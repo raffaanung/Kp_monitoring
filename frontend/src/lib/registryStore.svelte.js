@@ -35,7 +35,7 @@
  * @property {string} created_at
  * @property {string} updated_at
  * @property {Record<string, string>} metadata
- * @property {{ tasks_total: number, tasks_open: number, tasks_done: number, last_change: string }} quick_stats
+ * @property {{ tasks_total: number, tasks_open: number, tasks_done: number, last_change: string, requirements_total?: number }} quick_stats
  * @property {RegistryTask[]} tasks
  * @property {RegistryHistory[]} history
  */
@@ -440,11 +440,91 @@ function persist() {
 /** @param {RegistryDashboard} item */
 function refreshQuickStats(item) {
   item.quick_stats = {
+    ...item.quick_stats,
     tasks_total: item.tasks.length,
     tasks_open: item.tasks.filter((t) => t.status !== 'done').length,
     tasks_done: item.tasks.filter((t) => t.status === 'done').length,
     last_change: dateOnly(item.updated_at),
   }
+}
+
+/**
+ * Jumlah requirement yang tertaut ke sebuah dashboard.
+ * @param {number} id
+ * @param {number} total
+ */
+export function setRequirementsTotal(id, total) {
+  const item = getDashboard(id)
+  if (!item) return false
+  item.quick_stats = {
+    ...item.quick_stats,
+    requirements_total: Number(total) || 0,
+  }
+  item.updated_at = nowStamp()
+  registryStore.items = [...registryStore.items]
+  persist()
+  return true
+}
+
+/**
+ * @param {{ name: string, description?: string, pm?: string, owner?: string, url?: string, platform?: string, actor?: string }} payload
+ * @returns {RegistryDashboard | null}
+ */
+export function createDashboard(payload) {
+  const name = (payload.name || '').trim()
+  if (!name) return null
+  const exists = registryStore.items.some((d) => d.name.toLowerCase() === name.toLowerCase())
+  if (exists) return null
+
+  const stamp = nowStamp()
+  const nextId = registryStore.items.reduce((max, d) => Math.max(max, d.id), 0) + 1
+  const baseCode = name
+    .replace(/[^A-Za-z0-9]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .map((word) => word[0] || '')
+    .join('')
+    .toUpperCase()
+    .slice(0, 6) || 'DB'
+  let code = baseCode
+  let suffix = 2
+  const codes = new Set(registryStore.items.map((d) => d.code))
+  while (codes.has(code)) {
+    code = `${baseCode}${suffix}`
+    suffix += 1
+  }
+
+  const actor = (payload.actor || payload.owner || 'You').trim() || 'You'
+  /** @type {RegistryDashboard} */
+  const item = {
+    id: nextId,
+    name,
+    code,
+    description: (payload.description || '').trim(),
+    status: 'active',
+    criticality: 'medium',
+    owner: (payload.owner || actor).trim(),
+    platform: (payload.platform || 'Custom').trim() || 'Custom',
+    category: 'General',
+    url: (payload.url || '').trim(),
+    version: '1.0',
+    created_at: stamp,
+    updated_at: stamp,
+    metadata: { pm: (payload.pm || '').trim() },
+    quick_stats: {
+      tasks_total: 0,
+      tasks_open: 0,
+      tasks_done: 0,
+      last_change: dateOnly(stamp),
+      requirements_total: 0,
+    },
+    tasks: [],
+    history: [{ id: 1, at: stamp, actor, action: 'Dashboard registered' }],
+  }
+
+  registryStore.items = [item, ...registryStore.items]
+  persist()
+  return item
 }
 
 /** @param {RegistryDashboard} item @param {string} action @param {string} [actor] */
