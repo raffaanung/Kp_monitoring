@@ -464,7 +464,7 @@
 
   h3 {
     margin: 0 0 10px;
-    font-size: 0.82rem;
+    font-size: 0.56rem;
     font-weight: 750;
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -530,7 +530,7 @@
     background: rgba(255, 255, 255, 0.82);
     color: #1a1a1a;
     font: inherit;
-    font-size: 0.84rem;
+    font-size: 0.65rem;
     font-weight: 700;
     cursor: pointer;
     white-space: nowrap;
@@ -570,17 +570,17 @@
   .empty {
     padding: 1.5rem 0.75rem;
     color: #8a8a90;
-    font-size: 0.82rem;
+    font-size: 0.68rem;
   }
 
   .role-head strong {
-    font-size: 0.92rem;
+    font-size: 0.68rem;
     font-weight: 750;
     color: #1a1a1a;
   }
 
   .count {
-    font-size: 0.68rem;
+    font-size: 0.56rem;
     font-weight: 700;
     color: #8a8a90;
     white-space: nowrap;
@@ -588,7 +588,7 @@
 
   .role-card p {
     margin: 0 0 10px;
-    font-size: 0.78rem;
+    font-size: 0.59rem;
     line-height: 1.45;
     color: #6b6b6b;
   }
@@ -597,7 +597,7 @@
     display: inline-block;
     padding: 0.2rem 0.55rem;
     border-radius: 999px;
-    font-size: 0.68rem;
+    font-size: 0.56rem;
     font-weight: 750;
     background: rgba(196, 181, 230, 0.35);
     color: #5b4a8a;
@@ -613,7 +613,7 @@
 
   .hint {
     margin: 0 0 12px;
-    font-size: 0.76rem;
+    font-size: 0.61rem;
     color: #8a8a90;
   }
 
@@ -639,11 +639,11 @@
     border-bottom: 1px solid rgba(0, 0, 0, 0.05);
     text-align: center;
     vertical-align: middle;
-    font-size: 0.82rem;
+    font-size: 0.68rem;
   }
 
   .matrix th {
-    font-size: 0.72rem;
+    font-size: 0.56rem;
     font-weight: 750;
     color: #6b6b6b;
     background: rgba(255, 255, 255, 0.6);
@@ -664,14 +664,14 @@
   }
 
   .perm-label {
-    font-size: 0.8rem;
+    font-size: 0.68rem;
     font-weight: 600;
     color: #3a3a3a;
   }
 
   .group-row td {
     text-align: left;
-    font-size: 0.68rem;
+    font-size: 0.56rem;
     font-weight: 750;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -750,14 +750,14 @@
 
   .lead {
     margin: 0;
-    font-size: 0.85rem;
+    font-size: 0.61rem;
     line-height: 1.5;
     color: #4a4a4a;
   }
 
   .modal-body h2 {
     margin: 0;
-    font-size: 1.1rem;
+    font-size: 0.86rem;
     font-weight: 750;
   }
 
@@ -766,7 +766,7 @@
     border-radius: 999px;
     padding: 10px 16px;
     font: inherit;
-    font-size: 0.82rem;
+    font-size: 0.65rem;
     font-weight: 650;
     cursor: pointer;
     background: #b42318;
@@ -834,13 +834,13 @@
 
   .modal-head h2 {
     margin: 0;
-    font-size: 1.1rem;
+    font-size: 0.86rem;
     font-weight: 750;
   }
 
   .modal-head p {
     margin: 4px 0 0;
-    font-size: 0.78rem;
+    font-size: 0.61rem;
     color: #6b6b6b;
   }
 
@@ -852,7 +852,7 @@
     border-radius: 999px;
     background: rgba(0, 0, 0, 0.06);
     color: #1a1a1a;
-    font-size: 1.2rem;
+    font-size: 0.95rem;
     line-height: 1;
     cursor: pointer;
   }
@@ -865,7 +865,7 @@
   }
 
   .modal-body label span {
-    font-size: 0.72rem;
+    font-size: 0.56rem;
     font-weight: 600;
     color: #6b6b6b;
   }
@@ -876,7 +876,7 @@
     border-radius: 12px;
     padding: 10px 12px;
     font: inherit;
-    font-size: 0.88rem;
+    font-size: 0.68rem;
   }
 
   .perm-pick {
@@ -887,7 +887,7 @@
   }
 
   .perm-pick legend {
-    font-size: 0.72rem;
+    font-size: 0.56rem;
     font-weight: 600;
     color: #6b6b6b;
     padding: 0 4px;
@@ -908,14 +908,14 @@
   }
 
   .modal-body label.check span {
-    font-size: 0.82rem;
+    font-size: 0.65rem;
     font-weight: 600;
     color: #1a1a1a;
   }
 
   .error {
     margin: 0;
-    font-size: 0.75rem;
+    font-size: 0.59rem;
     color: #b42318;
     font-weight: 600;
   }
@@ -933,7 +933,7 @@
     border-radius: 999px;
     padding: 10px 16px;
     font: inherit;
-    font-size: 0.82rem;
+    font-size: 0.65rem;
     font-weight: 650;
     cursor: pointer;
   }
