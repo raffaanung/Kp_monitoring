@@ -379,40 +379,16 @@
   }
 
   .layout :global(.panel-glow .panel),
-  .layout :global(.panel-glow .panel-card),
-  .page > :global(.panel-glow .panel),
-  .page > :global(.panel-glow .panel-card) {
+  .page > :global(.panel-glow .panel) {
     width: 100%;
     height: auto;
     min-height: 0;
     overflow: visible;
-  }
-
-  .layout :global(.panel-glow .panel) {
     flex: 1 1 auto;
-  }
-
-  .layout :global(.panel-glow .panel-card) {
-    flex: 1 1 auto;
-  }
-
-  .layout :global(.panel-glow .liquidGlass-effect),
-  .page > :global(.panel-glow .liquidGlass-effect) {
-    background: rgba(255, 255, 255, 0.28);
-    backdrop-filter: blur(12px) saturate(1.08);
-    -webkit-backdrop-filter: blur(12px) saturate(1.08);
-  }
-
-  .layout :global(.panel-glow .panel),
-  .page > :global(.panel-glow .panel) {
     box-shadow: 0 6px 20px rgba(15, 27, 46, 0.07);
-  }
-
-  .layout :global(.panel-glow .panel-card),
-  .page > :global(.panel-glow .panel-card) {
-    background: rgba(255, 255, 255, 0.7);
-    border: 1px solid rgba(255, 255, 255, 0.55);
-    padding: 14px 16px;
+    background: rgba(255, 255, 255, 0.78);
+    border: 1px solid rgba(255, 255, 255, 0.85);
+    padding: 18px 20px;
   }
 
   .hero {

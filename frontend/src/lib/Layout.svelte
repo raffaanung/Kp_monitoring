@@ -485,7 +485,7 @@
     display: block;
     padding: 0.45rem 0.75rem;
     border-radius: 10px;
-    font-size: 0.61rem;
+    font-size: 0.65rem;
     font-weight: 600;
     color: #6b6b6b;
     text-decoration: none;
@@ -548,12 +548,12 @@
   }
 
   .circle svg {
-    width: 16px;
-    height: 16px;
+    width: 17px;
+    height: 17px;
   }
 
   .nav-label {
-    font-size: 0.65rem;
+    font-size: 0.68rem;
     font-weight: 650;
     color: #2a2a2a;
     white-space: nowrap;
@@ -655,10 +655,11 @@
     min-width: 0;
     min-height: 0;
     height: 100%;
-    padding: 16px 22px 18px 8px;
+    padding: 14px 18px 16px 8px;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
     gap: 4px;
   }
 
@@ -785,7 +786,7 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    overflow: visible;
   }
 
   @media (max-width: 900px) {

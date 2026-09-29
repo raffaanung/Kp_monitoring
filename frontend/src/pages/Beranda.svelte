@@ -606,110 +606,101 @@
 
   <div class="main-grid">
     <div class="panel-glow">
-      <article class="panel liquidGlass-wrapper chart-panel">
-        <div class="liquidGlass-effect"></div>
-        <div class="liquidGlass-tint"></div>
-        <div class="liquidGlass-shine"></div>
-        <div class="panel-card">
-          <div class="panel-head compact chart-head">
-            <div class="chart-head-top">
-              <div class="head-copy">
-                <h2>{chartView === 'dashboard' ? 'Dashboard' : 'Requirements'}</h2>
-                <p class="sub">
-                  {#if chartView === 'dashboard'}
-                    Jumlah task per dashboard
-                  {:else}
-                    Open · In progress · Selesai{chartDashboard ? ` · ${chartDashboard}` : ''}
-                  {/if}
-                </p>
-              </div>
-              <GlassSwitch
-                class="compact"
-                label="Jenis chart"
-                options={chartOptions}
-                value={chartView}
-                onchange={(id) => (chartView = /** @type {'requirement' | 'dashboard'} */ (id))}
-              />
-            </div>
-            {#if chartView === 'requirement'}
-              <label class="chart-dash">
-                <span>Dashboard</span>
-                <select bind:value={chartDashboard}>
-                  <option value="">Semua</option>
-                  {#each chartDashboards as name}
-                    <option value={name}>{name}</option>
-                  {/each}
-                </select>
-              </label>
-            {/if}
-          </div>
-          {#if chartView === 'dashboard'}
-            <div class="chart-box">
-              <div class="chart-plot bars">
-                {#if dashboardBar.labels.length}
-                  <OpsChart
-                    type="bar"
-                    horizontal
-                    unit="task"
-                    labels={dashboardBar.labels}
-                    series={dashboardBar.series}
-                    colors={dashboardBar.colors}
-                  />
+      <article class="panel chart-panel">
+        <div class="panel-head compact chart-head">
+          <div class="chart-head-top">
+            <div class="head-copy">
+              <h2>{chartView === 'dashboard' ? 'Dashboard' : 'Requirements'}</h2>
+              <p class="sub">
+                {#if chartView === 'dashboard'}
+                  Jumlah task per dashboard
                 {:else}
-                  <p class="sub">Belum ada task pada periode ini.</p>
+                  Open · In progress · Selesai{chartDashboard ? ` · ${chartDashboard}` : ''}
                 {/if}
-              </div>
+              </p>
             </div>
-          {:else}
-            <div class="chart-box split">
-              <div class="chart-plot">
-                <OpsChart type={activeChart.type} labels={activeChart.labels} series={activeChart.series} colors={activeChart.colors} unit="requirement" />
-              </div>
-              <ul class="chart-legend side-legend">
-                {#each chartLegend as item (item.label)}
-                  <li>
-                    <div class="legend-item">
-                      <span class="swatch" style="background:{item.color}"></span>
-                      <div class="legend-copy">
-                        <strong>{item.label}</strong>
-                        {#key `${period}-${chartDashboard}-${item.value}`}
-                          <small in:fade={{ duration: 200 }}>{item.value} requirement</small>
-                        {/key}
-                      </div>
-                    </div>
-                  </li>
+            <GlassSwitch
+              class="compact"
+              label="Jenis chart"
+              options={chartOptions}
+              value={chartView}
+              onchange={(id) => (chartView = /** @type {'requirement' | 'dashboard'} */ (id))}
+            />
+          </div>
+          {#if chartView === 'requirement'}
+            <label class="chart-dash">
+              <span>Dashboard</span>
+              <select bind:value={chartDashboard}>
+                <option value="">Semua</option>
+                {#each chartDashboards as name}
+                  <option value={name}>{name}</option>
                 {/each}
-              </ul>
-            </div>
+              </select>
+            </label>
           {/if}
         </div>
+        {#if chartView === 'dashboard'}
+          <div class="chart-box">
+            <div class="chart-plot bars">
+              {#if dashboardBar.labels.length}
+                <OpsChart
+                  type="bar"
+                  horizontal
+                  unit="task"
+                  labels={dashboardBar.labels}
+                  series={dashboardBar.series}
+                  colors={dashboardBar.colors}
+                />
+              {:else}
+                <p class="sub">Belum ada task pada periode ini.</p>
+              {/if}
+            </div>
+          </div>
+        {:else}
+          <div class="chart-box split">
+            <div class="chart-plot">
+              <OpsChart type={activeChart.type} labels={activeChart.labels} series={activeChart.series} colors={activeChart.colors} unit="requirement" />
+            </div>
+            <ul class="chart-legend side-legend">
+              {#each chartLegend as item (item.label)}
+                <li>
+                  <div class="legend-item">
+                    <span class="swatch" style="background:{item.color}"></span>
+                    <div class="legend-copy">
+                      <strong>{item.label}</strong>
+                      {#key `${period}-${chartDashboard}-${item.value}`}
+                        <small in:fade={{ duration: 200 }}>{item.value} requirement</small>
+                      {/key}
+                    </div>
+                  </div>
+                </li>
+              {/each}
+            </ul>
+          </div>
+        {/if}
       </article>
     </div>
 
     <div class="panel-glow">
-      <article class="panel liquidGlass-wrapper activity-panel">
-        <div class="liquidGlass-effect"></div>
-        <div class="liquidGlass-tint"></div>
-        <div class="liquidGlass-shine"></div>
-        <div class="panel-card">
-          <div class="panel-head compact week-head">
-            <div class="head-copy">
-              <h2>{boardHeading}</h2>
-              <p class="sub">{boardTitle} · {weekItems.length} {boardUnit}</p>
-            </div>
-            <div class="head-tools week-tools">
-              <GlassSwitch
-                class="compact"
-                label="Timeline source"
-                options={boardOptions}
-                value={boardView}
-                onchange={(id) => {
-                  boardView = /** @type {'task' | 'requirement'} */ (id)
-                  taskTip = null
-                }}
-              />
-            </div>
+      <article class="panel activity-panel">
+        <div class="panel-head compact week-head">
+          <div class="head-copy">
+            <h2>{boardHeading}</h2>
+            <p class="sub">{boardTitle} · {weekItems.length} {boardUnit}</p>
           </div>
+          <div class="head-tools week-tools">
+            <GlassSwitch
+              class="compact"
+              label="Timeline source"
+              options={boardOptions}
+              value={boardView}
+              onchange={(id) => {
+                boardView = /** @type {'task' | 'requirement'} */ (id)
+                taskTip = null
+              }}
+            />
+          </div>
+        </div>
 
         {#key period}
         <div class="day-canvas" in:fade={{ duration: 180 }}>
@@ -794,8 +785,7 @@
           </div>
         </div>
         {/key}
-      </div>
-    </article>
+      </article>
     </div>
 
     {#if taskTip}
@@ -821,186 +811,176 @@
     {/if}
 
     <div class="panel-glow">
-      <article class="panel liquidGlass-wrapper feed-panel">
-        <div class="liquidGlass-effect"></div>
-        <div class="liquidGlass-tint"></div>
-        <div class="liquidGlass-shine"></div>
-        <div class="panel-card">
-          <div class="panel-head compact">
-            <div class="head-copy">
-              <h2>Update Terbaru</h2>
-              <p class="sub">
-                {#if feedTab === 'tasks'}Baru dibuat / di-update{:else}Log operasional{/if}
-              </p>
-            </div>
-            <div class="head-tools">
-              <GlassSwitch
-                class="compact"
-                label="Filter update"
-                options={feedOptions}
-                value={feedTab}
-                onchange={(id) => (feedTab = /** @type {'tasks' | 'activity'} */ (id))}
-              />
-            </div>
+      <article class="panel feed-panel">
+        <div class="panel-head compact">
+          <div class="head-copy">
+            <h2>Update Terbaru</h2>
+            <p class="sub">
+              {#if feedTab === 'tasks'}Baru dibuat / di-update{:else}Log operasional{/if}
+            </p>
           </div>
-
-          {#key feedTab}
-            <div class="table-wrap" in:fade={{ duration: 180 }}>
-              {#if feedTab === 'tasks'}
-                <table class="modern-table feed-table">
-                  <thead>
-                    <tr>
-                      <th class="col-id">ID</th>
-                      <th>Task</th>
-                      <th class="col-when">Update</th>
-                      <th class="col-status">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {#each newestTasks.slice(0, 4) as item}
-                      <tr>
-                        <td class="col-id"><span class="mono-id">#{item.id}</span></td>
-                        <td>
-                          <button type="button" class="task-link" onclick={() => pushTaskFilters({ status: item.status })}>{item.title}</button>
-                        </td>
-                        <td class="col-when"><span class="muted">{item.when}</span></td>
-                        <td class="col-status"><span class="status-text" style="color:{workflowStatusColor(item.status)}">{statusLabel(item.status)}</span></td>
-                      </tr>
-                    {/each}
-                  </tbody>
-                </table>
-              {:else}
-                <table class="modern-table feed-table activity-table">
-                  <thead>
-                    <tr>
-                      <th>PIC</th>
-                      <th>Aktivitas</th>
-                      <th class="col-when">Waktu</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {#each recentActivities.slice(0, 4) as item}
-                      <tr>
-                        <td>
-                          <span class="pic">
-                            <i class="face {faceTone(item.who)}">{initials(item.who)}</i>
-                            {item.who}
-                          </span>
-                        </td>
-                        <td>
-                          <span class="activity-line">{item.action} <em>{item.target}</em></span>
-                        </td>
-                        <td class="col-when"><span class="muted">{item.when}</span></td>
-                      </tr>
-                    {/each}
-                  </tbody>
-                </table>
-              {/if}
-            </div>
-          {/key}
+          <div class="head-tools">
+            <GlassSwitch
+              class="compact"
+              label="Filter update"
+              options={feedOptions}
+              value={feedTab}
+              onchange={(id) => (feedTab = /** @type {'tasks' | 'activity'} */ (id))}
+            />
+          </div>
         </div>
+
+        {#key feedTab}
+          <div class="table-wrap" in:fade={{ duration: 180 }}>
+            {#if feedTab === 'tasks'}
+              <table class="modern-table feed-table">
+                <thead>
+                  <tr>
+                    <th class="col-id">ID</th>
+                    <th>Task</th>
+                    <th class="col-when">Update</th>
+                    <th class="col-status">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each newestTasks.slice(0, 4) as item}
+                    <tr>
+                      <td class="col-id"><span class="mono-id">#{item.id}</span></td>
+                      <td>
+                        <button type="button" class="task-link" onclick={() => pushTaskFilters({ status: item.status })}>{item.title}</button>
+                      </td>
+                      <td class="col-when"><span class="muted">{item.when}</span></td>
+                      <td class="col-status"><span class="status-text" style="color:{workflowStatusColor(item.status)}">{statusLabel(item.status)}</span></td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            {:else}
+              <table class="modern-table feed-table activity-table">
+                <thead>
+                  <tr>
+                    <th>PIC</th>
+                    <th>Aktivitas</th>
+                    <th class="col-when">Waktu</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each recentActivities.slice(0, 4) as item}
+                    <tr>
+                      <td>
+                        <span class="pic">
+                          <i class="face {faceTone(item.who)}">{initials(item.who)}</i>
+                          {item.who}
+                        </span>
+                      </td>
+                      <td>
+                        <span class="activity-line">{item.action} <em>{item.target}</em></span>
+                      </td>
+                      <td class="col-when"><span class="muted">{item.when}</span></td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            {/if}
+          </div>
+        {/key}
       </article>
     </div>
 
     <div class="panel-glow">
-      <article class="panel liquidGlass-wrapper deadline-panel">
-        <div class="liquidGlass-effect"></div>
-        <div class="liquidGlass-tint"></div>
-        <div class="liquidGlass-shine"></div>
-        <div class="panel-card">
-          <div class="panel-head compact">
-            <div class="head-copy">
-              <h2>Fokus Deadline</h2>
-              <p class="sub" class:alert={deadlineTab === 'overdue'}>
-                {#if deadlineTab === 'overdue'}{overdueTasks.length} overdue{:else}7 hari ke depan{/if}
-              </p>
-            </div>
-            <div class="head-tools">
-              <button
-                type="button"
-                class="deadline-go"
-                onclick={() =>
-                  deadlineTab === 'overdue'
-                    ? pushTaskFilters({ overdue: 'yes' })
-                    : pushTaskFilters({ aktif: 'yes' })
-                }
-              >
-                Lihat list
-              </button>
-              <GlassSwitch
-                class="compact"
-                label="Filter deadline"
-                options={deadlineOptions}
-                value={deadlineTab}
-                onchange={(id) => (deadlineTab = /** @type {'upcoming' | 'overdue'} */ (id))}
-              />
-            </div>
+      <article class="panel deadline-panel">
+        <div class="panel-head compact">
+          <div class="head-copy">
+            <h2>Fokus Deadline</h2>
+            <p class="sub" class:alert={deadlineTab === 'overdue'}>
+              {#if deadlineTab === 'overdue'}{overdueTasks.length} overdue{:else}7 hari ke depan{/if}
+            </p>
           </div>
-
-          {#key deadlineTab}
-            <div class="table-wrap" in:fade={{ duration: 180 }}>
-              {#if deadlineTab === 'overdue'}
-                <table class="modern-table deadline-table">
-                  <thead>
-                    <tr>
-                      <th class="col-task">Task</th>
-                      <th class="col-pic">PIC</th>
-                      <th class="col-date">Deadline</th>
-                      <th class="col-late">Terlambat</th>
-                      <th class="col-status">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {#each overdueTasks.slice(0, 4) as row}
-                      <tr>
-                        <td class="col-task">
-                          <button type="button" class="task-link" onclick={() => pushTaskFilters({ overdue: 'yes', status: row.status })}>{row.title}</button>
-                        </td>
-                        <td class="col-pic">
-                          <span class="pic">
-                            <i class="face {faceTone(row.pic)}">{initials(row.pic)}</i>
-                            <span class="pic-name">{row.pic}</span>
-                          </span>
-                        </td>
-                        <td class="col-date"><span class="muted">{formatDate(row.deadline)}</span></td>
-                        <td class="col-late"><span class="late-text">{row.delay}</span></td>
-                        <td class="col-status"><span class="status-text" style="color:{workflowStatusColor(row.status)}">{statusLabel(row.status)}</span></td>
-                      </tr>
-                    {/each}
-                  </tbody>
-                </table>
-              {:else}
-                <table class="modern-table deadline-table">
-                  <thead>
-                    <tr>
-                      <th class="col-task">Task</th>
-                      <th class="col-pic">PIC</th>
-                      <th class="col-date">Deadline</th>
-                      <th class="col-status">Prioritas</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {#each upcomingDeadlines.slice(0, 4) as row}
-                      <tr>
-                        <td class="col-task">
-                          <button type="button" class="task-link" onclick={() => pushTaskFilters({ aktif: 'yes', priority: row.priority.toLowerCase() })}>{row.title}</button>
-                        </td>
-                        <td class="col-pic">
-                          <span class="pic">
-                            <i class="face {faceTone(row.pic)}">{initials(row.pic)}</i>
-                            <span class="pic-name">{row.pic}</span>
-                          </span>
-                        </td>
-                        <td class="col-date"><span class="muted">{formatDate(row.deadline)}</span></td>
-                        <td class="col-status"><span class="prio-text {row.priority.toLowerCase()}">{row.priority}</span></td>
-                      </tr>
-                    {/each}
-                  </tbody>
-                </table>
-              {/if}
-            </div>
-          {/key}
+          <div class="head-tools">
+            <button
+              type="button"
+              class="deadline-go"
+              onclick={() =>
+                deadlineTab === 'overdue'
+                  ? pushTaskFilters({ overdue: 'yes' })
+                  : pushTaskFilters({ aktif: 'yes' })
+              }
+            >
+              Lihat list
+            </button>
+            <GlassSwitch
+              class="compact"
+              label="Filter deadline"
+              options={deadlineOptions}
+              value={deadlineTab}
+              onchange={(id) => (deadlineTab = /** @type {'upcoming' | 'overdue'} */ (id))}
+            />
+          </div>
         </div>
+
+        {#key deadlineTab}
+          <div class="table-wrap" in:fade={{ duration: 180 }}>
+            {#if deadlineTab === 'overdue'}
+              <table class="modern-table deadline-table">
+                <thead>
+                  <tr>
+                    <th class="col-task">Task</th>
+                    <th class="col-pic">PIC</th>
+                    <th class="col-date">Deadline</th>
+                    <th class="col-late">Terlambat</th>
+                    <th class="col-status">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each overdueTasks.slice(0, 4) as row}
+                    <tr>
+                      <td class="col-task">
+                        <button type="button" class="task-link" onclick={() => pushTaskFilters({ overdue: 'yes', status: row.status })}>{row.title}</button>
+                      </td>
+                      <td class="col-pic">
+                        <span class="pic">
+                          <i class="face {faceTone(row.pic)}">{initials(row.pic)}</i>
+                          <span class="pic-name">{row.pic}</span>
+                        </span>
+                      </td>
+                      <td class="col-date"><span class="muted">{formatDate(row.deadline)}</span></td>
+                      <td class="col-late"><span class="late-text">{row.delay}</span></td>
+                      <td class="col-status"><span class="status-text" style="color:{workflowStatusColor(row.status)}">{statusLabel(row.status)}</span></td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            {:else}
+              <table class="modern-table deadline-table">
+                <thead>
+                  <tr>
+                    <th class="col-task">Task</th>
+                    <th class="col-pic">PIC</th>
+                    <th class="col-date">Deadline</th>
+                    <th class="col-status">Prioritas</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each upcomingDeadlines.slice(0, 4) as row}
+                    <tr>
+                      <td class="col-task">
+                        <button type="button" class="task-link" onclick={() => pushTaskFilters({ aktif: 'yes', priority: row.priority.toLowerCase() })}>{row.title}</button>
+                      </td>
+                      <td class="col-pic">
+                        <span class="pic">
+                          <i class="face {faceTone(row.pic)}">{initials(row.pic)}</i>
+                          <span class="pic-name">{row.pic}</span>
+                        </span>
+                      </td>
+                      <td class="col-date"><span class="muted">{formatDate(row.deadline)}</span></td>
+                      <td class="col-status"><span class="prio-text {row.priority.toLowerCase()}">{row.priority}</span></td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            {/if}
+          </div>
+        {/key}
       </article>
     </div>
   </div>
@@ -1010,13 +990,13 @@
 <style>
   .beranda {
     position: relative;
-    display: grid;
-    grid-template-rows: auto auto minmax(0, 1fr);
-    gap: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
     flex: 1;
     min-height: 0;
-    height: 100%;
-    overflow: hidden;
+    height: auto;
+    padding-bottom: 32px;
     color: #1a1a1a;
   }
 
@@ -1067,9 +1047,9 @@
   .page-header {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 8px;
     margin: 0;
-    padding: 10px 0 12px;
+    padding: 2px 0 0;
   }
 
   /* Switch sits in the free space between logo and tools, so both gaps match */
@@ -1102,7 +1082,6 @@
     justify-content: center;
     min-width: 0;
     overflow: visible;
-    transform: translateX(36px);
   }
 
   .topbar-right {
@@ -1308,7 +1287,7 @@
     position: relative;
     display: flex;
     flex-direction: column;
-    margin-top: 4px;
+    margin-top: 0;
     padding: 14px;
     border-radius: 28px;
     overflow: hidden;
@@ -1319,8 +1298,8 @@
       linear-gradient(125deg, #042a5c 0%, #053a83 28%, #065fc6 68%, #339ef5 100%);
     border: 1px solid rgba(255, 255, 255, 0.16);
     box-shadow:
-      0 10px 28px rgba(5, 58, 131, 0.28),
-      inset 1px 1px 0 rgba(255, 255, 255, 0.2);
+      0 4px 18px rgba(0, 0, 0, 0.08),
+      inset 1px 1px 0 rgba(255, 255, 255, 0.18);
   }
 
   .metrics-rail > :global(.liquidGlass-effect),
@@ -1363,7 +1342,7 @@
     background: linear-gradient(160deg, #f7fbff 0%, #eef5fc 100%);
     border: 1.5px solid rgba(120, 170, 220, 0.35);
     box-shadow:
-      0 6px 16px rgba(4, 40, 90, 0.12),
+      0 3px 10px rgba(0, 0, 0, 0.06),
       inset 1px 1px 0 rgba(255, 255, 255, 0.95);
     transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
     font: inherit;
@@ -1375,7 +1354,7 @@
   .metric-card.clickable:hover {
     transform: translateY(-2px);
     box-shadow:
-      0 10px 22px rgba(4, 40, 90, 0.18),
+      0 6px 16px rgba(0, 0, 0, 0.09),
       inset 1px 1px 0 rgba(255, 255, 255, 1);
   }
 
@@ -1407,8 +1386,7 @@
   .metric-card.mint {
     border-color: rgba(70, 170, 190, 0.55);
     box-shadow:
-      0 6px 16px rgba(4, 40, 90, 0.12),
-      0 0 0 1px rgba(70, 170, 190, 0.12),
+      0 3px 10px rgba(0, 0, 0, 0.05),
       inset 1px 1px 0 rgba(255, 255, 255, 0.95);
   }
   .metric-card.mint :global(.liquidGlass-tint) {
@@ -1418,8 +1396,7 @@
   .metric-card.lavender {
     border-color: rgba(120, 140, 210, 0.55);
     box-shadow:
-      0 6px 16px rgba(4, 40, 90, 0.12),
-      0 0 0 1px rgba(120, 140, 210, 0.12),
+      0 3px 10px rgba(0, 0, 0, 0.05),
       inset 1px 1px 0 rgba(255, 255, 255, 0.95);
   }
   .metric-card.lavender :global(.liquidGlass-tint) {
@@ -1429,8 +1406,7 @@
   .metric-card.peach {
     border-color: rgba(100, 160, 220, 0.55);
     box-shadow:
-      0 6px 16px rgba(4, 40, 90, 0.12),
-      0 0 0 1px rgba(100, 160, 220, 0.12),
+      0 3px 10px rgba(0, 0, 0, 0.05),
       inset 1px 1px 0 rgba(255, 255, 255, 0.95);
   }
   .metric-card.peach :global(.liquidGlass-tint) {
@@ -1440,8 +1416,7 @@
   .metric-card.sky {
     border-color: rgba(50, 140, 230, 0.58);
     box-shadow:
-      0 6px 16px rgba(4, 40, 90, 0.12),
-      0 0 0 1px rgba(50, 140, 230, 0.14),
+      0 3px 10px rgba(0, 0, 0, 0.05),
       inset 1px 1px 0 rgba(255, 255, 255, 0.95);
   }
   .metric-card.sky :global(.liquidGlass-tint) {
@@ -1452,14 +1427,12 @@
   .metric-card.rose {
     border-color: rgba(220, 80, 95, 0.55);
     box-shadow:
-      0 6px 16px rgba(160, 40, 55, 0.14),
-      0 0 0 1px rgba(220, 80, 95, 0.16),
+      0 3px 10px rgba(0, 0, 0, 0.05),
       inset 1px 1px 0 rgba(255, 255, 255, 0.95);
   }
   .metric-card.rose:hover {
     box-shadow:
-      0 8px 20px rgba(160, 40, 55, 0.18),
-      0 0 0 1px rgba(220, 80, 95, 0.22),
+      0 6px 16px rgba(0, 0, 0, 0.08),
       inset 1px 1px 0 rgba(255, 255, 255, 0.98);
   }
   .metric-card.rose :global(.liquidGlass-tint) {
@@ -1484,8 +1457,7 @@
   .metric-card.sand {
     border-color: rgba(80, 150, 210, 0.52);
     box-shadow:
-      0 6px 16px rgba(4, 40, 90, 0.12),
-      0 0 0 1px rgba(80, 150, 210, 0.12),
+      0 3px 10px rgba(0, 0, 0, 0.05),
       inset 1px 1px 0 rgba(255, 255, 255, 0.95);
   }
   .metric-card.sand :global(.liquidGlass-tint) {
@@ -1585,12 +1557,11 @@
     letter-spacing: -0.01em;
   }
 
-  /* 2×2: chart + board / update + deadline */
   .main-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.95fr);
-    grid-template-rows: minmax(0, 1.15fr) minmax(0, 1fr);
-    gap: 16px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.85fr);
+    grid-template-rows: minmax(280px, auto) minmax(260px, auto);
+    gap: 14px;
     min-height: 0;
     flex: 1;
   }
@@ -1608,78 +1579,35 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    padding: 10px;
-    border-radius: 32px;
-    overflow: hidden;
-    isolation: isolate;
-    color: #1a1a1a;
-    background: transparent;
-    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
-    transition: box-shadow 0.25s ease, transform 0.25s ease;
-  }
-
-  /* Soft glass — no SVG displacement (avoids vertical smear artifacts) */
-  .liquidGlass-wrapper {
-    position: relative;
-    display: flex;
-    font-weight: 600;
-    overflow: hidden;
-    isolation: isolate;
-    color: black;
-    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
-    transition: box-shadow 0.25s ease, transform 0.25s ease;
-  }
-
-  :global(.liquidGlass-effect) {
-    position: absolute;
-    z-index: 0;
-    inset: 0;
-    border-radius: inherit;
-    backdrop-filter: blur(10px) saturate(1.05);
-    -webkit-backdrop-filter: blur(10px) saturate(1.05);
-    background: rgba(255, 255, 255, 0.18);
-    overflow: hidden;
-    pointer-events: none;
-  }
-
-  :global(.liquidGlass-tint) {
-    z-index: 1;
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    background: rgba(255, 255, 255, 0.28);
-    pointer-events: none;
-  }
-
-  :global(.liquidGlass-shine) {
-    position: absolute;
-    inset: 0;
-    z-index: 2;
-    border-radius: inherit;
-    overflow: hidden;
-    pointer-events: none;
+    padding: 18px 20px;
+    border-radius: 22px;
+    background: rgba(255, 255, 255, 0.78);
+    border: 1px solid rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
     box-shadow:
-      inset 1px 1px 0 rgba(255, 255, 255, 0.55),
-      inset -1px -1px 0 rgba(255, 255, 255, 0.28);
+      0 4px 18px rgba(0, 0, 0, 0.04),
+      0 1px 3px rgba(0, 0, 0, 0.03);
+    color: #1a1a1a;
+    transition: box-shadow 0.25s ease, transform 0.25s ease;
   }
 
-  .chart-panel,
-  .activity-panel,
+  .panel:hover {
+    box-shadow:
+      0 6px 22px rgba(0, 0, 0, 0.06),
+      0 1px 4px rgba(0, 0, 0, 0.03);
+  }
+
   .feed-panel,
   .deadline-panel {
-    background: transparent;
-  }
-
-  .feed-panel .panel-card,
-  .deadline-panel .panel-card {
-    padding: 16px 18px 14px;
+    padding: 18px 20px 16px;
   }
 
   .feed-panel .panel-head.compact,
   .deadline-panel .panel-head.compact {
     align-items: flex-start;
     min-height: 44px;
-    margin-bottom: 14px;
+    margin-bottom: 12px;
     padding-bottom: 12px;
     border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   }
@@ -1687,23 +1615,6 @@
   .feed-panel .head-tools,
   .deadline-panel .head-tools {
     margin-top: 2px;
-  }
-
-  .panel-card {
-    position: relative;
-    z-index: 3;
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    background: rgba(255, 255, 255, 0.12);
-    border-radius: 24px;
-    overflow: hidden;
-    border: 1px solid rgba(255, 255, 255, 0.35);
-    box-shadow:
-      inset 2px 2px 1px 0 rgba(255, 255, 255, 0.45),
-      inset -1px -1px 1px 1px rgba(255, 255, 255, 0.3);
-    padding: 14px 16px;
   }
 
   .panel-head {
@@ -1994,8 +1905,8 @@
     white-space: nowrap;
   }
 
-  .activity-panel .panel-card {
-    padding: 10px 12px;
+  .activity-panel {
+    padding: 14px 16px;
   }
 
   .activity-panel .panel-head.compact {
@@ -2448,25 +2359,37 @@
     background: rgba(26, 26, 26, 0.025);
   }
 
-  .feed-table .col-id { width: 44px; }
-  .feed-table .col-when { width: 92px; }
-  .feed-table .col-status { width: 88px; }
+  .feed-table .col-id { width: 40px; }
+  .feed-table .col-when { width: 96px; }
+  .feed-table .col-status { width: 110px; }
 
-  .deadline-table .col-task { width: 32%; }
+  .activity-table th:first-child,
+  .activity-table td:first-child { width: 28%; }
+  .activity-table th:nth-child(2),
+  .activity-table td:nth-child(2) { width: 48%; }
+  .activity-table .col-when { width: 24%; }
+
+  .deadline-table .col-task { width: 34%; }
   .deadline-table .col-pic { width: 24%; }
-  .deadline-table .col-date { width: 16%; }
-  .deadline-table .col-late { width: 14%; }
-  .deadline-table .col-status { width: 14%; }
+  .deadline-table .col-date { width: 18%; }
+  .deadline-table .col-late { width: 12%; }
+  .deadline-table .col-status { width: 12%; }
+
+  .modern-table thead th:last-child,
+  .modern-table tbody td:last-child {
+    padding-right: 14px;
+  }
 
   .modern-table .col-status,
   .modern-table .col-late {
     text-align: right;
-    padding-right: 2px;
+    padding-right: 14px;
   }
 
   .modern-table th.col-status,
   .modern-table th.col-late {
     text-align: right;
+    padding-right: 14px;
   }
 
   .mono-id {
@@ -2583,35 +2506,43 @@
     font-weight: 600;
   }
 
-  @media (max-width: 1280px) {
-    .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  @media (max-width: 1440px) {
+    .metrics {
+      gap: 10px;
+    }
+    .metric-card {
+      padding: 12px 12px 10px;
+      min-height: 96px;
+    }
+    .metric-value {
+      font-size: 1.45rem;
+    }
   }
 
-  @media (max-width: 1100px) {
-    .beranda {
-      display: flex;
-      flex-direction: column;
-      overflow: auto;
-      height: auto;
+  @media (max-width: 1280px) {
+    .metrics {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
     }
-
     .main-grid {
       grid-template-columns: 1fr;
       grid-template-rows: none;
     }
+    .panel {
+      min-height: 270px;
+    }
+  }
 
-    .panel { min-height: 280px; }
-
+  @media (max-width: 1100px) {
     .topbar {
       flex-wrap: wrap;
-      gap: 14px;
+      gap: 12px;
     }
 
     .period-slot {
       flex: 1 1 100%;
       order: 3;
       justify-content: flex-start;
-      transform: none;
+      margin-top: 4px;
     }
 
     .topbar-right {
@@ -2624,18 +2555,20 @@
     .headline {
       grid-template-columns: 1fr;
       align-items: start;
-      row-gap: 16px;
+      row-gap: 14px;
     }
 
     .headline-meta {
       justify-content: flex-start;
       flex-wrap: wrap;
-      gap: 20px;
+      gap: 16px;
     }
   }
 
-  @media (max-width: 700px) {
-    .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  @media (max-width: 768px) {
+    .metrics {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 
     .profile-meta {
       display: none;
@@ -2645,6 +2578,12 @@
       padding: 4px;
       width: 40px;
       justify-content: center;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .metrics {
+      grid-template-columns: 1fr;
     }
   }
 </style>

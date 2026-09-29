@@ -478,10 +478,10 @@
     grid-column: 1 / -1;
   }
 
-  .layout :global(.panel-glow .panel-card) {
-    background: rgba(255, 255, 255, 0.7);
-    border: 1px solid rgba(255, 255, 255, 0.55);
-    padding: 14px 16px;
+  .layout :global(.panel-glow .panel) {
+    background: rgba(255, 255, 255, 0.78);
+    border: 1px solid rgba(255, 255, 255, 0.85);
+    padding: 18px 20px;
   }
 
   .hero { display: grid; }

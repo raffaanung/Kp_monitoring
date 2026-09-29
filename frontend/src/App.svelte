@@ -64,7 +64,6 @@
   :global(.stage-body > *) {
     flex: 1;
     min-height: 0;
-    height: 100%;
     display: flex;
     flex-direction: column;
   }

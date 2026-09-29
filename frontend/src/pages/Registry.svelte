@@ -658,15 +658,11 @@
     align-self: stretch;
   }
 
-  .page.detail :global(.panel-glow.detail-panel .panel),
-  .page.detail :global(.panel-glow.detail-panel .panel-card) {
+  .page.detail :global(.panel-glow.detail-panel .panel) {
     flex: 1;
     width: 100%;
     height: 100%;
     min-height: 0;
-  }
-
-  .page.detail :global(.panel-glow.detail-panel .panel-card) {
     overflow: auto;
   }
 

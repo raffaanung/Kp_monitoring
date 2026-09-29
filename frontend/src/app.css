@@ -15,7 +15,26 @@
 }
 
 html {
-  font-size: 18px;
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+
+@media (max-width: 1440px), (max-height: 880px) {
+  html {
+    font-size: 15px;
+  }
+}
+
+@media (max-width: 1200px), (max-height: 740px) {
+  html {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 900px) {
+  html {
+    font-size: 14px;
+  }
 }
 
 html,
