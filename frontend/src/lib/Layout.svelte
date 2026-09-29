@@ -181,6 +181,11 @@
                 </svg>
               </span>
               <span class="nav-label">Tasks</span>
+              <span class="nav-chevron" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="m9 6 6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </span>
             </a>
 
             {#if railExpanded}
@@ -211,6 +216,11 @@
                 </svg>
               </span>
               <span class="nav-label">Requirements</span>
+              <span class="nav-chevron" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="m9 6 6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </span>
             </a>
 
             {#if railExpanded}
@@ -239,6 +249,11 @@
                 </svg>
               </span>
               <span class="nav-label">Dashboard Registry</span>
+              <span class="nav-chevron" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="m9 6 6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </span>
             </a>
 
             {#if railExpanded}
@@ -269,6 +284,11 @@
                 </svg>
               </span>
               <span class="nav-label">User Access</span>
+              <span class="nav-chevron" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="m9 6 6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </span>
             </a>
 
             {#if railExpanded}
@@ -453,19 +473,19 @@
   }
 
   .subnav {
+    position: relative;
     display: none;
     grid-template-columns: 1fr;
-    gap: 2px;
-    padding: 0 4px 0 20px;
-    margin: 0;
+    gap: 3px;
+    margin: 3px 0 6px 20px;
+    padding: 3px 0 3px 12px;
+    border-left: 1.5px solid rgba(0, 0, 0, 0.12);
     overflow: hidden;
     pointer-events: none;
   }
 
   .subnav.visible {
     display: grid;
-    padding: 2px 4px 4px 20px;
-    margin-top: 2px;
     pointer-events: auto;
     animation: subnav-in 0.22s ease;
   }
@@ -483,10 +503,10 @@
 
   .sub-item {
     display: block;
-    padding: 0.45rem 0.75rem;
-    border-radius: 10px;
+    padding: 0.42rem 0.75rem;
+    border-radius: 8px;
     font-size: 0.65rem;
-    font-weight: 600;
+    font-weight: 550;
     color: #6b6b6b;
     text-decoration: none;
     transition: background 0.15s ease, color 0.15s ease;
@@ -498,9 +518,9 @@
   }
 
   .sub-item.on {
-    background: rgba(26, 26, 26, 0.1);
+    background: rgba(26, 26, 26, 0.09);
     color: #1a1a1a;
-    font-weight: 750;
+    font-weight: 700;
   }
 
   .nav-item {
@@ -521,6 +541,39 @@
     border-radius: 999px;
     transition: background 0.28s ease;
     flex-shrink: 0;
+  }
+
+  .nav-chevron {
+    margin-left: auto;
+    width: 14px;
+    height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #8e8e93;
+    opacity: 0;
+    transform: translateX(-4px);
+    transition: opacity 0.28s ease, transform 0.25s ease, color 0.2s ease;
+    flex-shrink: 0;
+  }
+
+  .shell.expanded .nav-chevron {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  .nav-group.open .nav-chevron svg {
+    transform: rotate(90deg);
+  }
+
+  .nav-chevron svg {
+    width: 12px;
+    height: 12px;
+    transition: transform 0.25s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  .nav-item:hover .nav-chevron {
+    color: #1a1a1a;
   }
 
   .shell.expanded .nav-item:hover {
@@ -639,6 +692,10 @@
   :global(.shell.expanded nav a.nav-item.active .nav-label) {
     color: #1a1a1a;
     font-weight: 750;
+  }
+
+  :global(.shell.expanded nav a.nav-item.active .nav-chevron) {
+    color: #1a1a1a;
   }
 
   :global(.shell.expanded nav a.nav-item.active:hover) {
