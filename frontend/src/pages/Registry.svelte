@@ -12,6 +12,9 @@
     rememberDetailId,
     changeDashboardStatus,
     createDashboard,
+    setDashboardField,
+    renameDashboardField,
+    removeDashboardField,
   } from '../lib/registryStore.svelte.js'
   import { canCreateDashboard, currentUserName } from '../lib/taskModuleStore.svelte.js'
   import { listUsers } from '../lib/accessStore.svelte.js'
@@ -109,6 +112,57 @@
       return
     }
     createOpen = false
+  }
+
+  let addFieldOpen = $state(false)
+  let newFieldLabel = $state('')
+  let newFieldValue = $state('')
+
+  function openAddField() {
+    newFieldLabel = ''
+    newFieldValue = ''
+    addFieldOpen = true
+  }
+
+  function cancelAddField() {
+    addFieldOpen = false
+  }
+
+  function submitAddField(event) {
+    event.preventDefault()
+    if (!selectedDetail) return
+    if (setDashboardField(selectedDetail.id, newFieldLabel, newFieldValue)) {
+      addFieldOpen = false
+    }
+  }
+
+  /** @type {string | null} key field metadata yang sedang diedit */
+  let editingFieldKey = $state(null)
+  let editFieldLabel = $state('')
+  let editFieldValue = $state('')
+
+  function startEditField(key, value) {
+    editingFieldKey = key
+    editFieldLabel = key
+    editFieldValue = value
+  }
+
+  function cancelEditField() {
+    editingFieldKey = null
+  }
+
+  function submitEditField(event, originalKey) {
+    event.preventDefault()
+    if (!selectedDetail) return
+    if (renameDashboardField(selectedDetail.id, originalKey, editFieldLabel, editFieldValue)) {
+      editingFieldKey = null
+    }
+  }
+
+  function onDeleteField(key) {
+    if (!selectedDetail) return
+    if (!confirm(`Hapus field "${key}"?`)) return
+    removeDashboardField(selectedDetail.id, key)
   }
 
   function downloadSopPdf() {
@@ -467,6 +521,23 @@
         </div>
       </div>
 
+      {#if canAdd}
+        <div class="hero-field-toolbar">
+          {#if addFieldOpen}
+            <form class="field-add-form" onsubmit={submitAddField}>
+              <input class="fact-input" bind:value={newFieldLabel} placeholder="Label (mis. Database)" maxlength="40" />
+              <input class="fact-input" bind:value={newFieldValue} placeholder="Nilai" maxlength="200" />
+              <button type="submit" class="fact-save">Simpan</button>
+              <button type="button" class="fact-cancel" onclick={cancelAddField}>Batal</button>
+            </form>
+          {:else}
+            <div class="action-pills" aria-label="Tambah Field">
+              <button type="button" class="pill" onclick={openAddField}>+ Tambah Field</button>
+            </div>
+          {/if}
+        </div>
+      {/if}
+
       <div class="hero-main">
         <p class="eyebrow">Dashboard Registry</p>
         <div class="chip-row">
@@ -501,11 +572,37 @@
           <div class="fact"><span class="k">Category</span><strong>{selectedDetail.category}</strong></div>
           <div class="fact"><span class="k">Version</span><strong>{selectedDetail.version}</strong></div>
           <div class="fact"><span class="k">URL</span><strong>{selectedDetail.url || '—'}</strong></div>
-          <div class="fact"><span class="k">Framework</span><strong>{selectedDetail.metadata?.framework || 'CodeIgniter'}</strong></div>
-          <div class="fact"><span class="k">Backend</span><strong>{selectedDetail.metadata?.backend || 'PHP'}</strong></div>
-          <div class="fact"><span class="k">Versi Framework</span><strong>{selectedDetail.metadata?.ci_version || '4.x'}</strong></div>
-          <div class="fact"><span class="k">Versi Backend</span><strong>{selectedDetail.metadata?.php_version || '8.2'}</strong></div>
-          <div class="fact"><span class="k">Frontend</span><strong>{selectedDetail.metadata?.frontend || 'Svelte'}</strong></div>
+
+          {#each Object.entries(selectedDetail.metadata || {}) as [key, value] (key)}
+            {#if editingFieldKey === key}
+              <form class="fact fact-edit" onsubmit={(e) => submitEditField(e, key)}>
+                <input class="fact-input" bind:value={editFieldLabel} placeholder="Label" maxlength="40" />
+                <input class="fact-input" bind:value={editFieldValue} placeholder="Nilai" maxlength="200" />
+                <div class="fact-actions">
+                  <button type="submit" class="fact-save">Simpan</button>
+                  <button type="button" class="fact-cancel" onclick={cancelEditField}>Batal</button>
+                </div>
+              </form>
+            {:else}
+              <div class="fact">
+                <span class="k">{key.replaceAll('_', ' ')}</span>
+                <strong>{value || '—'}</strong>
+                {#if canAdd}
+                  <div class="fact-tools">
+                    <button type="button" class="fact-icon edit" title="Edit field" aria-label={`Edit field ${key}`} onclick={() => startEditField(key, value)}>
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M16.5 4.5 19.5 7.5 8 19H5v-3L16.5 4.5Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                      <span>Edit</span>
+                    </button>
+                    <button type="button" class="fact-icon danger" title="Hapus field" aria-label={`Hapus field ${key}`} onclick={() => onDeleteField(key)}>
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 7h14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-8 0 1 12a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                      <span>Hapus</span>
+                    </button>
+                  </div>
+                {/if}
+              </div>
+            {/if}
+          {/each}
+
           <div class="fact"><span class="k">Last Update</span><strong>{formatDateDisplay(selectedDetail.updated_at)}</strong></div>
         </div>
       </div>
@@ -686,6 +783,29 @@
     margin-left: auto;
   }
 
+  .hero-field-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: -0.3rem;
+  }
+
+  .field-add-form {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+  }
+
+  .field-add-form .fact-input {
+    width: 150px;
+    border-radius: 999px;
+    padding: 0.35rem 0.75rem;
+  }
+
   .action-pills {
     position: relative;
     display: inline-flex;
@@ -846,10 +966,10 @@
   }
 
   .fact {
+    position: relative;
     display: grid;
     gap: 0.15rem;
     padding: 0.7rem 0.9rem;
-    border-bottom: 1px solid rgba(15, 27, 46, 0.06);
     border-right: 1px solid rgba(15, 27, 46, 0.06);
     min-width: 0;
   }
@@ -858,8 +978,138 @@
     border-right: 0;
   }
 
-  .facts > .fact:nth-last-child(-n + 2) {
-    border-bottom: 0;
+  .fact:not(:nth-child(1)):not(:nth-child(2)) {
+    border-top: 1px solid rgba(15, 27, 46, 0.06);
+  }
+
+  .fact-tools {
+    position: absolute;
+    top: 0.45rem;
+    right: 0.55rem;
+    display: none;
+    gap: 0.35rem;
+  }
+
+  .fact:hover .fact-tools {
+    display: flex;
+  }
+
+  .fact-icon {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    height: 24px;
+    padding: 0 0.5rem;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-size: 0.56rem;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .fact-icon svg {
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+  }
+
+  .fact-icon.edit {
+    background: #e0e7ff;
+    color: #3730a3;
+    border-color: rgba(55, 48, 163, 0.15);
+  }
+
+  .fact-icon.edit:hover {
+    background: #c7d2fe;
+    color: #312e81;
+  }
+
+  .fact-icon.danger {
+    background: #fee2e2;
+    color: #991b1b;
+    border-color: rgba(153, 27, 27, 0.15);
+  }
+
+  .fact-icon.danger:hover {
+    background: #fecaca;
+    color: #7f1d1d;
+  }
+
+  .fact-edit {
+    display: grid;
+    gap: 0.35rem;
+    align-content: start;
+  }
+
+  .fact-input {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid rgba(15, 27, 46, 0.12);
+    border-radius: 8px;
+    padding: 0.3rem 0.5rem;
+    font: inherit;
+    font-size: 0.66rem;
+    color: #1a1a1a;
+    background: #fff;
+  }
+
+  .fact-actions {
+    display: flex;
+    gap: 0.4rem;
+  }
+
+  .fact-save,
+  .fact-cancel {
+    border: 0;
+    border-radius: 999px;
+    padding: 0.2rem 0.65rem;
+    font: inherit;
+    font-size: 0.6rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .fact-save {
+    background: #1a1a1a;
+    color: #fff;
+  }
+
+  .fact-cancel {
+    background: rgba(15, 27, 46, 0.08);
+    color: #475569;
+  }
+
+  .fact-add {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    border: none;
+    background: transparent;
+    color: #6b6b6b;
+    font: inherit;
+    font-size: 0.66rem;
+    font-weight: 650;
+    cursor: pointer;
+    min-height: 2.6rem;
+  }
+
+  .fact-add:hover {
+    color: #1a1a1a;
+    background: rgba(15, 27, 46, 0.04);
+  }
+
+  .fact-add-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 999px;
+    border: 1px dashed currentColor;
+    font-size: 0.7rem;
+    line-height: 1;
   }
 
   .dash-stats {
@@ -921,6 +1171,10 @@
     .dash-stats .stat,
     .dash-stats .stat:last-child {
       border-right: 0;
+    }
+
+    .fact:nth-child(2) {
+      border-top: 1px solid rgba(15, 27, 46, 0.06);
     }
   }
 

@@ -613,6 +613,58 @@ export function updateDashboard(id, patch) {
   return true
 }
 
+/**
+ * Tambah atau update satu field metadata bebas (key-value) pada dashboard.
+ * @param {number} id @param {string} key @param {string} value
+ */
+export function setDashboardField(id, key, value) {
+  const item = getDashboard(id)
+  const k = (key || '').trim()
+  if (!item || !k) return false
+
+  item.metadata = { ...item.metadata, [k]: value }
+  item.updated_at = nowStamp()
+  pushHistory(item, `Mengubah field: ${k}`)
+  registryStore.items = [...registryStore.items]
+  persist()
+  return true
+}
+
+/**
+ * Ganti nama key field metadata (dan sekaligus value-nya).
+ * @param {number} id @param {string} oldKey @param {string} newKey @param {string} value
+ */
+export function renameDashboardField(id, oldKey, newKey, value) {
+  const item = getDashboard(id)
+  const nk = (newKey || '').trim()
+  if (!item || !nk) return false
+
+  const meta = { ...item.metadata }
+  if (oldKey !== nk) delete meta[oldKey]
+  meta[nk] = value
+  item.metadata = meta
+  item.updated_at = nowStamp()
+  pushHistory(item, oldKey === nk ? `Mengubah field: ${nk}` : `Mengubah field: ${oldKey} -> ${nk}`)
+  registryStore.items = [...registryStore.items]
+  persist()
+  return true
+}
+
+/** @param {number} id @param {string} key */
+export function removeDashboardField(id, key) {
+  const item = getDashboard(id)
+  if (!item || !(key in (item.metadata || {}))) return false
+
+  const meta = { ...item.metadata }
+  delete meta[key]
+  item.metadata = meta
+  item.updated_at = nowStamp()
+  pushHistory(item, `Menghapus field: ${key}`)
+  registryStore.items = [...registryStore.items]
+  persist()
+  return true
+}
+
 /** @param {number} id @param {RegistryStatus} status */
 export function changeDashboardStatus(id, status) {
   const item = getDashboard(id)
