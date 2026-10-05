@@ -950,14 +950,14 @@
   }
 
   .modal .field input::placeholder,
-  .modal .field textarea::placeholder {
+  .modal .field textarea::placeholder::placeholder {
     color: #a8a8ae;
     font-weight: 450;
   }
 
   .modal .field input:focus,
   .modal .field select:focus,
-  .modal .field textarea:focus {
+  .modal .field textarea:focus:focus {
     border-color: rgba(26, 26, 26, 0.28);
     box-shadow: 0 0 0 3px rgba(26, 26, 26, 0.06);
   }

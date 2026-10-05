@@ -199,28 +199,4 @@ class App extends BaseConfig
      * @see http://www.w3.org/TR/CSP/
      */
     public bool $CSPEnabled = false;
-
-    public function __construct()
-    {
-        parent::__construct();
-
-        // Image OpenShift dilayani di root route. Host publik baru diketahui saat request.
-        if (getenv('CI_PUBLIC_ROOT') !== '1') {
-            return;
-        }
-        if (getenv('app.baseURL') || getenv('app_baseURL')) {
-            return;
-        }
-
-        $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
-        if ($host === '') {
-            $this->baseURL = 'http://127.0.0.1:8080/';
-
-            return;
-        }
-
-        $https = (! empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-            || (strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https');
-        $this->baseURL = ($https ? 'https' : 'http') . '://' . $host . '/';
-    }
 }

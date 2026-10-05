@@ -1,3 +1,0 @@
-#!/bin/bash -e
-# Copy source code ke /var/www/html
-cp -Rf /tmp/src/* /var/www/html
