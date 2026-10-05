@@ -4,8 +4,8 @@ import { defineConfig } from 'vite'
 export default defineConfig(({ command }) => ({
   plugins: [svelte()],
   // Dev: root `/` supaya preview Vite sederhana.
-  // Build: path XAMPP/CI3 untuk serve dari backend/spa.
-  base: command === 'serve' ? '/' : '/edm-task-monitoring/backend/spa/',
+  // Build lokal: path XAMPP. Build image: VITE_BASE=/spa/
+  base: command === 'serve' ? '/' : (process.env.VITE_BASE || '/edm-task-monitoring/backend/spa/'),
   build: {
     outDir: '../backend/spa',
     emptyOutDir: true,

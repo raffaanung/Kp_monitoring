@@ -1,0 +1,38 @@
+# Build sekali di mesin dev — hasil: openssl-4.0.0-prebuilt-linux-amd64.tar.gz
+# Tanpa bind-mount (cocok Mac: /Applications/XAMPP tidak perlu File Sharing)
+#
+# Jalankan dari folder gbo (WAJIB linux/amd64 untuk OpenShift):
+#   bash docker/build-openssl-prebuilt.sh
+# =============================================================================
+FROM --platform=linux/amd64 php:8.4-apache-trixie AS builder
+
+ARG OPENSSL_VERSION=4.0.0
+ARG OPENSSL_BUILD_JOBS=4
+ARG OPENSSL_SHA256=c32cf49a959c4f345f9606982dd36e7d28f7c58b19c2e25d75624d2b3d2f79ac
+
+COPY openssl-${OPENSSL_VERSION}.tar.gz /tmp/openssl-src.tar.gz
+
+RUN set -eux \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential perl zlib1g-dev ca-certificates \
+    && echo "${OPENSSL_SHA256}  /tmp/openssl-src.tar.gz" | sha256sum -c - \
+    && tar -xzf /tmp/openssl-src.tar.gz -C /tmp \
+    && cd "/tmp/openssl-${OPENSSL_VERSION}" \
+    && ./config \
+        --prefix=/usr/local/openssl \
+        --openssldir=/usr/local/openssl \
+        shared zlib-dynamic \
+    && make -j"${OPENSSL_BUILD_JOBS}" \
+    && make install_sw \
+    && echo "/usr/local/openssl/lib64" > /etc/ld.so.conf.d/openssl4.conf \
+    && echo "/usr/local/openssl/lib" >> /etc/ld.so.conf.d/openssl4.conf \
+    && ldconfig \
+    && /usr/local/openssl/bin/openssl version | grep -q "OpenSSL ${OPENSSL_VERSION}" \
+    && file /usr/local/openssl/bin/openssl | grep -qE 'x86-64|AMD64' \
+    && mkdir -p /export \
+    && tar -C /usr/local -czf "/export/openssl-${OPENSSL_VERSION}-prebuilt-linux-amd64.tar.gz" openssl
+
+FROM scratch
+ARG OPENSSL_VERSION=4.0.0
+COPY --from=builder /export/openssl-${OPENSSL_VERSION}-prebuilt-linux-amd64.tar.gz /

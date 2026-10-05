@@ -1,0 +1,14 @@
+.git
+**/.DS_Store
+frontend/node_modules
+backend/vendor
+backend/writable/cache/*
+backend/writable/logs/*
+backend/writable/session/*
+backend/writable/debugbar/*
+backend/writable/uploads/*
+!backend/writable/cache/index.html
+!backend/writable/logs/index.html
+!backend/writable/session/index.html
+!backend/writable/debugbar/index.html
+!backend/writable/uploads/index.html
