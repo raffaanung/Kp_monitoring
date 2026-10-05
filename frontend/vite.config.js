@@ -1,6 +1,8 @@
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { defineConfig } from 'vite'
 
+const openshiftBuild = process.env.VITE_DEPLOY === 'openshift'
+
 export default defineConfig(({ command }) => ({
   plugins: [svelte()],
   // Dev: root `/` supaya preview Vite sederhana.
@@ -9,6 +11,11 @@ export default defineConfig(({ command }) => ({
   build: {
     outDir: '../backend/spa',
     emptyOutDir: true,
+    // Pod build OpenShift sering SIGKILL saat minify bundle besar.
+    minify: openshiftBuild ? false : 'esbuild',
+    cssMinify: openshiftBuild ? false : 'lightningcss',
+    reportCompressedSize: !openshiftBuild,
+    chunkSizeWarningLimit: 2000,
   },
   server: {
     host: '127.0.0.1',

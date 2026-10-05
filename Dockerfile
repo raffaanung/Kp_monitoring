@@ -11,8 +11,11 @@ WORKDIR /src/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ ./
+# Satu thread + tanpa minify: pod build OpenShift mematikan proses (SIGKILL) saat render bundle.
 ENV VITE_BASE=/spa/ \
-    VITE_DEPLOY=openshift
+    VITE_DEPLOY=openshift \
+    RAYON_NUM_THREADS=1 \
+    NODE_OPTIONS=--max-old-space-size=768
 RUN npm run build
 
 FROM php:8.4-apache-trixie
@@ -89,6 +92,7 @@ COPY --chown=1001:0 backend/ /var/www/html/
 COPY --from=frontend --chown=1001:0 /src/backend/spa/ /var/www/html/spa/
 
 RUN sed -i 's|RewriteBase /edm-task-monitoring/backend/|RewriteBase /|' /var/www/html/.htaccess \
+    && sed -i -E 's#https://api\.github\.com/repos/([^/]+)/([^/]+)/zipball/#https://codeload.github.com/\1/\2/legacy.zip/#g' /var/www/html/composer.lock \
     && composer install --no-dev --optimize-autoloader --no-interaction --working-dir=/var/www/html \
     && chown -R 1001:0 /var/www/html \
     && chmod -R g+rwX /var/www/html
