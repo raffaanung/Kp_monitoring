@@ -1,5 +1,5 @@
 # =============================================================================
-# EDM Task Monitoring — PHP 8.4 + Apache + OpenSSL 4.0.0
+# GBO Dashboard — PHP 8.4 + Apache + OpenSSL 4.0.0
 #
 # BUILD CEPAT (default): OPENSSL_MODE=prebuilt
 #   Wajib ada: docker/openssl-4.0.0-prebuilt-linux-amd64.tar.gz
@@ -108,13 +108,11 @@ RUN set -eux; \
     && a2enconf gbo-hardening \
     && sed -i 's/AllowOverride None/AllowOverride All/' /etc/apache2/apache2.conf \
     && printf '%s\n' \
-        'Alias /edm-task-monitoring/backend /var/www/html' \
         '<Directory /var/www/html>' \
         '    Options -Indexes +FollowSymLinks' \
         '    AllowOverride All' \
         '    Require all granted' \
         '</Directory>' \
-        'RedirectMatch 302 ^/$ /edm-task-monitoring/backend/' \
         > /etc/apache2/conf-available/ci3.conf \
     && a2enconf ci3 \
     && sed -i '/DocumentRoot \/var\/www\/html/a <Directory \/var\/www\/html>\n\tOptions -Indexes +FollowSymLinks\n\tAllowOverride All\n\tRequire all granted\n<\/Directory>' \
@@ -140,7 +138,7 @@ COPY docker/verify-versions.sh /usr/local/bin/verify-versions
 COPY docker/verify-security.sh /usr/local/bin/verify-security
 RUN chmod +x /usr/local/bin/verify-versions /usr/local/bin/verify-security
 
-COPY --chown=1001:0 backend/ /var/www/html/
+COPY --chown=1001:0 . /var/www/html
 
 RUN if [ ! -f /var/www/html/.htaccess ]; then \
         printf '%s\n' \
