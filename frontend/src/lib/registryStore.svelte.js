@@ -1,4 +1,4 @@
-/** @typedef {'active' | 'idle'} RegistryStatus */
+/** @typedef {'production' | 'development' | 'maintenance' | 'retired'} RegistryStatus */
 /** @typedef {'high' | 'medium' | 'low'} Criticality */
 /** @typedef {'open' | 'in_progress' | 'done'} ItemStatus */
 
@@ -83,7 +83,7 @@ function seedDashboards() {
       name: 'GBO Dashboard',
       code: 'GBO',
       description: 'Operational overview for GBO performance, SLA, and throughput.',
-      status: 'active',
+      status: 'production',
       criticality: 'high',
       owner: 'Alya Putri',
       platform: 'Power BI',
@@ -116,7 +116,7 @@ function seedDashboards() {
       history: [
         { id: 1, at: '2026-09-10 14:20:00', actor: 'Alya Putri', action: 'Updated metadata refresh cadence to Hourly' },
         { id: 2, at: '2026-09-05 11:00:00', actor: 'Budi Santoso', action: 'Added task: Escalation drill-down' },
-        { id: 3, at: '2026-08-20 16:30:00', actor: 'Alya Putri', action: 'Changed status to Active' },
+        { id: 3, at: '2026-08-20 16:30:00', actor: 'Alya Putri', action: 'Changed status to Production' },
         { id: 4, at: '2025-11-12 09:00:00', actor: 'System', action: 'Dashboard registered' },
       ],
     },
@@ -125,7 +125,7 @@ function seedDashboards() {
       name: 'FinSight',
       code: 'FIN',
       description: 'Finance insight board covering invoice aging, cash, and vendor exposure.',
-      status: 'active',
+      status: 'production',
       criticality: 'high',
       owner: 'Citra Dewi',
       platform: 'Tableau',
@@ -467,7 +467,7 @@ export function setRequirementsTotal(id, total) {
 }
 
 /**
- * @param {{ name: string, description?: string, pm?: string, owner?: string, url?: string, platform?: string, actor?: string }} payload
+ * @param {{ name: string, code?: string, description?: string, pm?: string, owner?: string, url?: string, platform?: string, actor?: string, category?: string, criticality?: string, start_date?: string, target_date?: string, tech_stack?: string }} payload
  * @returns {RegistryDashboard | null}
  */
 export function createDashboard(payload) {
@@ -478,7 +478,7 @@ export function createDashboard(payload) {
 
   const stamp = nowStamp()
   const nextId = registryStore.items.reduce((max, d) => Math.max(max, d.id), 0) + 1
-  const baseCode = name
+  const baseCode = payload.code || name
     .replace(/[^A-Za-z0-9]+/g, ' ')
     .trim()
     .split(/\s+/)
@@ -489,7 +489,7 @@ export function createDashboard(payload) {
   let code = baseCode
   let suffix = 2
   const codes = new Set(registryStore.items.map((d) => d.code))
-  while (codes.has(code)) {
+  while (codes.has(code) && !payload.code) {
     code = `${baseCode}${suffix}`
     suffix += 1
   }
@@ -502,15 +502,20 @@ export function createDashboard(payload) {
     code,
     description: (payload.description || '').trim(),
     status: 'active',
-    criticality: 'medium',
+    criticality: /** @type {any} */ (payload.criticality || 'medium'),
     owner: (payload.owner || actor).trim(),
     platform: (payload.platform || 'Custom').trim() || 'Custom',
-    category: 'General',
+    category: (payload.category || 'General').trim() || 'General',
     url: (payload.url || '').trim(),
     version: '1.0',
     created_at: stamp,
     updated_at: stamp,
-    metadata: { pm: (payload.pm || '').trim() },
+    metadata: {
+      pm: (payload.pm || '').trim(),
+      start_date: payload.start_date || '',
+      target_date: payload.target_date || '',
+      tech_stack: (payload.tech_stack || '').trim(),
+    },
     quick_stats: {
       tasks_total: 0,
       tasks_open: 0,
@@ -725,10 +730,14 @@ export function addRegistryTask(dashboardId, payload) {
 /** @param {RegistryStatus | string} status */
 export function registryStatusLabel(status) {
   switch (status) {
-    case 'active':
-      return 'Active'
-    case 'idle':
-      return 'Idle'
+    case 'production':
+      return 'Production'
+    case 'development':
+      return 'In Development'
+    case 'maintenance':
+      return 'Maintenance'
+    case 'retired':
+      return 'Retired'
     default:
       return status
   }
@@ -763,8 +772,10 @@ export function itemStatusLabel(status) {
 }
 
 export const registryStatusOptions = [
-  { value: 'active', label: 'Active' },
-  { value: 'idle', label: 'Idle' },
+  { value: 'production', label: 'Production' },
+  { value: 'development', label: 'In Development' },
+  { value: 'maintenance', label: 'Maintenance' },
+  { value: 'retired', label: 'Retired' }
 ]
 
 export const criticalityOptions = [

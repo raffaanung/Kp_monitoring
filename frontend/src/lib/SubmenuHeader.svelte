@@ -52,11 +52,11 @@
   }
 
   .eyebrow {
-    font-size: 0.54rem;
-    font-weight: 750;
+    font-size: 0.65rem;
+    font-weight: 800;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: #8e8e93;
+    color: #475569;
   }
 
   .title-row {
@@ -68,23 +68,23 @@
 
   h2 {
     margin: 0;
-    font-size: 0.88rem;
-    font-weight: 750;
+    font-size: 1.25rem;
+    font-weight: 800;
     letter-spacing: -0.02em;
     line-height: 1.2;
-    color: #1a1a1a;
+    color: #0f172a;
   }
 
   .meta {
     display: inline-flex;
     align-items: center;
-    height: 1.55rem;
-    padding: 0 0.65rem;
+    height: 1.7rem;
+    padding: 0 0.85rem;
     border-radius: 999px;
-    font-size: 0.56rem;
-    font-weight: 750;
-    background: rgba(26, 26, 26, 0.08);
-    color: #1a1a1a;
+    font-size: 0.65rem;
+    font-weight: 700;
+    background: #e2e8f0;
+    color: #334155;
     max-width: 220px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -93,11 +93,11 @@
 
   .sub {
     margin: 0;
-    font-size: 0.61rem;
+    font-size: 0.72rem;
     font-weight: 500;
-    color: #8a8a90;
-    line-height: 1.35;
-    max-width: 48ch;
+    color: #64748b;
+    line-height: 1.45;
+    max-width: 60ch;
   }
 
   .actions {

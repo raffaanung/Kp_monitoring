@@ -1,5 +1,5 @@
 <script>
-  import { link } from 'svelte-spa-router'
+  import { goto } from '$app/navigation'
   import { portal } from './portal.js'
   import { sessionPersonas, setSessionPersona } from './taskModuleStore.svelte.js'
 
@@ -70,7 +70,7 @@
         <small>{persona.label}</small>
       </button>
     {/each}
-    <a class="profile-link" href="/access/profile" use:link onclick={close}>Buka halaman profil</a>
+    <a class="profile-link" href="/access/profile" onclick={close}>Buka halaman profil</a>
   </div>
 {/if}
 

@@ -1,5 +1,5 @@
 <script>
-  import { addTask, toISODate, addDays } from '../lib/taskStore.svelte.js'
+  import { addTask, toISODate, addDays } from '$lib/taskStore.svelte.js'
 
   /** @type {{ open?: boolean, onClose?: () => void }} */
   let { open = false, onClose = () => {} } = $props()

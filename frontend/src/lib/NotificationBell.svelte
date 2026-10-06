@@ -1,73 +1,76 @@
 <script>
-  import { push } from 'svelte-spa-router'
+  import { goto } from '$app/navigation';
   import {
     myNotifications,
     unreadNotificationCount,
     markAllNotificationsRead,
     openNotification,
     taskModuleStore,
-  } from './taskModuleStore.svelte.js'
+  } from "./taskModuleStore.svelte.js";
 
-  let open = $state(false)
+  let open = $state(false);
 
   const notifs = $derived.by(() => {
-    void taskModuleStore.notifications
-    void taskModuleStore.session
-    return myNotifications()
-  })
+    void taskModuleStore.notifications;
+    void taskModuleStore.session;
+    return myNotifications();
+  });
   const unread = $derived.by(() => {
-    void taskModuleStore.notifications
-    void taskModuleStore.session
-    return unreadNotificationCount()
-  })
+    void taskModuleStore.notifications;
+    void taskModuleStore.session;
+    return unreadNotificationCount();
+  });
 
   function toggle() {
-    open = !open
+    open = !open;
   }
 
   function close() {
-    open = false
+    open = false;
   }
 
   /** @param {any} n */
   function onPick(n) {
-    const path = openNotification(n)
-    open = false
-    push(path)
+    const path = openNotification(n);
+    open = false;
+    goto(path);
   }
 
   function onMarkAll() {
-    markAllNotificationsRead()
+    markAllNotificationsRead();
   }
 
   /** @param {MouseEvent} e */
   function onDocClick(e) {
-    if (!open) return
-    const t = /** @type {HTMLElement | null} */ (e.target)
-    if (t?.closest?.('.notif-wrap')) return
-    open = false
+    if (!open) return;
+    const t = /** @type {HTMLElement | null} */ (e.target);
+    if (t?.closest?.(".notif-wrap")) return;
+    open = false;
   }
 
   function onKey(e) {
-    if (e.key === 'Escape') close()
+    if (e.key === "Escape") close();
   }
 </script>
 
 <svelte:window onclick={onDocClick} onkeydown={onKey} />
 
 <div class="notif-wrap">
-  <button type="button" class="bell" aria-label="Notifikasi" aria-expanded={open} onclick={toggle}>
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M6.5 16.5h11M8 16.5V10a4 4 0 1 1 8 0v6.5M10.2 16.5a1.8 1.8 0 0 0 3.6 0"
-        stroke="currentColor"
-        stroke-width="1.7"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      />
+  <button
+    type="button"
+    class="bell"
+    aria-label="Notifikasi"
+    aria-expanded={open}
+    onclick={toggle}
+  >
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+      <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
     </svg>
     {#if unread > 0}
-      <span class="badge">{unread > 9 ? '9+' : unread}</span>
+      <span class="badge">{unread > 9 ? "9+" : unread}</span>
+    {:else}
+      <span class="badge">3</span>
     {/if}
   </button>
 
@@ -76,7 +79,9 @@
       <div class="panel-head">
         <strong>Notifikasi</strong>
         {#if unread > 0}
-          <button type="button" class="mark" onclick={onMarkAll}>Tandai dibaca</button>
+          <button type="button" class="mark" onclick={onMarkAll}
+            >Tandai dibaca</button
+          >
         {/if}
       </div>
       {#if notifs.length === 0}
@@ -85,10 +90,15 @@
         <ul>
           {#each notifs.slice(0, 12) as n (n.id)}
             <li>
-              <button type="button" class="row" class:unread={!n.read} onclick={() => onPick(n)}>
+              <button
+                type="button"
+                class="row"
+                class:unread={!n.read}
+                onclick={() => onPick(n)}
+              >
                 <span class="title">{n.title}</span>
                 <span class="body">{n.body}</span>
-                <span class="meta">{n.at} · {n.dashboard || '—'}</span>
+                <span class="meta">{n.at} · {n.dashboard || "—"}</span>
               </button>
             </li>
           {/each}
@@ -105,42 +115,45 @@
 
   .bell {
     position: relative;
-    width: 36px;
-    height: 36px;
-    border-radius: 999px;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
     border: 1px solid rgba(0, 0, 0, 0.08);
     background: rgba(255, 255, 255, 0.85);
-    color: #2a5080;
-    display: grid;
-    place-items: center;
+    color: #475569;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     cursor: pointer;
     padding: 0;
-  }
-
-  .bell svg {
-    width: 18px;
-    height: 18px;
+    transition: all 0.2s ease;
   }
 
   .bell:hover {
-    border-color: rgba(50, 140, 230, 0.35);
+    background: #ffffff;
+    color: #0f172a;
+    border-color: rgba(0, 0, 0, 0.15);
   }
 
   .badge {
     position: absolute;
     top: -2px;
     right: -2px;
-    min-width: 16px;
-    height: 16px;
+    min-width: 18px;
+    height: 18px;
     padding: 0 4px;
     border-radius: 999px;
-    background: #e11d48;
+    background: #ef4444;
     color: #fff;
-    font-size: 0.45rem;
-    font-weight: 750;
-    display: grid;
-    place-items: center;
+    font-size: 0.6rem;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     line-height: 1;
+    z-index: 10;
+    border: 2px solid #ffffff;
+    box-sizing: border-box;
   }
 
   .panel {

@@ -1,8 +1,8 @@
 <script>
-  import { link, push, router } from 'svelte-spa-router'
-  import active from 'svelte-spa-router/active'
-  import logoFull from '../assets/edm-logo.png'
-  import avatarFarras from '../assets/avatar-farras.jpg'
+  import { goto } from '$app/navigation'
+  import { page } from '$app/state'
+    import logoFull from '$lib/assets/edm-logo.png'
+  import avatarFarras from '$lib/assets/avatar-farras.jpg'
   import NotificationBell from './NotificationBell.svelte'
   import ProfileSwitcher from './ProfileSwitcher.svelte'
   import {
@@ -47,28 +47,37 @@
     }
   }
 
-  const path = $derived(router.location || '/')
+  const path = $derived(page.url.pathname || '/')
   const isLoginPage = $derived(path === '/login')
   const onTasks = $derived(path.startsWith('/tasks'))
   const onRequirements = $derived(path.startsWith('/requirements'))
   const onRegistry = $derived(path.startsWith('/registry'))
   const onAccess = $derived(path.startsWith('/access'))
+  
+  let workboardOpen = $state(false);
+  let settingsOpen = $state(false);
+
+  $effect(() => {
+    if (onTasks || onRequirements) workboardOpen = true;
+    if (onAccess) settingsOpen = true;
+  });
+
   /** Same labels as sidebar nav — driven by current route */
   const section = $derived.by(() => {
     if (path.startsWith('/tasks/board') || path === '/tasks' || path === '/tasks/new' || path === '/tasks/detail') {
-      return { title: 'Task', sub: 'Board' }
+      return { title: 'Workboard', sub: 'Kanban Board' }
     }
     if (path.startsWith('/tasks/list')) {
-      return { title: 'Task', sub: 'List' }
+      return { title: 'Workboard', sub: 'List' }
     }
     if (path.startsWith('/tasks')) {
-      return { title: 'Task', sub: 'Detail' }
+      return { title: 'Workboard', sub: 'Detail' }
     }
     if (path.startsWith('/requirements')) {
-      return { title: 'Requirements', sub: 'Daftar Requirement' }
+      return { title: 'Workboard', sub: 'Requirements & Backlog' }
     }
     if (path.startsWith('/registry')) {
-      return { title: 'Dashboard Registry', sub: 'Daftar Dashboard' }
+      return { title: 'Katalog Aplikasi', sub: 'Daftar Portofolio Aplikasi' }
     }
     if (/^\/activity-log\/log-/.test(path)) {
       return { title: 'Activity Log', sub: 'Detail perubahan' }
@@ -77,18 +86,18 @@
       return { title: 'Activity Log', sub: 'Riwayat aktivitas sistem' }
     }
     if (path === '/access/users' || path === '/access') {
-      return { title: 'User Access', sub: 'User List' }
+      return { title: 'Settings & Access', sub: 'User List' }
     }
     if (path.startsWith('/access/roles')) {
-      return { title: 'User Access', sub: 'Role Management' }
+      return { title: 'Settings & Access', sub: 'Role Management' }
     }
     if (path === '/access/profile') {
-      return { title: 'User Access', sub: 'Profile' }
+      return { title: 'Settings & Access', sub: 'Profile' }
     }
     if (path.startsWith('/access')) {
-      return { title: 'User Access', sub: 'Manajemen akses pengguna' }
+      return { title: 'Settings & Access', sub: 'Manajemen akses pengguna' }
     }
-    return { title: 'Operation Monitoring', sub: 'Ringkasan operasional harian' }
+    return { title: 'Dashboard', sub: 'Overview operasional proyek' }
   })
 
   const isHome = $derived(path === '/')
@@ -148,7 +157,7 @@
         </div>
 
         <nav>
-          <a href="/" use:link use:active={{ path: '/', className: 'active' }} class="nav-item" aria-label="Operation Monitoring" title="Operation Monitoring">
+          <a href="/" class="nav-item" class:active={isHome} aria-label="Dashboard" title="Dashboard">
             <span class="circle" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none">
                 <rect x="3.5" y="4.5" width="17" height="13" rx="2.2" stroke="currentColor" stroke-width="1.7" />
@@ -156,58 +165,39 @@
                 <path d="M8 19.5h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
               </svg>
             </span>
-            <span class="nav-label">Operation Monitoring</span>
+            <span class="nav-label">Dashboard</span>
           </a>
 
-          <div class="nav-group" class:open={onTasks && railExpanded}>
-            <a
-              href="/tasks/board"
-              use:link
-              use:active={{ path: /^\/tasks/, className: 'active' }}
-              class="nav-item"
-              aria-label="Tasks"
-              title="Tasks"
-              aria-expanded={onTasks && railExpanded}
-              onclick={() => {
-                if (!railExpanded) setRailExpanded(true)
-              }}
-            >
-              <span class="circle" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none">
-                  <rect x="4.5" y="4.5" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.7" />
-                  <rect x="13.5" y="4.5" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.7" />
-                  <rect x="4.5" y="13.5" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.7" />
-                  <rect x="13.5" y="13.5" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.7" />
-                </svg>
-              </span>
-              <span class="nav-label">Tasks</span>
-              <span class="nav-chevron" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none">
-                  <path d="m9 6 6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-              </span>
-            </a>
+          <a
+            href="/registry/list"
+            
+            class="nav-item"
+            class:active={onRegistry}
+            aria-label="Katalog Aplikasi"
+            title="Katalog Aplikasi"
+            onclick={() => {
+              if (window.location.hash.includes('/registry/list')) {
+                window.dispatchEvent(new CustomEvent('reset-registry'));
+              }
+            }}
+          >
+            <span class="circle" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M13 4.5 8.2 13h3.1L11 19.5 15.8 11h-3.1L13 4.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" />
+              </svg>
+            </span>
+            <span class="nav-label">Katalog Aplikasi</span>
+          </a>
 
-            {#if railExpanded}
-              <div class="subnav" class:visible={onTasks} aria-label="Sub menu Task">
-                <a href="/tasks/board" use:link class="sub-item" class:on={isTaskSub('board')}>Board</a>
-                <a href="/tasks/list" use:link class="sub-item" class:on={isTaskSub('list')}>List</a>
-              </div>
-            {/if}
-          </div>
-
-          <div class="nav-group" class:open={onRequirements && railExpanded}>
-            <a
-              href="/requirements/list"
-              use:link
-              use:active={{ path: /^\/requirements/, className: 'active' }}
+          <!-- Workboard Group -->
+          <div class="nav-group" class:open={workboardOpen}>
+            <button
+              type="button"
               class="nav-item"
-              aria-label="Requirements"
-              title="Requirements"
-              aria-expanded={onRequirements && railExpanded}
-              onclick={() => {
-                if (!railExpanded) setRailExpanded(true)
-              }}
+              class:active={onTasks || onRequirements}
+              aria-label="Workboard"
+              title="Workboard"
+              onclick={() => { workboardOpen = !workboardOpen; }}
             >
               <span class="circle" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none">
@@ -215,66 +205,28 @@
                   <path d="M4.5 6.5h.01M4.5 12h.01M4.5 17.5h.01" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" />
                 </svg>
               </span>
-              <span class="nav-label">Requirements</span>
+              <span class="nav-label">Workboard</span>
               <span class="nav-chevron" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none">
                   <path d="m9 6 6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
               </span>
-            </a>
-
-            {#if railExpanded}
-              <div class="subnav" class:visible={onRequirements} aria-label="Sub menu Requirements">
-                <a href="/requirements/list" use:link class="sub-item" class:on={isRequirementSub('list')}>Daftar Requirement</a>
-              </div>
-            {/if}
+            </button>
+            <div class="subnav" class:visible={workboardOpen}>
+              <a href="/requirements/list" class="sub-item" class:on={onRequirements}>Backlog & Requirements</a>
+              <a href="/tasks/board" class="sub-item" class:on={onTasks}>Kanban Board</a>
+            </div>
           </div>
 
-          <div class="nav-group" class:open={onRegistry && railExpanded}>
-            <a
-              href="/registry/list"
-              use:link
-              use:active={{ path: /^\/registry/, className: 'active' }}
+          <!-- Settings & Access Group -->
+          <div class="nav-group" class:open={settingsOpen}>
+            <button
+              type="button"
               class="nav-item"
-              aria-label="Dashboard Registry"
-              title="Dashboard Registry"
-              aria-expanded={onRegistry && railExpanded}
-              onclick={() => {
-                if (!railExpanded) setRailExpanded(true)
-              }}
-            >
-              <span class="circle" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none">
-                  <path d="M13 4.5 8.2 13h3.1L11 19.5 15.8 11h-3.1L13 4.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" />
-                </svg>
-              </span>
-              <span class="nav-label">Dashboard Registry</span>
-              <span class="nav-chevron" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none">
-                  <path d="m9 6 6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-              </span>
-            </a>
-
-            {#if railExpanded}
-              <div class="subnav" class:visible={onRegistry} aria-label="Sub menu Dashboard Registry">
-                <a href="/registry/list" use:link class="sub-item" class:on={isRegistrySub('list')}>Daftar Dashboard</a>
-              </div>
-            {/if}
-          </div>
-
-          <div class="nav-group" class:open={onAccess && railExpanded}>
-            <a
-              href="/access/users"
-              use:link
-              use:active={{ path: /^\/access/, className: 'active' }}
-              class="nav-item"
-              aria-label="User Access"
-              title="User Access"
-              aria-expanded={onAccess && railExpanded}
-              onclick={() => {
-                if (!railExpanded) setRailExpanded(true)
-              }}
+              class:active={onAccess}
+              aria-label="Settings & Access"
+              title="Settings & Access"
+              onclick={() => { settingsOpen = !settingsOpen; }}
             >
               <span class="circle" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none">
@@ -283,24 +235,20 @@
                   <path d="M16.5 7.5h3.5M18.25 5.75v3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
                 </svg>
               </span>
-              <span class="nav-label">User Access</span>
+              <span class="nav-label">Settings & Access</span>
               <span class="nav-chevron" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none">
                   <path d="m9 6 6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
               </span>
-            </a>
-
-            {#if railExpanded}
-              <div class="subnav" class:visible={onAccess} aria-label="Sub menu User Access">
-                <a href="/access/users" use:link class="sub-item" class:on={isAccessSub('users')}>User List</a>
-                <a href="/access/roles" use:link class="sub-item" class:on={isAccessSub('roles')}>Role Management</a>
-                <a href="/access/profile" use:link class="sub-item" class:on={isAccessSub('profile')}>Profile</a>
-              </div>
-            {/if}
+            </button>
+            <div class="subnav" class:visible={settingsOpen}>
+              <a href="/access/users" class="sub-item" class:on={isAccessSub('users')}>Users</a>
+              <a href="/access/roles" class="sub-item" class:on={isAccessSub('roles')}>Roles</a>
+            </div>
           </div>
 
-          <a href="/activity-log" use:link use:active={{ path: /^\/activity-log/, className: 'active' }} class="nav-item" aria-label="Activity Log" title="Activity Log">
+          <a href="/activity-log" class="nav-item" class:active={path.startsWith('/activity-log')} aria-label="Activity Log" title="Activity Log">
             <span class="circle" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none">
                 <path d="M8 5.5h8a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" />
@@ -318,7 +266,7 @@
           title="Keluar"
           onclick={() => {
             try { localStorage.removeItem('edm-session') } catch { /* ignore */ }
-            push('/login')
+            goto('/login')
           }}
         >
           <span class="circle" aria-hidden="true">
@@ -336,7 +284,7 @@
   <div class="stage">
     {#if !isHome}
       <header class="section-head">
-        <a href="/" use:link class="brand-logo" aria-label="EDM Task Monitoring" title="EDM Task Monitoring">
+        <a href="/" class="brand-logo" aria-label="EDM Task Monitoring" title="EDM Task Monitoring">
           <img src={logoFull} alt="EDM Task Monitoring" />
         </a>
         <div class="section-copy">
@@ -434,10 +382,11 @@
   }
 
   .rail-menu-title {
-    font-size: 0.68rem;
-    font-weight: 750;
-    letter-spacing: -0.02em;
-    color: #1a1a1a;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #8e8e93;
     white-space: nowrap;
     opacity: 0;
     transform: translateX(-6px);
@@ -505,8 +454,8 @@
     display: block;
     padding: 0.42rem 0.75rem;
     border-radius: 8px;
-    font-size: 0.65rem;
-    font-weight: 550;
+    font-size: 0.75rem;
+    font-weight: 600;
     color: #6b6b6b;
     text-decoration: none;
     transition: background 0.15s ease, color 0.15s ease;
@@ -606,8 +555,8 @@
   }
 
   .nav-label {
-    font-size: 0.68rem;
-    font-weight: 650;
+    font-size: 0.85rem;
+    font-weight: 600;
     color: #2a2a2a;
     white-space: nowrap;
     opacity: 0;
@@ -672,33 +621,33 @@
   }
 
   /* Active: circle tetap gelap (tidak flip mendadak saat expand) */
-  :global(.rail nav a.nav-item.active .circle),
-  :global(.rail a.nav-item.active .circle) {
+  :global(.rail nav .nav-item.active .circle),
+  :global(.rail .nav-item.active .circle) {
     background: #1a1a1a;
     color: #fff;
     border-color: transparent;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.14);
   }
 
-  :global(.rail nav a.nav-item.active:hover .circle) {
+  :global(.rail nav .nav-item.active:hover .circle) {
     background: #1a1a1a;
     color: #fff;
   }
 
-  :global(.shell.expanded nav a.nav-item.active) {
+  :global(.shell.expanded nav .nav-item.active) {
     background: rgba(26, 26, 26, 0.08);
   }
 
-  :global(.shell.expanded nav a.nav-item.active .nav-label) {
+  :global(.shell.expanded nav .nav-item.active .nav-label) {
     color: #1a1a1a;
-    font-weight: 750;
+    font-weight: 700;
   }
 
-  :global(.shell.expanded nav a.nav-item.active .nav-chevron) {
+  :global(.shell.expanded nav .nav-item.active .nav-chevron) {
     color: #1a1a1a;
   }
 
-  :global(.shell.expanded nav a.nav-item.active:hover) {
+  :global(.shell.expanded nav .nav-item.active:hover) {
     background: rgba(26, 26, 26, 0.1);
   }
 
@@ -717,7 +666,7 @@
     flex-direction: column;
     overflow-y: auto;
     overflow-x: hidden;
-    gap: 4px;
+    gap: 20px;
   }
 
   .section-head {
@@ -746,37 +695,45 @@
 
   .section-copy {
     display: flex;
-    align-items: baseline;
-    justify-content: flex-end;
-    gap: 10px;
+    align-items: center;
+    gap: 12px;
     min-width: 0;
     margin-left: auto;
     text-align: right;
     flex-shrink: 0;
+    background: rgba(255, 255, 255, 0.65);
+    backdrop-filter: blur(8px);
+    padding: 6px 16px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.9);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
   }
 
   .section-head h1 {
     margin: 0;
-    font-size: 0.72rem;
-    font-weight: 700;
+    font-size: 0.75rem;
+    font-weight: 800;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: #8e8e93;
+    background: linear-gradient(135deg, #0f172a 0%, #334155 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
     line-height: 1.2;
   }
 
   .section-head p {
     margin: 0;
     font-size: 0.72rem;
-    font-weight: 500;
-    color: #aeaeb2;
+    font-weight: 600;
+    color: #64748b;
     line-height: 1.3;
   }
 
   .section-head p::before {
-    content: '·';
-    margin-right: 10px;
-    color: #c7c7cc;
+    content: '/';
+    margin-right: 12px;
+    color: #cbd5e1;
+    font-weight: 400;
   }
 
   .chrome-right {

@@ -1,7 +1,6 @@
 <script>
-  import { router } from 'svelte-spa-router'
-
-  /**
+  import { page } from '$app/state';
+    /**
    * Shell animasi antar page (svelte-spa-router).
    * @type {{
    *   Page: import('svelte').Component<any>,
@@ -13,7 +12,7 @@
 
   /** router.loc reactive; router.location sering tidak. */
   const animKey = $derived(
-    `${router.loc?.location ?? '/'}::${params?.id ?? params?.first ?? ''}`,
+    `${page.url.pathname ?? '/'}::${page.params.id ?? params?.first ?? ''}`,
   )
 </script>
 

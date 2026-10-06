@@ -1,4 +1,4 @@
-import { push } from 'svelte-spa-router'
+import { goto } from '$app/navigation'
 import { setBoardDashboard } from './taskModuleStore.svelte.js'
 
 /**
@@ -14,7 +14,7 @@ import { setBoardDashboard } from './taskModuleStore.svelte.js'
 export function pushTaskFilters(filters = {}, view = 'list') {
   if (view === 'board') {
     if (filters.dashboard) setBoardDashboard(filters.dashboard)
-    push('/tasks/board')
+    goto('/tasks/board')
     return
   }
 
@@ -23,7 +23,7 @@ export function pushTaskFilters(filters = {}, view = 'list') {
     if (value != null && String(value).trim() !== '') params.set(key, String(value))
   }
   const query = params.toString()
-  push(query ? `/tasks/list?${query}` : '/tasks/list')
+  goto(query ? `/tasks/list?${query}` : '/tasks/list')
 }
 
 /** Parse filters from spa-router hash: `#/tasks/list?status=backlog` */
