@@ -1,0 +1,4 @@
+#!/bin/bash
+# Batasi hanya ke direktori aplikasi
+echo "Running custom fix-permissions..."
+chmod -R g+rwX /var/www/html || true
