@@ -1,4 +1,4 @@
-const API_BASE = '/edm-task-monitoring/backend'
+const API_BASE = import.meta.env.VITE_API_BASE ?? '/edm-task-monitoring/backend'
 
 async function request(path) {
   const res = await fetch(`${API_BASE}${path}`)
