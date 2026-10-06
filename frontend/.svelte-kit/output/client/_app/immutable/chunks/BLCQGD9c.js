@@ -1,1 +1,0 @@
-function e(e){return typeof document>`u`?{}:(document.body.appendChild(e),{destroy(){e.parentNode&&e.parentNode.removeChild(e)}})}export{e as t};

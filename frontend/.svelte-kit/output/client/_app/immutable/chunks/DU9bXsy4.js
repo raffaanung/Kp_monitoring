@@ -1,1 +1,0 @@
-var e=``+new URL(`../assets/avatar-farras.JxOz34v6.jpg`,import.meta.url).href;export{e as t};
