@@ -1,9 +1,13 @@
+import { api } from './api.js'
+import { accessStore } from './accessStore.svelte.js'
+
 /** @typedef {'open' | 'in_progress' | 'done'} RequirementStatus */
 /** @typedef {'on_track' | 'at_risk' | 'blocked'} RequirementHealth */
 
 /**
  * @typedef {Object} Requirement
- * @property {number} id
+ * @property {string} id
+ * @property {string} code
  * @property {string} dashboard
  * @property {string} title
  * @property {string} description
@@ -14,165 +18,113 @@
  * @property {string} created_by
  * @property {string} created_at
  * @property {string} updated_at
+ * @property {number} version_no
+ * @property {string | null} version_root_id
  */
-
-const STORAGE_KEY = 'edm-fe-requirements-v3'
-
-function nowStamp() {
-  const d = new Date()
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:00`
-}
-
-function dateOnly() {
-  const d = new Date()
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-}
-
-/**
- * @param {Partial<Requirement> & { id: number, dashboard: string, title: string }} raw
- * @returns {Requirement}
- */
-function normalizeRequirement(raw) {
-  return {
-    id: Number(raw.id),
-    dashboard: raw.dashboard || '',
-    title: raw.title || '',
-    description: raw.description || '',
-    status: raw.status || 'open',
-    health: raw.health || 'on_track',
-    due_date: raw.due_date || '',
-    team: Array.isArray(raw.team) ? raw.team : [],
-    created_by: raw.created_by || 'PM',
-    created_at: raw.created_at || nowStamp(),
-    updated_at: raw.updated_at || nowStamp(),
-  }
-}
-
-/** @returns {Requirement[]} */
-function seedRequirements() {
-  return [
-    normalizeRequirement({
-      id: 1,
-      dashboard: 'GBO Dashboard',
-      title: 'SLA & throughput visibility',
-      description: 'Requirement untuk heatmap SLA regional dan chart throughput vs target.',
-      status: 'in_progress',
-      health: 'on_track',
-      due_date: '2026-09-20',
-      team: ['Farras Al-Risyad', 'Panji Pujianto'],
-      created_by: 'Alamsyah Putra',
-      created_at: '2026-08-20 09:00:00',
-      updated_at: '2026-09-12 11:00:00',
-    }),
-    normalizeRequirement({
-      id: 2,
-      dashboard: 'GBO Dashboard',
-      title: 'Escalation & export pack',
-      description: 'Drill-down eskalasi dan export PDF mingguan.',
-      status: 'open',
-      health: 'on_track',
-      due_date: '2026-09-01',
-      team: [],
-      created_by: 'Alamsyah Putra',
-      created_at: '2026-09-01 10:00:00',
-      updated_at: '2026-09-01 10:00:00',
-    }),
-    normalizeRequirement({
-      id: 3,
-      dashboard: 'FinSight',
-      title: 'Invoice aging & FX exposure',
-      description: 'Filter aging bucket, vendor exposure, dan overlay FX rate.',
-      status: 'in_progress',
-      health: 'at_risk',
-      due_date: '2026-09-18',
-      team: ['Asep Wahyudi'],
-      created_by: 'Alamsyah Putra',
-      created_at: '2026-08-15 08:00:00',
-      updated_at: '2026-09-11 09:00:00',
-    }),
-    normalizeRequirement({
-      id: 4,
-      dashboard: 'CX Dashboard',
-      title: 'CSAT & backlog health',
-      description: 'Trend CSAT per channel dan alert aging backlog.',
-      status: 'in_progress',
-      health: 'on_track',
-      due_date: '2026-09-25',
-      team: ['Panji Pujianto', 'Farras Al-Risyad'],
-      created_by: 'Alamsyah Putra',
-      created_at: '2026-08-01 11:00:00',
-      updated_at: '2026-09-10 16:00:00',
-    }),
-    normalizeRequirement({
-      id: 5,
-      dashboard: 'TRAXIS',
-      title: 'Delivery board intelligence',
-      description: 'Burn-up widget dan taxonomy blocker.',
-      status: 'open',
-      health: 'on_track',
-      due_date: '2026-09-30',
-      team: [],
-      created_by: 'Alamsyah Putra',
-      created_at: '2026-09-05 12:00:00',
-      updated_at: '2026-09-07 12:00:00',
-    }),
-    normalizeRequirement({
-      id: 6,
-      dashboard: 'GARD',
-      title: 'Governance compliance pack',
-      description: 'Policy exception log dan audit trail export.',
-      status: 'done',
-      health: 'on_track',
-      due_date: '2026-09-01',
-      team: ['Maggie Arsyad'],
-      created_by: 'Alamsyah Putra',
-      created_at: '2026-07-01 10:00:00',
-      updated_at: '2026-09-01 16:00:00',
-    }),
-  ]
-}
-
-/** @returns {Requirement[]} */
-function loadRequirements() {
-  if (typeof localStorage === 'undefined') return seedRequirements()
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return seedRequirements()
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed) || parsed.length === 0) return seedRequirements()
-    return parsed.map((row) => normalizeRequirement(row))
-  } catch {
-    return seedRequirements()
-  }
-}
 
 export const requirementStore = $state({
   /** @type {Requirement[]} */
-  items: loadRequirements(),
-  /** @type {number | null} */
+  items: [],
+  /** @type {string | null} */
   lastDetailId: null,
+  loading: false,
+  /** @type {string | null} */
+  error: null,
 })
 
-function persist() {
-  if (typeof localStorage === 'undefined') return
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(requirementStore.items))
+export async function loadRequirementsFromApi() {
+  requirementStore.loading = true
+  requirementStore.error = null
+  try {
+    requirementStore.items = await api.get('/api/requirements')
+  } catch (e) {
+    requirementStore.error = e instanceof Error ? e.message : String(e)
+  } finally {
+    requirementStore.loading = false
+  }
 }
 
-/** @param {number} id */
+/** @param {string} id */
 export function reqCode(id) {
-  return `REQ-${String(Number(id)).padStart(3, '0')}`
+  return requirementStore.items.find((r) => r.id === id)?.code || ''
 }
 
+/** Id yang dipakai sebagai identitas tetap requirement ini, sama untuk semua versinya (V1, V2, ...). */
+/** @param {Pick<Requirement, 'id' | 'version_root_id'>} item */
+export function versionRootId(item) {
+  return item.version_root_id || item.id
+}
+
+/** " · V2" kalau versinya bukan V1, kosong kalau V1 (supaya requirement yang belum punya versi lain tampil sama seperti sebelumnya). */
+/** @param {Pick<Requirement, 'version_no'>} item */
+export function reqVersionSuffix(item) {
+  return item.version_no > 1 ? ` · V${item.version_no}` : ''
+}
+
+/** Semua versi (V1, V2, ...) dari requirement yang satu grup dengan id ini, urut dari yang paling lama. */
 /** @param {number} id */
+export function requirementVersions(id) {
+  const item = getRequirement(id)
+  if (!item) return []
+  const rootId = versionRootId(item)
+  return requirementStore.items
+    .filter((r) => versionRootId(r) === rootId)
+    .sort((a, b) => a.version_no - b.version_no)
+}
+
+/**
+ * Kelompokkan daftar requirement per grup versi, untuk ditampilkan sebagai satu baris.
+ * @param {Requirement[]} items
+ * @returns {{ root: Requirement, latest: Requirement, versions: Requirement[] }[]}
+ */
+export function groupByVersionRoot(items) {
+  /** @type {Map<number, Requirement[]>} */
+  const groups = new Map()
+  for (const r of items) {
+    const rootId = versionRootId(r)
+    const bucket = groups.get(rootId)
+    if (bucket) bucket.push(r)
+    else groups.set(rootId, [r])
+  }
+  return [...groups.values()].map((versions) => {
+    const sorted = [...versions].sort((a, b) => a.version_no - b.version_no)
+    return { root: sorted[0], latest: sorted[sorted.length - 1], versions: sorted }
+  })
+}
+
+/**
+ * Buat versi baru dari requirement ini. Tanpa payload, judul/deskripsi/tim disalin dari
+ * versi sumber sebagai awalan; task tidak ikut disalin karena task adalah milik satu versi.
+ * @param {number} id
+ * @param {{ title?: string, description?: string, team?: string[] }} [payload]
+ */
+export async function createRequirementVersion(id, payload = {}) {
+  try {
+    const body = {}
+    if (payload.title !== undefined) body.title = payload.title.trim()
+    if (payload.description !== undefined) body.description = payload.description.trim()
+    if (payload.team !== undefined) body.team = payload.team.filter(Boolean)
+    const created = await api.post(`/api/requirements/${id}/versions`, body)
+    await loadRequirementsFromApi()
+    return created
+  } catch {
+    return null
+  }
+}
+
+/** Hapus satu versi requirement. Task yang pernah terhubung ke versi ini tidak ikut terhapus — hanya tautannya dilepas. @param {number} id */
+export async function deleteRequirementVersion(id) {
+  return deleteRequirement(id)
+}
+
+/** @param {string} id */
 export function rememberDetailId(id) {
-  requirementStore.lastDetailId = Number(id) || null
+  requirementStore.lastDetailId = id || null
 }
 
-/** @param {number} id */
+/** @param {string} id */
 export function getRequirement(id) {
-  return requirementStore.items.find((r) => r.id === Number(id)) || null
+  return requirementStore.items.find((r) => r.id === id) || null
 }
 
 /**
@@ -184,14 +136,13 @@ export function getRequirement(id) {
  * }} [filters]
  */
 export function listRequirements({ dashboard = '', status = '', q = '', sort = 'updated_desc' } = {}) {
-  void requirementStore.items
   let items = [...requirementStore.items]
   if (dashboard) items = items.filter((r) => r.dashboard === dashboard)
   if (status) items = items.filter((r) => r.status === status)
   if (q) {
     const needle = q.toLowerCase()
     items = items.filter((r) =>
-      `${reqCode(r.id)} ${r.title} ${r.description} ${r.dashboard} ${r.created_by} ${r.team.join(' ')}`
+      `${reqCode(versionRootId(r))} ${r.title} ${r.description} ${r.dashboard} ${r.created_by} ${r.team.join(' ')}`
         .toLowerCase()
         .includes(needle),
     )
@@ -222,7 +173,6 @@ export function listRequirements({ dashboard = '', status = '', q = '', sort = '
 
 /** Dashboard names available for filter / form select */
 export function requirementDashboardOptions() {
-  void requirementStore.items
   return [...new Set(requirementStore.items.map((r) => r.dashboard).filter(Boolean))].sort()
 }
 
@@ -238,7 +188,6 @@ export const requirementSortOptions = [
 
 /** @param {string} dashboard */
 export function countRequirements(dashboard = '') {
-  void requirementStore.items
   if (!dashboard) return requirementStore.items.length
   return requirementStore.items.filter((r) => r.dashboard === dashboard).length
 }
@@ -255,58 +204,50 @@ export function countRequirements(dashboard = '') {
  *   created_by?: string,
  * }} payload
  */
-export function createRequirement(payload) {
+export async function createRequirement(payload) {
   const title = (payload.title || '').trim()
   const dashboard = (payload.dashboard || '').trim()
   if (!title || !dashboard) return null
 
-  const nextId = requirementStore.items.reduce((max, r) => Math.max(max, r.id), 0) + 1
-  const stamp = nowStamp()
-  /** @type {Requirement} */
-  const row = normalizeRequirement({
-    id: nextId,
-    dashboard,
-    title,
-    description: (payload.description || '').trim(),
-    status: payload.status || 'open',
-    health: payload.health || 'on_track',
-    due_date: (payload.due_date || '').trim() || dateOnly(),
-    team: Array.isArray(payload.team) ? payload.team.filter(Boolean) : [],
-    created_by: (payload.created_by || '').trim() || 'PM',
-    created_at: stamp,
-    updated_at: stamp,
-  })
-  requirementStore.items = [row, ...requirementStore.items]
-  persist()
-  return row
+  try {
+    const created = await api.post('/api/requirements', {
+      dashboard,
+      title,
+      description: (payload.description || '').trim(),
+      due_date: (payload.due_date || '').trim(),
+      team: Array.isArray(payload.team) ? payload.team.filter(Boolean) : [],
+      created_by: (payload.created_by || '').trim(),
+    })
+    await loadRequirementsFromApi()
+    return created
+  } catch {
+    return null
+  }
 }
 
 /**
  * @param {number} id
  * @param {Partial<Pick<Requirement, 'title' | 'description' | 'status' | 'health' | 'due_date' | 'team'>>} patch
  */
-export function updateRequirement(id, patch) {
-  const item = getRequirement(id)
-  if (!item) return false
-  if (patch.title !== undefined) item.title = patch.title.trim()
-  if (patch.description !== undefined) item.description = patch.description.trim()
-  if (patch.status !== undefined) item.status = patch.status
-  if (patch.health !== undefined) item.health = patch.health
-  if (patch.due_date !== undefined) item.due_date = patch.due_date
-  if (patch.team !== undefined) item.team = [...patch.team]
-  item.updated_at = nowStamp()
-  requirementStore.items = [...requirementStore.items]
-  persist()
-  return true
+export async function updateRequirement(id, patch) {
+  try {
+    await api.put(`/api/requirements/${id}`, patch)
+    await loadRequirementsFromApi()
+    return true
+  } catch {
+    return false
+  }
 }
 
-/** @param {number} id */
-export function deleteRequirement(id) {
-  const before = requirementStore.items.length
-  requirementStore.items = requirementStore.items.filter((r) => r.id !== Number(id))
-  if (requirementStore.items.length === before) return false
-  persist()
-  return true
+/** No delete UI exists anywhere in the app; kept only for API symmetry. */
+export async function deleteRequirement(id) {
+  try {
+    await api.del(`/api/requirements/${id}`)
+    await loadRequirementsFromApi()
+    return true
+  } catch {
+    return false
+  }
 }
 
 /** @param {RequirementStatus | string} status */
@@ -322,7 +263,6 @@ export function requirementStatusLabel(status) {
       return status
   }
 }
-
 
 /** @param {RequirementHealth | string} health */
 export function requirementHealthLabel(health) {
@@ -363,7 +303,6 @@ export const requirementStatusCatalog = [
   },
 ]
 
-
 export const requirementHealthOptions = [
   { value: 'on_track', label: 'On Track' },
   { value: 'at_risk', label: 'At Risk' },
@@ -394,7 +333,6 @@ export const requirementHealthCatalog = [
  * @param {string} [dashboard]
  */
 export function requirementStatusSummary(dashboard = '') {
-  void requirementStore.items
   const base = dashboard
     ? requirementStore.items.filter((r) => r.dashboard === dashboard)
     : requirementStore.items
@@ -409,7 +347,6 @@ export function requirementStatusSummary(dashboard = '') {
  * @param {string} [dashboard]
  */
 export function requirementHealthSummary(dashboard = '') {
-  void requirementStore.items
   const base = dashboard
     ? requirementStore.items.filter((r) => r.dashboard === dashboard)
     : requirementStore.items
@@ -419,13 +356,11 @@ export function requirementHealthSummary(dashboard = '') {
   }))
 }
 
-/** Seed roster for team picker (mockup) */
-export const requirementTeamRoster = [
-  { name: 'Asep Wahyudi', role: 'Teknis', presence: 'online' },
-  { name: 'Panji Pujianto', role: 'Teknis', presence: 'online' },
-  { name: 'Maggie Arsyad', role: 'Teknis', presence: 'away' },
-  { name: 'Farras Al-Risyad', role: 'Teknis', presence: 'online' },
-  { name: 'Lifi', role: 'Teknis', presence: 'online' },
-  { name: 'Mahdi', role: 'Teknis', presence: 'online' },
-  { name: 'Alfiv', role: 'Teknis', presence: 'away' },
-]
+/** Real Teknis-role users from accessStore, in the same shape the team picker used to get from a hardcoded roster. */
+export function requirementTeamRoster() {
+  const teknisRole = accessStore.roles.find((r) => r.name === 'Teknis')
+  if (!teknisRole) return []
+  return accessStore.users
+    .filter((u) => u.role_id === teknisRole.id && u.status === 'active')
+    .map((u) => ({ name: u.name, role: 'Teknis', presence: 'online' }))
+}

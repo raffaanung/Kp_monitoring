@@ -10,7 +10,7 @@ export default defineConfig({
 				assets: '../backend/spa',
 				fallback: 'index.html',
 				precompress: false,
-				strict: true
+				strict: false
 			}),
 			paths: {
 				base: process.env.NODE_ENV === 'production' ? '/edm-task-monitoring/backend/spa' : ''
@@ -26,7 +26,7 @@ export default defineConfig({
 		strictPort: true,
 		open: '/',
 		proxy: {
-			'/edm-task-monitoring/backend/api': {
+			'/edm-monitor/backend/api': {
 				target: 'http://localhost',
 				changeOrigin: true,
 			},

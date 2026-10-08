@@ -171,6 +171,8 @@
   .modal-body {
     position: relative;
     z-index: 3;
+    width: 100%;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     gap: 12px;

@@ -1,7 +1,6 @@
 <script>
   import { fade, fly } from 'svelte/transition'
   import OpsChart from '$lib/OpsChart.svelte'
-  import avatarFarras from '$lib/assets/avatar-farras.jpg'
   import logoFull from '$lib/assets/edm-logo.png'
   import NotificationBell from '$lib/NotificationBell.svelte'
   import ProfileSwitcher from '$lib/ProfileSwitcher.svelte'
@@ -30,6 +29,8 @@
   } from '$lib/taskModuleStore.svelte.js'
   import { pushTaskFilters } from '$lib/taskNav.js'
   import { requirementStore, requirementDashboardOptions } from '$lib/requirementStore.svelte.js'
+  import { avatarUrl } from '$lib/settingsStore.svelte.js'
+  import { authStore } from '$lib/authStore.svelte.js'
 
   /**
    * Adapt module task → shape dipakai timeline helpers (startDate/meta/updatedAt).
@@ -59,6 +60,11 @@
   const session = $derived.by(() => {
     void taskModuleStore.session
     return taskModuleStore.session
+  })
+
+  const profileAvatar = $derived.by(() => {
+    void authStore.user
+    return avatarUrl() || ''
   })
 
   const periodOptions = [
@@ -202,7 +208,7 @@
     const aktif = scopedTasks.filter((t) => t.status !== 'selesai').length
     const overdue = scopedTasks.filter((t) => isOverdue(/** @type {any} */ (t))).length
     const done = scopedTasks.filter((t) => t.status === 'selesai').length
-    const dashboards = new Set(scopedTasks.map((t) => t.meta)).size
+    const dashboards = new Set(scopedTasks.map((t) => t.meta).filter(Boolean)).size
     const periodNote =
       period === 'today' ? 'today' : period === 'week' ? 'this week' : 'this month'
     return [
@@ -531,7 +537,7 @@
         <ProfileSwitcher
           name={session.name}
           label={session.label}
-          avatar={avatarFarras}
+          avatar={profileAvatar}
           currentId={session.id}
         />
       </div>
@@ -845,7 +851,7 @@
                 <tbody>
                   {#each newestTasks.slice(0, 4) as item}
                     <tr>
-                      <td class="col-id"><span class="mono-id">#{item.id}</span></td>
+                      <td class="col-id"><span class="mono-id">{item.code}</span></td>
                       <td>
                         <button type="button" class="task-link" onclick={() => pushTaskFilters({ status: item.status })}>{item.title}</button>
                       </td>

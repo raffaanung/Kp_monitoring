@@ -1,4 +1,4 @@
-﻿<script>
+<script>
   import { goto } from '$app/navigation'
   import GlassPanel from '$lib/GlassPanel.svelte'
   import SubmenuHeader from '$lib/SubmenuHeader.svelte'
@@ -31,13 +31,14 @@
     approvalLabel,
     pmOfDashboard,
     currentUserRole,
+    currentUserName,
     addTaskComment,
     getModuleTask,
     readEvidenceFile,
   } from '$lib/taskModuleStore.svelte.js'
   import { formatDate, formatDateTime } from '$lib/format.js'
   import { portal } from '$lib/portal.js'
-  import { listRequirements, reqCode, requirementStore } from '$lib/requirementStore.svelte.js'
+  import { listRequirements, reqCode, versionRootId, reqVersionSuffix, requirementStore } from '$lib/requirementStore.svelte.js'
 
   let dragId = $state(/** @type {number | null} */ (null))
   let overColumn = $state(/** @type {string | null} */ (null))
@@ -48,9 +49,9 @@
   let moveConfirmTo = $state(/** @type {string | null} */ (null))
   let moveNote = $state('')
   let moveMsg = $state('')
-  let moveEvidence = $state(/** @type {import('../../lib/taskModuleStore.svelte.js').EvidenceFile | null} */ (null))
+  let moveEvidence = $state(/** @type {import('../lib/taskModuleStore.svelte.js').EvidenceFile | null} */ (null))
   let moveFileLabel = $state('')
-  /** @type {Record<number, import('../../lib/taskModuleStore.svelte.js').EvidenceFile | null>} */
+  /** @type {Record<number, import('../lib/taskModuleStore.svelte.js').EvidenceFile | null>} */
   let reviewFiles = $state({})
   /** @type {Record<number, string>} */
   let reviewFileLabels = $state({})
@@ -80,12 +81,21 @@
   const canAdd = $derived.by(() => {
     void taskModuleStore.session
     void taskModuleStore.boardDashboard
-    return canCreateTask() && isCurrentUserPmOf(selectedDashboard)
+    return canCreateTask()
   })
   const canDrag = $derived.by(() => {
     void taskModuleStore.session
     return canUpdateBoard()
   })
+  /** Owner requirement boleh geser task-nya sendiri, apa pun role-nya (termasuk Admin). @param {{ requirement_owner?: string } | null} task */
+  function isTaskOwner(task) {
+    void taskModuleStore.session
+    return Boolean(task && task.requirement_owner === currentUserName())
+  }
+  /** @param {{ requirement_owner?: string } | null} task */
+  function canDragTask(task) {
+    return canDrag || isTaskOwner(task)
+  }
   const canComment = $derived.by(() => {
     void taskModuleStore.session
     return canCommentOnTask()
@@ -99,10 +109,10 @@
     void taskModuleStore.session
     return currentUserRole()
   })
-  /** @param {{ requirement_id?: number | null }} task */
+  /** @param {{ requirement_id?: string | null }} task */
   function inRequirement(task) {
     if (!requirementId) return true
-    return Number(task.requirement_id) === Number(requirementId)
+    return task.requirement_id === requirementId
   }
 
   const inboxItems = $derived.by(() => {
@@ -142,11 +152,11 @@
 
   /** @param {DragEvent} e @param {number} id */
   function onDragStart(e, id) {
-    if (!canDrag) {
+    const task = getModuleTask(id)
+    if (!canDragTask(task)) {
       e.preventDefault()
       return
     }
-    const task = getModuleTask(id)
     if (task?.status_move) {
       e.preventDefault()
       return
@@ -171,27 +181,26 @@
 
   /** @param {DragEvent} e @param {string} column */
   function onDragOver(e, column) {
-    if (!canDrag) return
+    if (!canDragTask(getModuleTask(dragId))) return
     e.preventDefault()
     overColumn = column
   }
 
   /** @param {DragEvent} e @param {string} column */
-  function onDrop(e, column) {
+  async function onDrop(e, column) {
     e.preventDefault()
-    if (!canDrag) return
-    const raw = e.dataTransfer?.getData('text/plain') || String(dragId || '')
-    const id = Number(raw)
+    const id = e.dataTransfer?.getData('text/plain') || dragId || ''
     dragId = null
     overColumn = null
     if (!id) return
 
     const task = getModuleTask(id)
+    if (!canDragTask(task)) return
     if (!task || task.status === column) return
     if (task.status_move) return
 
-    if (role === 'pm' && asPmHere) {
-      moveModuleTask(id, /** @type {any} */ (column))
+    if (isTaskOwner(task) || (role === 'pm' && asPmHere)) {
+      await moveModuleTask(id, /** @type {any} */ (column))
       return
     }
 
@@ -234,9 +243,9 @@
     }
   }
 
-  function submitMoveRequest() {
+  async function submitMoveRequest() {
     if (!moveConfirmId || !moveConfirmTo) return
-    const result = moveModuleTask(moveConfirmId, /** @type {any} */ (moveConfirmTo), {
+    const result = await moveModuleTask(moveConfirmId, /** @type {any} */ (moveConfirmTo), {
       note: moveNote,
       evidence: moveEvidence,
     })
@@ -305,35 +314,35 @@
   }
 
   /** @param {number} id @param {string} [fallback] */
-  function cardApprove(id, fallback = '') {
+  async function cardApprove(id, fallback = '') {
     const task = getModuleTask(id)
     if (!task) return
     const note = inboxNote(id) || fallback
     const evidence = reviewFiles[id] || null
-    if (task.status_move) approveStatusMove(id, note, evidence)
-    else approveModuleTask(id, note, evidence)
+    if (task.status_move) await approveStatusMove(id, note, evidence)
+    else await approveModuleTask(id, note, evidence)
     setInboxNote(id, '')
     clearReviewFile(id)
   }
 
   /** @param {number} id @param {string} [fallback] */
-  function cardRevise(id, fallback = 'Perlu revisi.') {
+  async function cardRevise(id, fallback = 'Perlu revisi.') {
     const task = getModuleTask(id)
     if (!task) return
     const note = inboxNote(id).trim() || fallback
     const evidence = reviewFiles[id] || null
-    if (task.status_move) rejectStatusMove(id, note, evidence)
-    else requestRevisionModuleTask(id, note, evidence)
+    if (task.status_move) await rejectStatusMove(id, note, evidence)
+    else await requestRevisionModuleTask(id, note, evidence)
     setInboxNote(id, '')
     clearReviewFile(id)
   }
 
   /** @param {number} id */
-  function cardReject(id) {
+  async function cardReject(id) {
     const task = getModuleTask(id)
     if (!task) return
     const fallback = task.status_move ? 'Request pindah ditolak.' : 'Ditolak.'
-    cardRevise(id, fallback)
+    await cardRevise(id, fallback)
   }
 
   /** @param {number} id */
@@ -347,20 +356,25 @@
     commentDraft = ''
   }
 
-  /** @param {MouseEvent} e @param {number} id */
-  function openCardDetail(e, id) {
+  /** Klik badan kartu membuka area komentar di bawahnya, bukan pindah halaman. @param {MouseEvent} e @param {number} id */
+  function onCardClick(e, id) {
     if (suppressClick) return
     const el = /** @type {HTMLElement | null} */ (e.target)
     if (el?.closest('button, textarea, form, input, a, label')) return
+    toggleComment(id)
+  }
+
+  /** Judul task tetap jadi jalan ke halaman detail lengkap (approve/reject, riwayat, dll). @param {number} id */
+  function goToCardDetail(id) {
     rememberDetailId(id)
     goto(`/tasks/${id}`)
   }
 
   /** @param {SubmitEvent} e @param {number} id */
-  function submitCardComment(e, id) {
+  async function submitCardComment(e, id) {
     e.preventDefault()
     if (!commentDraft.trim()) return
-    addTaskComment(id, commentDraft)
+    await addTaskComment(id, commentDraft)
     commentDraft = ''
     commentOpenId = null
   }
@@ -370,9 +384,9 @@
   <GlassPanel>
     <SubmenuHeader
       eyebrow="Task"
-      title="Board View"
-      sub="Kanban per dashboard Â· pindah status teknis butuh approval PM"
-      meta={selectedDashboard || 'â€”'}
+      title="Board"
+      sub="Kanban per dashboard · pindah status teknis butuh approval PM"
+      meta={selectedDashboard || '—'}
     >
       {#snippet actions()}
         <label class="ctrl">
@@ -395,7 +409,7 @@
           <select class="ctrl-input req-filter" bind:value={requirementId}>
             <option value="">Semua requirement</option>
             {#each requirements as req (req.id)}
-              <option value={String(req.id)}>{reqCode(req.id)} Â· {req.title}</option>
+              <option value={String(req.id)}>{reqCode(versionRootId(req))}{reqVersionSuffix(req)} · {req.title}</option>
             {/each}
           </select>
         </label>
@@ -406,11 +420,6 @@
         {/if}
       {/snippet}
     </SubmenuHeader>
-
-    <div class="main-tabs" role="tablist">
-      <button type="button" class="main-tab on" aria-selected="true">Board</button>
-      <button type="button" class="main-tab" onclick={() => goto('/tasks/list')}>List</button>
-    </div>
 
     <div class="tabs" role="tablist" aria-label="Board views">
       <button
@@ -442,11 +451,11 @@
         {#if role === 'viewer' || role === 'manager'}
           Mode view saja
         {:else if asPmHere}
-          Anda PM {selectedDashboard} Â· drag langsung Â· review request teknis
+          Anda PM {selectedDashboard} · drag langsung · review request teknis
         {:else if role === 'pm'}
-          PM {pmOfDashboard(selectedDashboard) || 'â€”'} Â· Anda PM dashboard lain
+          PM {pmOfDashboard(selectedDashboard) || '—'} · Anda PM dashboard lain
         {:else}
-          Teknis Â· drag = ajukan pindah status (butuh approval PM)
+          Teknis · drag = ajukan pindah status (butuh approval PM)
         {/if}
       </p>
     </div>
@@ -459,14 +468,14 @@
       {:else}
         <div class="inbox-list">
           {#each inboxItems as task (task.id)}
-            {@const canActMove = isCurrentUserPmOf(task.dashboard) && Boolean(task.status_move)}
+            {@const canActMove = (isCurrentUserPmOf(task.dashboard) || isTaskOwner(task)) && Boolean(task.status_move)}
             {@const canActLegacy =
-              isCurrentUserPmOf(task.dashboard) &&
+              task.requirement_owner === session.name &&
               !task.status_move &&
               task.approval_state === 'pending'}
             {@const canResubmit =
               task.approval_state === 'revision' &&
-              (task.created_by === session.name || isCurrentUserPmOf(task.dashboard))}
+              (task.created_by === session.name || task.requirement_owner === session.name)}
             {@const canAct = canActMove || canActLegacy}
             {@const badgeState = task.status_move
               ? 'pending'
@@ -476,7 +485,7 @@
                   ? 'approved'
                   : 'pending'}
             {@const badgeText = task.status_move
-              ? `Pindah ${workflowLabel(task.status_move.from)} â†’ ${workflowLabel(task.status_move.to)}`
+              ? `Pindah ${workflowLabel(task.status_move.from)} → ${workflowLabel(task.status_move.to)}`
               : approvalLabel(task.approval_state)}
             {@const actor = task.status_move?.requested_by || task.created_by}
             {@const when = formatDateTime(task.status_move?.at || task.updated_at || task.created_at)}
@@ -497,7 +506,7 @@
               <p class="inbox-reviewer">
                 {badgeState === 'approved' ? 'Reviewer' : 'Diajukan'}:
                 <strong>{actor}</strong>
-                <span aria-hidden="true">Â·</span>
+                <span aria-hidden="true">·</span>
                 {when}
               </p>
 
@@ -506,7 +515,7 @@
                 {#if canAct}
                   <textarea
                     rows="3"
-                    placeholder="Tulis catatan reviewâ€¦"
+                    placeholder="Tulis catatan review…"
                     value={Object.hasOwn(reviewNotes, task.id) ? reviewNotes[task.id] : existingNote}
                     oninput={(e) => setInboxNote(task.id, /** @type {HTMLTextAreaElement} */ (e.currentTarget).value)}
                   ></textarea>
@@ -532,7 +541,6 @@
               <div class="inbox-acts">
                 {#if canAct}
                   <button type="button" class="act approve" onclick={() => cardApprove(task.id)}>Setujui</button>
-                  <button type="button" class="act revise" onclick={() => cardRevise(task.id)}>Minta revisi</button>
                   <button type="button" class="act reject" onclick={() => cardReject(task.id)}>Tolak</button>
                 {:else if canResubmit && role !== 'viewer'}
                   <button type="button" class="act approve" onclick={() => resubmitModuleTask(task.id)}>
@@ -573,28 +581,36 @@
               <span class="count">{cards.length}</span>
             </header>
 
-            <div class="cards">
+            <div class="cards" class:is-empty={cards.length === 0}>
               {#each cards as task (task.id)}
                 {@const comment = latestComment(task)}
+                {@const comments = task.comments || []}
                 <article
                   class="card"
                   class:dragging={dragId === task.id}
                   class:late={isOverdue(task)}
                   class:commenting={commentOpenId === task.id}
                   class:pending-move={Boolean(task.status_move)}
-                  draggable={canDrag && commentOpenId !== task.id && !task.status_move}
+                  draggable={canDragTask(task) && commentOpenId !== task.id && !task.status_move}
                   ondragstart={(e) => onDragStart(e, task.id)}
                   ondragend={onDragEnd}
-                  onclick={(e) => openCardDetail(e, task.id)}
+                  onclick={(e) => onCardClick(e, task.id)}
                   role="listitem"
                 >
                   <div class="card-body">
                     {#if task.status_move}
                       <span class="move-badge">
-                        Menunggu PM Â· â†’ {workflowLabel(task.status_move.to)}
+                        Menunggu PM · → {workflowLabel(task.status_move.to)}
                       </span>
                     {/if}
-                    <strong>{task.title}</strong>
+                    <button
+                      type="button"
+                      class="card-title-link"
+                      onclick={(e) => { e.stopPropagation(); goToCardDetail(task.id) }}
+                      title="Buka detail task"
+                    >
+                      {task.title}
+                    </button>
                     <div class="foot">
                       <span class="due">{formatDate(task.deadline)}</span>
                     </div>
@@ -604,17 +620,17 @@
                     </div>
 
                     <div class="card-comments">
-                      {#if task.comments.length > 0}
+                      {#if comments.length > 0}
                         <ul class="c-list">
-                          {#each task.comments.slice(0, 2) as c (c.id)}
+                          {#each comments.slice(0, 2) as c (c.id)}
                             <li>
                               <span class="c-actor">{c.actor.split(' ')[0]}</span>
                               {c.body}
                             </li>
                           {/each}
                         </ul>
-                        {#if task.comments.length > 2}
-                          <p class="c-more">+{task.comments.length - 2} komentar lain</p>
+                        {#if comments.length > 2}
+                          <p class="c-more">+{comments.length - 2} komentar lain</p>
                         {/if}
                       {:else if comment}
                         <p class="card-comment">{comment.body}</p>
@@ -630,7 +646,7 @@
                             <textarea
                               rows="2"
                               bind:value={commentDraft}
-                              placeholder="Tulis komentarâ€¦"
+                              placeholder="Tulis komentar…"
                               onkeydown={(e) => e.stopPropagation()}
                             ></textarea>
                             <div class="c-acts">
@@ -648,11 +664,11 @@
                             }}
                             onmousedown={(e) => e.stopPropagation()}
                           >
-                            {task.comments.length > 0 ? `Komentar (${task.comments.length})` : '+ Komentar'}
+                            {comments.length > 0 ? `Komentar (${comments.length})` : '+ Komentar'}
                           </button>
                         {/if}
-                      {:else if task.comments.length > 0}
-                        <span class="c-count-only">{task.comments.length} komentar</span>
+                      {:else if comments.length > 0}
+                        <span class="c-count-only">{comments.length} komentar</span>
                       {/if}
                     </div>
                   </div>
@@ -687,18 +703,18 @@
           <div>
             <h2 id="move-req-title">Ajukan pindah status</h2>
             <p>
-              {workflowLabel(moveTask.status)} â†’ <strong>{workflowLabel(moveConfirmTo)}</strong>
-              Â· menunggu PM ({pmOfDashboard(moveTask.dashboard) || 'â€”'})
+              {workflowLabel(moveTask.status)} → <strong>{workflowLabel(moveConfirmTo)}</strong>
+              · menunggu PM ({pmOfDashboard(moveTask.dashboard) || '—'})
             </p>
           </div>
-          <button type="button" class="close" aria-label="Tutup" onclick={closeMoveConfirm}>Ã—</button>
+          <button type="button" class="close" aria-label="Tutup" onclick={closeMoveConfirm}>×</button>
         </div>
         <div class="review-summary">
           <strong>{moveTask.title}</strong>
         </div>
         <label>
           <span>Catatan (opsional)</span>
-          <textarea rows="2" bind:value={moveNote} placeholder="Alasan pindah kolomâ€¦"></textarea>
+          <textarea rows="2" bind:value={moveNote} placeholder="Alasan pindah kolom…"></textarea>
         </label>
         <label class="file-field">
           <span>Bukti pengerjaan (opsional, max 900 KB)</span>
@@ -743,40 +759,6 @@
     margin-top: 12px;
     padding-top: 12px;
     border-top: 1px solid rgba(0, 0, 0, 0.06);
-  }
-
-  .main-tabs {
-    display: flex;
-    gap: 16px;
-    margin-top: 16px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-  }
-
-  .main-tab {
-    background: transparent;
-    border: none;
-    font-size: 0.72rem;
-    font-weight: 650;
-    color: #6b6b6b;
-    padding: 0 0 8px 0;
-    cursor: pointer;
-    position: relative;
-  }
-
-  .main-tab.on {
-    color: #0f1b2e;
-  }
-
-  .main-tab.on::after {
-    content: '';
-    position: absolute;
-    bottom: -9px;
-    left: 0;
-    right: 0;
-    height: 2px;
-    background: #0f1b2e;
-    border-radius: 2px 2px 0 0;
   }
 
   .tab {
@@ -1026,12 +1008,12 @@
   }
 
   .act.approve {
-    background: #8a8a8a;
+    background: #2f7a52;
     color: #fff;
   }
 
   .act.approve:hover {
-    background: #757575;
+    background: #26693f;
   }
 
   .act.revise {
@@ -1087,6 +1069,7 @@
     min-height: 0;
     display: grid;
     grid-template-columns: repeat(6, minmax(210px, 1fr));
+    align-items: start;
     gap: 12px;
     overflow: auto;
     padding: 2px;
@@ -1190,6 +1173,12 @@
     flex: 1;
   }
 
+  .cards.is-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
   .card {
     border-radius: 16px;
     background: linear-gradient(160deg, #ffffff 0%, #f4f8fc 100%);
@@ -1246,6 +1235,26 @@
     font-weight: 700;
     line-height: 1.35;
     color: #0f1b2e;
+  }
+
+  .card-title-link {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    text-align: left;
+    font: inherit;
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1.35;
+    color: #0f1b2e;
+    cursor: pointer;
+  }
+
+  .card-title-link:hover {
+    color: #065fc6;
+    text-decoration: underline;
   }
 
   .card-comments {
@@ -1473,6 +1482,8 @@
   .modal-body {
     position: relative;
     z-index: 3;
+    width: 100%;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -1596,4 +1607,3 @@
     }
   }
 </style>
-

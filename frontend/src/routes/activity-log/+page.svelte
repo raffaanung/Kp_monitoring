@@ -1,14 +1,21 @@
-﻿<script>
-    import GlassPanel from '$lib/GlassPanel.svelte'
+<script>
+  import { onMount } from 'svelte'
+  "/* link removed, native <a> works in SvelteKit */"
+  import GlassPanel from '$lib/GlassPanel.svelte'
   import SubmenuHeader from '$lib/SubmenuHeader.svelte'
   import {
     listActivityLogs,
+    loadActivityLogsFromApi,
     objectTypeLabel,
     rememberLogDetailId,
     activityLogStore,
   } from '$lib/activityLogStore.svelte.js'
   import { listDashboards, registryStore } from '$lib/registryStore.svelte.js'
   import { formatDate } from '$lib/format.js'
+
+  onMount(() => {
+    loadActivityLogsFromApi()
+  })
 
   let dateFrom = $state('')
   let dateTo = $state('')
@@ -49,7 +56,7 @@
   function formatStamp(stamp) {
     const date = stamp.slice(0, 10)
     const time = stamp.slice(11, 16)
-    return `${formatDate(date)} Â· ${time}`
+    return `${formatDate(date)} · ${time}`
   }
 </script>
 
@@ -121,6 +128,7 @@
                   <a
                     class="detail-link"
                     href={`/activity-log/${log.id}`}
+                   
                     onclick={() => rememberLogDetailId(log.id)}
                   >
                     {log.changes.length} field
@@ -309,4 +317,3 @@
     font-weight: 550;
   }
 </style>
-

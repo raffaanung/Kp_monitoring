@@ -6,57 +6,75 @@
     updateProfile,
     updateAvatar,
     clearAvatar,
-    settingsStore,
   } from '$lib/settingsStore.svelte.js'
-  import { taskModuleStore } from '$lib/taskModuleStore.svelte.js'
-  import avatarFallback from '$lib/assets/avatar-farras.jpg'
+  import { authStore, changePassword } from '$lib/authStore.svelte.js'
 
   let photoOpen = $state(false)
   let infoOpen = $state(false)
+  let passwordOpen = $state(false)
 
+  /** @type {File | null} */
+  let photoFile = $state(null)
   let photoPreview = $state('')
   let photoError = $state('')
   let infoError = $state('')
   let infoOk = $state('')
+  let busy = $state(false)
 
   let displayName = $state('')
-  let email = $state('')
-  let phone = $state('')
-  let unit = $state('')
-  let bio = $state('')
+  let username = $state('')
+
+  let currentPassword = $state('')
+  let newPassword = $state('')
+  let confirmPassword = $state('')
+  let passwordError = $state('')
+  let passwordOk = $state('')
 
   const profile = $derived.by(() => {
-    void settingsStore.byPersona
-    void taskModuleStore.session
+    void authStore.user
     return currentProfile()
   })
 
-  const session = $derived.by(() => {
-    void taskModuleStore.session
-    return taskModuleStore.session
-  })
+  const session = $derived.by(() => authStore.user)
 
-  const avatarSrc = $derived(profile.avatarDataUrl || avatarFallback)
-  const shownName = $derived(profile.displayName?.trim() || session.name)
+  const avatarSrc = $derived(session?.avatar_url || '')
+  const shownName = $derived(profile.displayName || session?.name || '')
+
+  /** @param {string} n */
+  function initials(n) {
+    return (n || '')
+      .split(' ')
+      .slice(0, 2)
+      .map((p) => p[0])
+      .join('')
+      .toUpperCase()
+  }
+
+  /** @param {string} n */
+  function faceTone(n) {
+    const tones = ['rose', 'sky', 'soft', 'mint', 'sand']
+    let h = 0
+    for (let i = 0; i < n.length; i++) h = (h + n.charCodeAt(i)) % tones.length
+    return tones[h]
+  }
 
   function openPhoto() {
-    photoPreview = profile.avatarDataUrl || ''
+    photoFile = null
+    photoPreview = ''
     photoError = ''
     photoOpen = true
   }
 
   function closePhoto() {
     photoOpen = false
+    photoFile = null
     photoPreview = ''
     photoError = ''
   }
 
   function openInfo() {
-    displayName = profile.displayName || session.name
-    email = profile.email
-    phone = profile.phone
-    unit = profile.unit
-    bio = profile.bio
+    displayName = profile.displayName
+    username = profile.username
     infoError = ''
     infoOk = ''
     infoOpen = true
@@ -66,9 +84,22 @@
     infoOpen = false
   }
 
+  function openPassword() {
+    currentPassword = ''
+    newPassword = ''
+    confirmPassword = ''
+    passwordError = ''
+    passwordOpen = true
+  }
+
+  function closePassword() {
+    passwordOpen = false
+  }
+
   function closeAll() {
     closePhoto()
     closeInfo()
+    closePassword()
   }
 
   /** @param {Event} e */
@@ -85,25 +116,21 @@
       photoError = 'Ukuran maksimal 1.5 MB'
       return
     }
-    const reader = new FileReader()
-    reader.onload = () => {
-      photoPreview = String(reader.result || '')
-    }
-    reader.onerror = () => {
-      photoError = 'Gagal membaca file'
-    }
-    reader.readAsDataURL(file)
+    photoFile = file
+    photoPreview = URL.createObjectURL(file)
   }
 
   /** @param {Event} e */
-  function onPhotoSubmit(e) {
+  async function onPhotoSubmit(e) {
     e.preventDefault()
     photoError = ''
-    if (!photoPreview) {
+    if (!photoFile) {
       photoError = 'Pilih foto terlebih dahulu'
       return
     }
-    const res = updateAvatar(photoPreview)
+    busy = true
+    const res = await updateAvatar(photoFile)
+    busy = false
     if (!res.ok) {
       photoError = res.error
       return
@@ -111,24 +138,50 @@
     closePhoto()
   }
 
-  function onClearPhoto() {
-    clearAvatar()
-    photoPreview = ''
+  async function onClearPhoto() {
+    busy = true
+    await clearAvatar()
+    busy = false
     closePhoto()
   }
 
   /** @param {Event} e */
-  function onInfoSubmit(e) {
+  async function onInfoSubmit(e) {
     e.preventDefault()
     infoError = ''
     infoOk = ''
-    const res = updateProfile({ displayName, email, phone, unit, bio })
+    busy = true
+    const res = await updateProfile({ displayName, username })
+    busy = false
     if (!res.ok) {
       infoError = res.error
       return
     }
     infoOk = 'Profil disimpan'
     infoOpen = false
+  }
+
+  /** @param {Event} e */
+  async function onPasswordSubmit(e) {
+    e.preventDefault()
+    passwordError = ''
+    if (newPassword.length < 6) {
+      passwordError = 'Password baru minimal 6 karakter'
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      passwordError = 'Konfirmasi password tidak cocok'
+      return
+    }
+    busy = true
+    const res = await changePassword(currentPassword, newPassword)
+    busy = false
+    if (!res.ok) {
+      passwordError = res.error
+      return
+    }
+    passwordOk = 'Password berhasil diganti'
+    passwordOpen = false
   }
 
   /** @param {KeyboardEvent} e */
@@ -158,10 +211,14 @@
           <button type="button" class="btn" onclick={openPhoto}>Ubah foto</button>
         </div>
         <div class="photo-row">
-          <img class="avatar" src={avatarSrc} alt="" />
+          {#if avatarSrc}
+            <img class="avatar" src={avatarSrc} alt="" />
+          {:else}
+            <i class="avatar face {faceTone(shownName)}">{initials(shownName)}</i>
+          {/if}
           <div class="photo-meta">
             <strong>{shownName}</strong>
-            <small>{session.label} Â· {session.role}</small>
+            <small>{session?.role_name} · {session?.functional_role}</small>
           </div>
         </div>
       </article>
@@ -170,7 +227,7 @@
         <div class="card-top">
           <div>
             <h3>Edit Info</h3>
-            <p>Nama tampilan, kontak, dan unit</p>
+            <p>Nama tampilan dan username akun</p>
           </div>
           <button type="button" class="btn" onclick={openInfo}>Edit info</button>
         </div>
@@ -180,23 +237,26 @@
             <dd>{shownName}</dd>
           </div>
           <div>
-            <dt>Email</dt>
-            <dd>{profile.email || 'â€”'}</dd>
-          </div>
-          <div>
-            <dt>Telepon</dt>
-            <dd>{profile.phone || 'â€”'}</dd>
+            <dt>Username</dt>
+            <dd>{profile.username || '—'}</dd>
           </div>
           <div>
             <dt>Unit</dt>
-            <dd>{profile.unit || 'â€”'}</dd>
-          </div>
-          <div class="full">
-            <dt>Bio</dt>
-            <dd>{profile.bio || 'â€”'}</dd>
+            <dd>{profile.unit || '—'}</dd>
           </div>
         </dl>
         {#if infoOk}<p class="ok">{infoOk}</p>{/if}
+      </article>
+
+      <article class="card">
+        <div class="card-top">
+          <div>
+            <h3>Keamanan</h3>
+            <p>Ganti password akun</p>
+          </div>
+          <button type="button" class="btn" onclick={openPassword}>Ganti password</button>
+        </div>
+        {#if passwordOk}<p class="ok">{passwordOk}</p>{/if}
       </article>
     </div>
   </GlassPanel>
@@ -222,11 +282,15 @@
             <h2 id="edit-photo-title">Edit Foto</h2>
             <p>Unggah JPG, PNG, atau WebP (maks. 1.5 MB)</p>
           </div>
-          <button type="button" class="close" aria-label="Tutup" onclick={closePhoto}>Ã—</button>
+          <button type="button" class="close" aria-label="Tutup" onclick={closePhoto}>×</button>
         </div>
 
         <div class="preview-wrap">
-          <img class="preview" src={photoPreview || avatarSrc} alt="" />
+          {#if photoPreview || avatarSrc}
+            <img class="preview" src={photoPreview || avatarSrc} alt="" />
+          {:else}
+            <i class="preview face {faceTone(shownName)}">{initials(shownName)}</i>
+          {/if}
         </div>
 
         <label class="file-label">
@@ -237,11 +301,11 @@
         {#if photoError}<p class="error">{photoError}</p>{/if}
 
         <div class="actions">
-          {#if profile.avatarDataUrl}
-            <button type="button" class="ghost danger" onclick={onClearPhoto}>Hapus foto</button>
+          {#if session?.avatar_url}
+            <button type="button" class="ghost danger" onclick={onClearPhoto} disabled={busy}>Hapus foto</button>
           {/if}
           <button type="button" class="ghost" onclick={closePhoto}>Batal</button>
-          <button type="submit" class="primary">Simpan foto</button>
+          <button type="submit" class="primary" disabled={busy}>{busy ? 'Menyimpan…' : 'Simpan foto'}</button>
         </div>
       </form>
     </div>
@@ -266,9 +330,9 @@
         <div class="modal-head">
           <div>
             <h2 id="edit-info-title">Edit Info</h2>
-            <p>Perbarui data profil yang ditampilkan di aplikasi</p>
+            <p>Perbarui nama dan username akun</p>
           </div>
-          <button type="button" class="close" aria-label="Tutup" onclick={closeInfo}>Ã—</button>
+          <button type="button" class="close" aria-label="Tutup" onclick={closeInfo}>×</button>
         </div>
 
         <label>
@@ -277,31 +341,64 @@
         </label>
 
         <label>
-          <span>Email</span>
-          <input type="email" bind:value={email} placeholder="nama@edm.local" />
-        </label>
-
-        <div class="row">
-          <label>
-            <span>Telepon</span>
-            <input bind:value={phone} placeholder="08â€¦" />
-          </label>
-          <label>
-            <span>Unit</span>
-            <input bind:value={unit} placeholder="EDM Core" />
-          </label>
-        </div>
-
-        <label>
-          <span>Bio</span>
-          <textarea bind:value={bio} rows="3" placeholder="Singkat tentang peran Andaâ€¦"></textarea>
+          <span>Username</span>
+          <input type="text" inputmode="numeric" pattern={'[0-9]{8}'} maxlength="8" bind:value={username} placeholder="10000001" />
         </label>
 
         {#if infoError}<p class="error">{infoError}</p>{/if}
 
         <div class="actions">
           <button type="button" class="ghost" onclick={closeInfo}>Batal</button>
-          <button type="submit" class="primary">Simpan info</button>
+          <button type="submit" class="primary" disabled={busy}>{busy ? 'Menyimpan…' : 'Simpan info'}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+{/if}
+
+{#if passwordOpen}
+  <div class="backdrop" role="presentation" onclick={closePassword} onkeydown={onKeydown}>
+    <div
+      class="modal liquidGlass-wrapper"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="change-password-title"
+      tabindex="-1"
+      onclick={(e) => e.stopPropagation()}
+      onkeydown={onKeydown}
+    >
+      <div class="liquidGlass-effect"></div>
+      <div class="liquidGlass-tint"></div>
+      <div class="liquidGlass-shine"></div>
+      <form class="modal-body" onsubmit={onPasswordSubmit}>
+        <div class="modal-head">
+          <div>
+            <h2 id="change-password-title">Ganti Password</h2>
+            <p>Masukkan password saat ini, lalu password baru</p>
+          </div>
+          <button type="button" class="close" aria-label="Tutup" onclick={closePassword}>×</button>
+        </div>
+
+        <label>
+          <span>Password saat ini</span>
+          <input type="password" bind:value={currentPassword} placeholder="Password saat ini" />
+        </label>
+
+        <label>
+          <span>Password baru</span>
+          <input type="password" bind:value={newPassword} placeholder="Minimal 6 karakter" />
+        </label>
+
+        <label>
+          <span>Konfirmasi password baru</span>
+          <input type="password" bind:value={confirmPassword} placeholder="Ulangi password baru" />
+        </label>
+
+        {#if passwordError}<p class="error">{passwordError}</p>{/if}
+
+        <div class="actions">
+          <button type="button" class="ghost" onclick={closePassword}>Batal</button>
+          <button type="submit" class="primary" disabled={busy}>{busy ? 'Menyimpan…' : 'Simpan password'}</button>
         </div>
       </form>
     </div>
@@ -394,6 +491,21 @@
     border: 2px solid rgba(255, 255, 255, 0.85);
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
   }
+
+  .face {
+    display: inline-grid;
+    place-items: center;
+    font-weight: 700;
+    font-style: normal;
+  }
+
+  .avatar.face { font-size: 1.1rem; }
+
+  .face.rose { background: #f3d5da; color: #8a2f45; }
+  .face.sky { background: #d5e8f8; color: #2f5f8a; }
+  .face.soft { background: #ebe7f6; color: #4a3d8f; }
+  .face.mint { background: #d8f0e4; color: #2f7a52; }
+  .face.sand { background: #f3e6d4; color: #8a5a2f; }
 
   .photo-meta strong {
     display: block;
@@ -496,6 +608,8 @@
   .modal-body {
     position: relative;
     z-index: 3;
+    width: 100%;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -557,17 +671,6 @@
     font-size: 0.68rem;
   }
 
-  .modal-body textarea {
-    resize: vertical;
-    min-height: 72px;
-  }
-
-  .row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-  }
-
   .preview-wrap {
     display: grid;
     place-items: center;
@@ -582,6 +685,8 @@
     border: 2px solid rgba(255, 255, 255, 0.9);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
   }
+
+  .preview.face { font-size: 1.6rem; }
 
   .file-label input {
     padding: 8px;
@@ -628,12 +733,14 @@
     color: #fff;
   }
 
+  .primary:disabled,
+  .ghost:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
   @media (max-width: 720px) {
     .info-list {
-      grid-template-columns: 1fr;
-    }
-
-    .row {
       grid-template-columns: 1fr;
     }
 
@@ -643,4 +750,3 @@
     }
   }
 </style>
-

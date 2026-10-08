@@ -108,7 +108,7 @@
   let createOpen = $state(false);
 
   const canAdd = $derived(canCreateDashboard());
-  const pmOptions = $derived(listUsers({ role: 3, status: "active" }));
+  const pmOptions = $derived(listUsers({ status: "active" }));
   const userOptions = $derived(listUsers({ status: "active" }));
 
   function openCreate() {
@@ -166,7 +166,7 @@
         <!-- Card 2 -->
         <div class="stat-card">
           <div class="stat-top">
-            <span class="stat-title">In Production</span>
+            <span class="stat-title">Active</span>
             <div class="icon-wrapper green-icon">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -189,7 +189,7 @@
         <!-- Card 3 -->
         <div class="stat-card">
           <div class="stat-top">
-            <span class="stat-title">In Development</span>
+            <span class="stat-title">Idle</span>
             <div class="icon-wrapper yellow-icon">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -268,11 +268,9 @@
             <thead>
               <tr>
                 <th>DAFTAR DASHBOARD</th>
-                <th>INFO & TASK</th>
                 <th>PIC</th>
                 <th>STATUS DASHBOARD</th>
                 <th>LAST UPDATES</th>
-                <th class="action-col"></th>
               </tr>
             </thead>
             <tbody>
@@ -333,39 +331,6 @@
                     </div>
                   </td>
 
-                  <!-- Column 1.5: Info & Tasks -->
-                  <td>
-                    <div class="info-task-cell">
-                      <span class={`crit-badge crit-${item.criticality}`}
-                        >{item.criticality === "high"
-                          ? "High"
-                          : item.criticality === "medium"
-                            ? "Medium"
-                            : "Low"}</span
-                      >
-                      <div
-                        class="task-stats"
-                        class:has-open={item.quick_stats.tasks_open > 0}
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="12"
-                          height="12"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="2.5"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          ><path
-                            d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"
-                          ></path><path d="M12 6v6l4 2"></path></svg
-                        >
-                        <span>{item.quick_stats.tasks_open} Open</span>
-                      </div>
-                    </div>
-                  </td>
-
                   <!-- Column 2: PIC -->
                   <td>
                     <div class="pic-cell">
@@ -406,109 +371,6 @@
                     </div>
                   </td>
 
-                  <!-- Column Action -->
-                  <td class="action-col">
-                    <div class="row-actions">
-                      <button
-                        class="icon-btn tooltip-btn color-sop"
-                        data-tooltip="Lihat SOP"
-                        aria-label="SOP"
-                        onclick={(e) => {
-                          e.preventDefault();
-                          selectedSopItem = item;
-                        }}
-                      >
-                        <svg
-                          viewBox="0 0 24 24"
-                          width="15"
-                          height="15"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="2"
-                          ><path
-                            d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
-                          /><polyline points="14 2 14 8 20 8" /><line
-                            x1="16"
-                            y1="13"
-                            x2="8"
-                            y2="13"
-                          /><line x1="16" y1="17" x2="8" y2="17" /><polyline
-                            points="10 9 9 9 8 9"
-                          /></svg
-                        >
-                      </button>
-                      <button
-                        class="icon-btn tooltip-btn color-view"
-                        data-tooltip="Lihat Detail"
-                        aria-label="View Detail"
-                        onclick={(e) => {
-                          e.preventDefault();
-                          selectedDetail = item;
-                          rememberDetailId(item.id);
-                          detailActiveTab = "overview";
-                        }}
-                      >
-                        <svg
-                          viewBox="0 0 24 24"
-                          width="16"
-                          height="16"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="2"
-                          ><path
-                            d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"
-                          /><circle cx="12" cy="12" r="3" /></svg
-                        >
-                      </button>
-                      <button
-                        class="icon-btn tooltip-btn color-edit"
-                        data-tooltip="Edit Data"
-                        aria-label="Edit"
-                        onclick={(e) => {
-                          e.preventDefault();
-                          selectedDetail = item;
-                          rememberDetailId(item.id);
-                          detailActiveTab = "overview";
-                        }}
-                      >
-                        <svg
-                          viewBox="0 0 24 24"
-                          width="16"
-                          height="16"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="2"
-                          ><path
-                            d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
-                          /><path
-                            d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
-                          /></svg
-                        >
-                      </button>
-                      <button
-                        class="icon-btn tooltip-btn danger"
-                        data-tooltip="Hapus Data"
-                        aria-label="Delete"
-                      >
-                        <svg
-                          viewBox="0 0 24 24"
-                          width="16"
-                          height="16"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="2"
-                          ><polyline points="3 6 5 6 21 6" /><path
-                            d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
-                          /><line x1="10" y1="11" x2="10" y2="17" /><line
-                            x1="14"
-                            y1="11"
-                            x2="14"
-                            y2="17"
-                          /></svg
-                        >
-                      </button>
-                    </div>
-                  </td>
                 </tr>
               {/each}
             </tbody>

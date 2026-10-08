@@ -1,3 +1,5 @@
+import { fetchTasks } from './api.js'
+
 /** @typedef {'open' | 'in_progress' | 'done'} TaskStatus */
 /** @typedef {'high' | 'medium' | 'low'} TaskPriority */
 /** @typedef {'today' | 'week' | 'month'} PeriodKey */
@@ -328,11 +330,54 @@ function loadTasks() {
 export const taskStore = $state({
   /** @type {FeTask[]} */
   items: loadTasks(),
+  loading: false,
+  /** @type {string | null} */
+  error: null,
 })
 
 function persist() {
   if (typeof localStorage === 'undefined') return
   localStorage.setItem(STORAGE_KEY, JSON.stringify(taskStore.items))
+}
+
+/** Backend's 6-stage kanban collapses onto the board's 3-state status. */
+const API_STATUS_MAP = {
+  backlog: 'open',
+  development: 'in_progress',
+  testing: 'in_progress',
+  uat: 'in_progress',
+  to_production: 'in_progress',
+  selesai: 'done',
+}
+
+/** @param {Record<string, any>} row @returns {FeTask} */
+function mapApiTask(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    meta: row.dashboard_name || 'General',
+    status: API_STATUS_MAP[row.status] || 'open',
+    priority: row.priority || 'medium',
+    startDate: (row.created_at || '').slice(0, 10),
+    deadline: row.deadline,
+    pic: row.pic_name || 'Unassigned',
+    updatedAt: row.updated_at ? row.updated_at.replace(' ', 'T') : new Date().toISOString(),
+  }
+}
+
+/** Fetch tasks from the backend/DB and replace the board's working set. */
+export async function loadTasksFromApi() {
+  taskStore.loading = true
+  taskStore.error = null
+  try {
+    const rows = await fetchTasks()
+    taskStore.items = rows.map(mapApiTask)
+    persist()
+  } catch (e) {
+    taskStore.error = e instanceof Error ? e.message : String(e)
+  } finally {
+    taskStore.loading = false
+  }
 }
 
 /** @param {Omit<FeTask, 'id' | 'updatedAt' | 'priority'> & { priority?: TaskPriority }} payload */

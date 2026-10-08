@@ -16,12 +16,12 @@
     requirementHealthLabel,
     requirementTeamRoster,
     requirementStore,
+    groupByVersionRoot,
   } from '$lib/requirementStore.svelte.js'
   import { listDashboards, setRequirementsTotal, registryStore } from '$lib/registryStore.svelte.js'
   import {
-    canManageRequirements,
+    canCreateRequirement,
     currentUserName,
-    isCurrentUserPmOf,
     tasksForRequirement,
     isOverdue,
     createModuleTask,
@@ -58,18 +58,11 @@
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
   }
 
-  const assigneePool = $derived(requirementTeamRoster.map((m) => m.name))
+  const assigneePool = $derived(requirementTeamRoster().map((m) => m.name))
 
   const dashboards = $derived.by(() => {
     void registryStore.items
     return listDashboards({}).map((d) => d.name)
-  })
-
-  const pmDashboards = $derived.by(() => {
-    void taskModuleStore.session
-    void registryStore.items
-    if (!canManageRequirements()) return []
-    return dashboards.filter((name) => isCurrentUserPmOf(name))
   })
 
   const items = $derived.by(() => {
@@ -77,6 +70,9 @@
     void taskModuleStore.items
     return listRequirements(applied)
   })
+
+  /** Satu requirement bisa punya beberapa versi (V1, V2, ...) — tampil sebagai satu baris. */
+  const groupedItems = $derived.by(() => groupByVersionRoot(items))
 
   const statusSummary = $derived.by(() => {
     void requirementStore.items
@@ -90,7 +86,7 @@
 
   const canAdd = $derived.by(() => {
     void taskModuleStore.session
-    return canManageRequirements()
+    return canCreateRequirement()
   })
 
   /** @param {string} nextStatus */
@@ -110,9 +106,9 @@
     goto(`/requirements/${id}`)
   }
 
-  /** @param {{ id: number }} req */
-  function progressOf(req) {
-    const tasks = tasksForRequirement(req.id)
+  /** Progress & jumlah task kumulatif dari semua versi requirement ini. @param {{ versions: { id: number }[] }} group */
+  function progressOfGroup(group) {
+    const tasks = group.versions.flatMap((v) => tasksForRequirement(v.id))
     const total = tasks.length
     const done = tasks.filter((t) => t.status === 'selesai').length
     const pct = total ? Math.round((done / total) * 100) : 0
@@ -121,7 +117,7 @@
 
   function openCreate() {
     newTitle = ''
-    newDashboard = pmDashboards[0] || dashboards[0] || ''
+    newDashboard = dashboards[0] || ''
     newDescription = ''
     newDue = todayISO()
     createError = ''
@@ -157,11 +153,11 @@
     draftTasks = draftTasks.filter((t) => t.key !== key)
   }
 
-  function onCreate(event) {
+  async function onCreate(event) {
     event.preventDefault()
     createError = ''
     if (!canAdd) {
-      createError = 'Hanya PM yang dapat menambah requirement'
+      createError = 'Anda tidak punya izin Tambah Requirement'
       return
     }
     if (!newTitle.trim()) {
@@ -170,10 +166,6 @@
     }
     if (!newDashboard.trim()) {
       createError = 'Dashboard wajib dipilih'
-      return
-    }
-    if (!isCurrentUserPmOf(newDashboard)) {
-      createError = 'Anda bukan PM untuk dashboard ini'
       return
     }
     if (!newDescription.trim()) {
@@ -195,7 +187,7 @@
 
     const team = [...new Set(readyTasks.map((t) => t.assignee.trim()).filter(Boolean))]
 
-    const created = createRequirement({
+    const created = await createRequirement({
       dashboard: newDashboard.trim(),
       title: newTitle.trim(),
       description: newDescription.trim(),
@@ -210,7 +202,7 @@
 
     let made = 0
     for (const t of readyTasks) {
-      const task = createModuleTask({
+      const task = await createModuleTask({
         title: t.title.trim(),
         description: '',
         dashboard: created.dashboard,
@@ -223,7 +215,7 @@
     }
 
     const dash = listDashboards({}).find((d) => d.name === created.dashboard)
-    if (dash) setRequirementsTotal(dash.id, countRequirements(created.dashboard))
+    if (dash) await setRequirementsTotal(dash.id, countRequirements(created.dashboard))
 
     createOpen = false
     rememberDetailId(created.id)
@@ -305,7 +297,7 @@
             <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.7" />
             <path d="m16.5 16.5 3.2 3.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
           </svg>
-          <input type="search" placeholder="Judul, dashboard, ownerâ€¦" bind:value={q} />
+          <input type="search" placeholder="Judul, dashboard, owner…" bind:value={q} />
         </div>
       </label>
 
@@ -341,14 +333,20 @@
             </tr>
           </thead>
           <tbody>
-            {#each items as req (req.id)}
-              {@const prog = progressOf(req)}
+            {#each groupedItems as group (group.root.id)}
+              {@const req = group.latest}
+              {@const prog = progressOfGroup(group)}
               <tr>
-                <td><span class="mono-id">{reqCode(req.id)}</span></td>
+                <td><span class="mono-id">{reqCode(group.root.id)}</span></td>
                 <td>
                   <button type="button" class="req-link" onclick={() => openDetail(req.id)}>
-                    <strong>{req.title}</strong>
-                    <span class="desc">{req.description || 'â€”'}</span>
+                    <span class="title-line">
+                      <strong>{req.title}</strong>
+                      {#if group.versions.length > 1}
+                        <span class="version-badge">{group.versions.length} versi</span>
+                      {/if}
+                    </span>
+                    <span class="desc">{req.description || '—'}</span>
                   </button>
                 </td>
                 <td>{req.dashboard}</td>
@@ -387,7 +385,7 @@
   >
       <header class="modal-head">
         <div class="modal-head-copy">
-          <p class="eyebrow">PM Â· Requirements</p>
+          <p class="eyebrow">PM · Requirements</p>
           <h2 id="create-req-title">Tambah Requirement</h2>
           <p class="hint">Isi requirement, lalu pecah ke beberapa task &amp; assign teknis (opsional).</p>
         </div>
@@ -408,7 +406,7 @@
           <label class="field">
             <span>Dashboard <em>*</em></span>
             <select bind:value={newDashboard}>
-              {#each pmDashboards.length ? pmDashboards : dashboards as name}
+              {#each dashboards as name}
                 <option value={name}>{name}</option>
               {/each}
             </select>
@@ -428,7 +426,7 @@
           <div class="tasks-top">
             <div>
               <span>Tasks ke Backlog</span>
-              <small>Judul + assign teknis Â· baris kosong diabaikan</small>
+              <small>Judul + assign teknis · baris kosong diabaikan</small>
             </div>
             <button type="button" class="add-task" onclick={addDraftTask}>+ Task</button>
           </div>
@@ -440,17 +438,17 @@
                 <input
                   class="draft-title"
                   bind:value={task.title}
-                  placeholder="Judul taskâ€¦"
+                  placeholder="Judul task…"
                   maxlength="120"
                 />
                 <select class="draft-assignee" bind:value={task.assignee}>
-                  <option value="">Assignâ€¦</option>
+                  <option value="">Assign…</option>
                   {#each assigneePool as name}
                     <option value={name}>{name}</option>
                   {/each}
                 </select>
                 <input class="draft-due" type="date" bind:value={task.deadline} />
-                <button type="button" class="draft-remove" aria-label="Hapus task" onclick={() => removeDraftTask(task.key)}>Ã—</button>
+                <button type="button" class="draft-remove" aria-label="Hapus task" onclick={() => removeDraftTask(task.key)}>×</button>
               </div>
             {/each}
           </div>
@@ -725,6 +723,24 @@
 
   .req-link strong {
     font-weight: 700;
+  }
+
+  .title-line {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .version-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.08rem 0.4rem;
+    border-radius: 999px;
+    background: rgba(6, 95, 198, 0.1);
+    color: #065fc6;
+    font-size: 0.52rem;
+    font-weight: 700;
+    white-space: nowrap;
   }
 
   .req-link:hover strong {
@@ -1164,4 +1180,3 @@
     }
   }
 </style>
-

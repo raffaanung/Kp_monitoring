@@ -2,7 +2,6 @@
   import { goto } from '$app/navigation'
   import { page } from '$app/state'
     import logoFull from '$lib/assets/edm-logo.png'
-  import avatarFarras from '$lib/assets/avatar-farras.jpg'
   import NotificationBell from './NotificationBell.svelte'
   import ProfileSwitcher from './ProfileSwitcher.svelte'
   import {
@@ -11,7 +10,6 @@
   import {
     displayName,
     avatarUrl,
-    settingsStore,
   } from './settingsStore.svelte.js'
 
   let { children } = $props()
@@ -22,15 +20,13 @@
   })
 
   const profileName = $derived.by(() => {
-    void settingsStore.byPersona
     void taskModuleStore.session
     return displayName()
   })
 
   const profileAvatar = $derived.by(() => {
-    void settingsStore.byPersona
     void taskModuleStore.session
-    return avatarUrl() || avatarFarras
+    return avatarUrl() || ''
   })
 
   /** Expanded = full + labels; collapsed = icon-only (hide) */

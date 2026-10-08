@@ -1,14 +1,17 @@
-﻿<script>
-  import { page } from '$app/state';
-    import GlassPanel from '$lib/GlassPanel.svelte'
+<script>
+  "/* link removed, native <a> works in SvelteKit */"
+  import GlassPanel from '$lib/GlassPanel.svelte'
   import SubmenuHeader from '$lib/SubmenuHeader.svelte'
   import {
     getActivityLog,
+    loadActivityLogDetail,
     rememberLogDetailId,
     objectTypeLabel,
     activityLogStore,
   } from '$lib/activityLogStore.svelte.js'
   import { formatDate } from '$lib/format.js'
+
+  import { page } from '$app/state'
 
   const log = $derived.by(() => {
     void activityLogStore.items
@@ -16,7 +19,10 @@
   })
 
   $effect(() => {
-    if (page.params.id) rememberLogDetailId(page.params.id)
+    if (page.params.id) {
+      rememberLogDetailId(page.params.id)
+      loadActivityLogDetail(page.params.id)
+    }
   })
 
   /** @param {string} name */
@@ -36,7 +42,7 @@
     return `${formatDate(date)} ${time}`
   }
 
-  /** @param {import('../../lib/activityLogStore.svelte.js').ObjectType} type @param {number} id */
+  /** @param {import('../lib/activityLogStore.svelte.js').ObjectType} type @param {number} id */
   function objectLink(type, id) {
     return type === 'task' ? '/tasks/list' : `/registry/${id}`
   }
@@ -48,7 +54,7 @@
       <SubmenuHeader title="Tidak ditemukan" />
       <div class="empty">
         <p>Entri dengan ID tersebut tidak ada.</p>
-        <a class="btn" href="/activity-log">â† Kembali</a>
+        <a class="btn" href="/activity-log">← Kembali</a>
       </div>
     </GlassPanel>
   {:else}
@@ -104,11 +110,11 @@
                 <tr class:changed={change.before !== change.after}>
                   <td class="field">{change.label}</td>
                   <td class="before">
-                    <span class:empty={change.before === 'â€”'}>{change.before}</span>
+                    <span class:empty={change.before === '—'}>{change.before}</span>
                   </td>
-                  <td class="arrow" aria-hidden="true">â†’</td>
+                  <td class="arrow" aria-hidden="true">→</td>
                   <td class="after">
-                    <span class:empty={change.after === 'â€”'}>{change.after}</span>
+                    <span class:empty={change.after === '—'}>{change.after}</span>
                   </td>
                 </tr>
               {/each}
@@ -118,7 +124,7 @@
       {/if}
 
       <div class="foot">
-        <a class="back" href="/activity-log">â† Kembali</a>
+        <a class="back" href="/activity-log">← Kembali</a>
       </div>
     </GlassPanel>
   {/if}
@@ -382,4 +388,3 @@
     font-weight: 550;
   }
 </style>
-

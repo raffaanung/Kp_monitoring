@@ -1,9 +1,9 @@
-﻿<script>
-  import { page } from '$app/state';
+<script>
   import { goto } from '$app/navigation'
   import GlassPanel from '$lib/GlassPanel.svelte'
   import {
     getModuleTask,
+    loadModuleTaskDetail,
     moveModuleTask,
     deleteModuleTask,
     rememberDetailId,
@@ -26,16 +26,17 @@
     readEvidenceFile,
   } from '$lib/taskModuleStore.svelte.js'
   import { formatDate } from '$lib/format.js'
-  import { reqCode } from '$lib/requirementStore.svelte.js'
+
+  import { page } from '$app/state'
 
   let nextStatus = $state(/** @type {'backlog' | 'development' | 'testing' | 'uat' | 'to_production' | 'selesai'} */ ('backlog'))
   let commentBody = $state('')
-  let commentEvidence = $state(/** @type {import('../../lib/taskModuleStore.svelte.js').EvidenceFile | null} */ (null))
+  let commentEvidence = $state(/** @type {import('../lib/taskModuleStore.svelte.js').EvidenceFile | null} */ (null))
   let commentFileLabel = $state('')
   /** @type {HTMLInputElement | null} */
   let commentPicker = $state(null)
   let msg = $state('')
-  let lastLoadedId = $state(/** @type {number | null} */ (null))
+  let lastLoadedId = $state(/** @type {string | null} */ (null))
 
   const task = $derived.by(() => {
     void taskModuleStore.items
@@ -47,11 +48,6 @@
     void taskModuleStore.items
     if (!task) return false
     return currentUserRole() === 'pm' && isCurrentUserPmOf(task.dashboard)
-  })
-
-  const canBoard = $derived.by(() => {
-    void taskModuleStore.session
-    return canUpdateBoard()
   })
 
   const canComment = $derived.by(() => {
@@ -69,6 +65,18 @@
     return task ? isCurrentUserPmOf(task.dashboard) : false
   })
 
+  /** Approve/minta-revisi task baru adalah hak owner requirement-nya, bukan PM dashboard. */
+  const asRequirementOwner = $derived.by(() => {
+    void taskModuleStore.session
+    return task ? task.requirement_owner === currentUserName() : false
+  })
+
+  /** Owner requirement boleh ubah status task-nya sendiri juga, apa pun role-nya (termasuk Admin). */
+  const canBoard = $derived.by(() => {
+    void taskModuleStore.session
+    return canUpdateBoard() || asRequirementOwner
+  })
+
   const journey = $derived.by(() => {
     if (!task) return []
     /** @type {Set<number>} */
@@ -80,7 +88,7 @@
       used.add(file.id)
       return file
     }
-    /** @type {{ key: string, at: string, actor: string, kind: 'event' | 'note', text: string, file: import('../../lib/taskModuleStore.svelte.js').TaskEvidence | null }[]} */
+    /** @type {{ key: string, at: string, actor: string, kind: 'event' | 'note', text: string, file: import('../lib/taskModuleStore.svelte.js').TaskEvidence | null }[]} */
     const rows = []
     for (const entry of task.activity || []) {
       if (entry.action === 'Menambah komentar') continue
@@ -134,7 +142,7 @@
   })
 
   /** @type {'today' | 'week' | 'all'} */
-  let journeyRange = $state('week')
+  let journeyRange = $state('all')
 
   /** @param {string} at @param {'today' | 'week' | 'all'} range */
   function inJourneyRange(at, range) {
@@ -154,11 +162,11 @@
 
   const visibleJourney = $derived(journey.filter((row) => inJourneyRange(row.at, journeyRange)))
 
-  /** @type {import('../../lib/taskModuleStore.svelte.js').TaskEvidence | null} */
+  /** @type {import('../lib/taskModuleStore.svelte.js').TaskEvidence | null} */
   let viewing = $state(null)
 
   $effect(() => {
-    const id = page.params.id ? Number(page.params.id) : null
+    const id = page.params.id || null
     if (!id || lastLoadedId === id) return
     const item = getModuleTask(id)
     if (!item) return
@@ -167,6 +175,7 @@
     rememberDetailId(id)
     nextStatus = item.status
     msg = ''
+    loadModuleTaskDetail(id)
   })
 
   function clearReply() {
@@ -176,61 +185,62 @@
     if (commentPicker) commentPicker.value = ''
   }
 
-  function onReply(event) {
+  async function onReply(event) {
     event.preventDefault()
     if (!task || !canComment) return
     if (!commentBody.trim() && !commentEvidence) return
-    addTaskComment(task.id, commentBody, commentEvidence)
+    await addTaskComment(task.id, commentBody, commentEvidence)
     clearReply()
+    await loadModuleTaskDetail(task.id)
   }
 
-  function onMove(event) {
+  async function onMove(event) {
     event?.preventDefault?.()
     if (!task || !canBoard) return
-    if (task.approval_state !== 'approved') {
-      msg = 'Task belum approved â€” tidak bisa digeser di pipeline'
-      return
-    }
     if (task.status_move) {
       msg = 'Sudah ada request pindah yang menunggu tanggapan PM'
       return
     }
-    const result = moveModuleTask(task.id, nextStatus, {
+    const taskId = task.id
+    const result = await moveModuleTask(taskId, nextStatus, {
       note: commentBody,
       evidence: commentEvidence,
     })
     if (result === 'requested') {
       msg = `Pengajuan pindah ke ${workflowLabel(nextStatus)} tercatat`
       clearReply()
-      return
-    }
-    if (result === 'moved') {
+    } else if (result === 'moved') {
       msg = `Status diubah ke ${workflowLabel(nextStatus)}`
       clearReply()
-      return
+    } else {
+      msg = 'Gagal mengubah status'
     }
-    msg = 'Gagal mengubah status'
+    await loadModuleTaskDetail(taskId)
   }
 
-  function onDelete() {
+  async function onDelete() {
     if (!task || !canEdit) return
     if (!confirm(`Hapus task "${task.title}"?`)) return
-    deleteModuleTask(task.id)
+    await deleteModuleTask(task.id)
     goto('/tasks/list')
   }
 
-  function onApproveMove() {
-    if (!task?.status_move || !asPm) return
-    approveStatusMove(task.id, commentBody, commentEvidence)
+  async function onApproveMove() {
+    if (!task?.status_move || (!asPm && !asRequirementOwner)) return
+    const taskId = task.id
+    await approveStatusMove(taskId, commentBody, commentEvidence)
     clearReply()
     msg = 'Pindah status disetujui dan tercatat di riwayat'
+    await loadModuleTaskDetail(taskId)
   }
 
-  function onRejectMove() {
-    if (!task?.status_move || !asPm) return
-    rejectStatusMove(task.id, commentBody || 'Perlu revisi sebelum pindah status.', commentEvidence)
+  async function onRejectMove() {
+    if (!task?.status_move || (!asPm && !asRequirementOwner)) return
+    const taskId = task.id
+    await rejectStatusMove(taskId, commentBody || 'Perlu revisi sebelum pindah status.', commentEvidence)
     clearReply()
     msg = 'Permintaan revisi tercatat di riwayat'
+    await loadModuleTaskDetail(taskId)
   }
 
   /** @param {Event} e */
@@ -251,6 +261,30 @@
     }
   }
 
+  async function onApproveTask() {
+    if (!task) return
+    const taskId = task.id
+    await approveModuleTask(taskId, commentBody, commentEvidence)
+    clearReply()
+    await loadModuleTaskDetail(taskId)
+  }
+
+  async function onRequestRevisionTask() {
+    if (!task) return
+    const taskId = task.id
+    await requestRevisionModuleTask(taskId, commentBody || 'Perlu revisi.')
+    clearReply()
+    msg = 'Revisi tercatat'
+    await loadModuleTaskDetail(taskId)
+  }
+
+  async function onResubmitTask() {
+    if (!task) return
+    const taskId = task.id
+    await resubmitModuleTask(taskId)
+    await loadModuleTaskDetail(taskId)
+  }
+
   /** @param {number | null | undefined} id */
   function evidenceById(id) {
     if (!task || !id) return null
@@ -262,20 +296,20 @@
   {#if !task}
     <GlassPanel>
       <p class="state error">Task tidak ditemukan.</p>
-      <a class="pill on back-link" href="/tasks/board">â† Kembali ke Board</a>
+      <a class="pill on back-link" href="/tasks/board">← Kembali ke Board</a>
     </GlassPanel>
   {:else}
     <div class="layout">
       <GlassPanel class="span-2">
         <div class="hero">
           <div class="strip">
-            <a class="back" href="/tasks/board" aria-label="Kembali ke board">â†</a>
+            <a class="back" href="/tasks/board" aria-label="Kembali ke board">←</a>
             <div class="strip-copy">
               <div class="meta">
-                <span class="mono-id">#{task.id}</span>
+                <span class="mono-id">{task.code}</span>
                 <span class={`chip st-${task.status}`}>{workflowLabel(task.status)}</span>
                 {#if task.status_move}
-                  <span class="chip appr-pending">Menunggu PM Â· {workflowLabel(task.status_move.to)}</span>
+                  <span class="chip appr-pending">Menunggu PM · {workflowLabel(task.status_move.to)}</span>
                 {/if}
                 {#if isOverdue(task)}
                   <span class="chip late">Overdue</span>
@@ -283,7 +317,7 @@
               </div>
               <h2>{task.title}</h2>
               <p class="meta-line">
-                {task.assignee || task.pic} Â· {task.dashboard} Â· {task.requirement_id ? reqCode(task.requirement_id) : 'tanpa requirement'} Â· {formatDate(task.deadline)}
+                {task.assignee || task.pic} · {task.dashboard} · {task.requirement_code || 'tanpa requirement'} · {formatDate(task.deadline)}
               </p>
             </div>
           </div>
@@ -343,7 +377,7 @@
                     {#if row.file}
                       <button type="button" class="file-card" onclick={() => (viewing = row.file)}>
                         {#if row.file.mime.startsWith('image/')}
-                          <img src={row.file.data_url} alt="" />
+                          <img src={row.file.file_url} alt="" />
                         {:else}
                           <span class="file-ico" aria-hidden="true">FILE</span>
                         {/if}
@@ -366,21 +400,21 @@
               <p class="eyebrow">Tanggapan</p>
               {#if task.status_move && asPm}
                 <p class="reply-context">
-                  {task.status_move.requested_by} mengajukan {workflowLabel(task.status_move.from)} â†’ {workflowLabel(task.status_move.to)}. Tulis catatan, lalu pilih satu keputusan.
+                  {task.status_move.requested_by} mengajukan {workflowLabel(task.status_move.from)} → {workflowLabel(task.status_move.to)}. Tulis catatan, lalu pilih satu keputusan.
                 </p>
               {:else if task.status_move}
                 <p class="reply-context">
-                  Pengajuan {workflowLabel(task.status_move.from)} â†’ {workflowLabel(task.status_move.to)} menunggu PM.
+                  Pengajuan {workflowLabel(task.status_move.from)} → {workflowLabel(task.status_move.to)} menunggu PM.
                 </p>
               {:else}
                 <p class="reply-context">Catatan dan gambar akan masuk ke riwayat task.</p>
               {/if}
             </div>
             <div class="reply-field">
-              <textarea rows="2" bind:value={commentBody} placeholder="Tulis tanggapanâ€¦"></textarea>
+              <textarea rows="2" bind:value={commentBody} placeholder="Tulis tanggapan…"></textarea>
               <div class="reply-tools">
-                {#if commentEvidence?.data_url}
-                  <img class="thumb" src={commentEvidence.data_url} alt="" />
+                {#if commentEvidence?.previewUrl}
+                  <img class="thumb" src={commentEvidence.previewUrl} alt="" />
                   <span class="clip-name">{commentFileLabel}</span>
                 {/if}
                 <button type="button" class="clip" aria-label="Lampirkan gambar" title="Lampirkan gambar" onclick={() => commentPicker?.click()}>
@@ -392,17 +426,17 @@
               </div>
             </div>
             <div class="decision">
-              {#if asPm && task.status_move}
+              {#if (asPm || asRequirementOwner) && task.status_move}
                 <button type="button" class="primary" onclick={onApproveMove}>Setujui ke {workflowLabel(task.status_move.to)}</button>
                 <button type="button" class="ghost-btn" onclick={onRejectMove}>Minta revisi</button>
                 {#if canComment}
                   <button type="submit" class="text-btn">Catat saja</button>
                 {/if}
-              {:else if asPm && task.approval_state === 'pending'}
-                <button type="button" class="primary" onclick={() => approveModuleTask(task.id, commentBody, commentEvidence)}>Setujui ke Backlog</button>
-                <button type="button" class="ghost-btn" onclick={() => { requestRevisionModuleTask(task.id, commentBody || 'Perlu revisi.'); clearReply(); msg = 'Revisi tercatat' }}>Minta revisi</button>
-              {:else if task.approval_state === 'revision' && (task.created_by === currentUserName() || asPm) && canBoard}
-                <button type="button" class="ghost-btn" onclick={() => resubmitModuleTask(task.id)}>Ajukan ulang</button>
+              {:else if asRequirementOwner && task.approval_state === 'pending'}
+                <button type="button" class="primary" onclick={onApproveTask}>Setujui ke Backlog</button>
+                <button type="button" class="ghost-btn" onclick={onRequestRevisionTask}>Minta revisi</button>
+              {:else if task.approval_state === 'revision' && (task.created_by === currentUserName() || asRequirementOwner) && canBoard}
+                <button type="button" class="ghost-btn" onclick={onResubmitTask}>Ajukan ulang</button>
                 {#if canComment}
                   <button type="submit" class="primary">Kirim tanggapan</button>
                 {/if}
@@ -424,7 +458,7 @@
             </div>
           </form>
         {:else}
-          <p class="empty">Mode view â€” tanggapan tidak tersedia.</p>
+          <p class="empty">Mode view — tanggapan tidak tersedia.</p>
         {/if}
         {#if canEdit}
           <button type="button" class="danger-btn" onclick={onDelete}>Hapus task</button>
@@ -442,9 +476,9 @@
             <button type="button" class="ghost-btn" onclick={() => (viewing = null)}>Tutup</button>
           </div>
           {#if viewing.mime.startsWith('image/')}
-            <img src={viewing.data_url} alt={viewing.name} />
+            <img src={viewing.file_url} alt={viewing.name} />
           {:else}
-            <a class="file-link" href={viewing.data_url} download={viewing.name}>Unduh {viewing.name}</a>
+            <a class="file-link" href={viewing.file_url} download={viewing.name}>Unduh {viewing.name}</a>
           {/if}
         </div>
       </div>
@@ -945,4 +979,3 @@
     .layout, .flow, .entry { grid-template-columns: 1fr; }
   }
 </style>
-

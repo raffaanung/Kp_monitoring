@@ -3,6 +3,8 @@
   import { goto } from '$app/navigation'
   import logoFull from '$lib/assets/edm-logo.png'
   import logoLight from '$lib/assets/edm-logo-white.png'
+  import { login } from '$lib/authStore.svelte.js'
+  import { loadAppData } from '$lib/loadAppData.js'
 
   const FEATURES = [
     { label: 'Real-time', color: '#7c8cf8' },
@@ -15,11 +17,22 @@
   let remember = $state(true)
   let showPassword = $state(false)
   let focused = $state(/** @type {string|null} */ (null))
+  let error = $state('')
+  let submitting = $state(false)
 
-  /** Sementara: tanpa validasi, langsung ke dashboard (sambungkan ke API login nanti). */
-  function handleLogin(e) {
+  async function handleLogin(e) {
     e.preventDefault()
-    goto('/')
+    error = ''
+    submitting = true
+    try {
+      await login(username.trim(), password)
+      loadAppData()
+      goto('/')
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err)
+    } finally {
+      submitting = false
+    }
   }
 </script>
 
@@ -120,7 +133,10 @@
               <input
                 id="username"
                 type="text"
-                placeholder="Masukkan username"
+                inputmode="numeric"
+                pattern={'[0-9]{8}'}
+                maxlength="8"
+                placeholder="10000001"
                 autocomplete="username"
                 bind:value={username}
                 onfocus={() => {
@@ -201,8 +217,12 @@
             <button type="button" class="link-quiet">Lupa password?</button>
           </div>
 
-          <button type="submit" class="btn-primary">
-            Masuk
+          {#if error}
+            <p class="form-error" role="alert">{error}</p>
+          {/if}
+
+          <button type="submit" class="btn-primary" disabled={submitting}>
+            {submitting ? 'Memeriksa…' : 'Masuk'}
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path
                 d="M5 12h14M13 6l6 6-6 6"
@@ -713,6 +733,17 @@
   .link-quiet:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .form-error {
+    margin: -4px 0 0;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    color: #b91c1c;
+    font-size: 0.8rem;
+    font-weight: 600;
   }
 
   .btn-primary {

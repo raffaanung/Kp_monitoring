@@ -1,5 +1,5 @@
 RewriteEngine On
-RewriteBase /edm-task-monitoring/backend/
+RewriteBase /edm-monitor/backend/
 
 # Framework folders stay off the web. The front controller is index.php.
 RewriteRule ^(app|vendor|writable|tests|builds)(/|$) - [F,L]

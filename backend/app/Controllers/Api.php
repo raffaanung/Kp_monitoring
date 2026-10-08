@@ -2,25 +2,19 @@
 
 namespace App\Controllers;
 
+use App\Models\TaskModel;
 use CodeIgniter\HTTP\ResponseInterface;
 
 class Api extends BaseController
 {
     public function dashboard(): ResponseInterface
     {
-        $tasks  = $this->taskRows();
-        $counts = [
-            'total'       => count($tasks),
-            'open'        => 0,
-            'in_progress' => 0,
-            'done'        => 0,
-        ];
+        $tasks  = (new TaskModel())->withPic();
+        $counts = ['total' => count($tasks)];
 
         foreach ($tasks as $task) {
             $status = $task['status'] ?? '';
-            if (isset($counts[$status])) {
-                $counts[$status]++;
-            }
+            $counts[$status] = ($counts[$status] ?? 0) + 1;
         }
 
         return $this->jsonOk($counts);
@@ -28,7 +22,7 @@ class Api extends BaseController
 
     public function tasks(): ResponseInterface
     {
-        $tasks  = $this->taskRows();
+        $tasks  = (new TaskModel())->withPic();
         $status = trim((string) $this->request->getGet('status'));
         $q      = trim((string) $this->request->getGet('q'));
 
@@ -45,7 +39,7 @@ class Api extends BaseController
                 $tasks,
                 static function (array $task) use ($needle): bool {
                     $haystack = strtolower(
-                        ($task['title'] ?? '') . ' ' . ($task['description'] ?? '') . ' ' . ($task['pic'] ?? ''),
+                        ($task['title'] ?? '') . ' ' . ($task['description'] ?? '') . ' ' . ($task['pic_name'] ?? ''),
                     );
 
                     return str_contains($haystack, $needle);
@@ -58,48 +52,12 @@ class Api extends BaseController
 
     public function task(string $id = '0'): ResponseInterface
     {
-        $id = (int) $id;
-        if ($id < 1) {
-            return $this->jsonError('Invalid task id', 400);
+        $task = (new TaskModel())->findWithPic($id);
+
+        if ($task === null) {
+            return $this->jsonError('Task not found', 404);
         }
 
-        foreach ($this->taskRows() as $task) {
-            if ((int) ($task['id'] ?? 0) === $id) {
-                return $this->jsonOk($task);
-            }
-        }
-
-        return $this->jsonError('Task not found', 404);
-    }
-
-    /**
-     * @return list<array<string, mixed>>
-     */
-    private function taskRows(): array
-    {
-        $path = APPPATH . 'Data/tasks.php';
-        if (! is_file($path)) {
-            return [];
-        }
-
-        $data = include $path;
-
-        return is_array($data) ? array_values($data) : [];
-    }
-
-    private function jsonOk(mixed $data): ResponseInterface
-    {
-        return $this->response->setJSON([
-            'success' => true,
-            'data'    => $data,
-        ]);
-    }
-
-    private function jsonError(string $message, int $status): ResponseInterface
-    {
-        return $this->response->setStatusCode($status)->setJSON([
-            'success' => false,
-            'message' => $message,
-        ]);
+        return $this->jsonOk($task);
     }
 }

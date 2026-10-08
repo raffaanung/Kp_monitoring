@@ -1,13 +1,17 @@
+import { api } from './api.js'
+import { refreshCurrentUser } from './authStore.svelte.js'
+import { listDashboards } from './registryStore.svelte.js'
+
 /** @typedef {'active' | 'inactive'} UserStatus */
 
 /**
  * @typedef {Object} AccessUser
- * @property {number} id
+ * @property {string} id
  * @property {string} name
- * @property {string} email
- * @property {number} role_id
+ * @property {string} username
+ * @property {string} role_id
  * @property {string} unit
- * @property {number[]} team_ids
+ * @property {string[]} team_ids
  * @property {UserStatus} status
  * @property {string} created_at
  */
@@ -39,300 +43,81 @@
  * @property {string} created_at
  */
 
-const STORAGE_KEY = 'edm-fe-access-v4'
-
-/** @type {AccessPermission[]} */
-const defaultPermissions = [
-  { key: 'view_monitoring', label: 'Lihat Operation Monitoring', group: 'Monitoring' },
-  { key: 'manage_tasks', label: 'Kelola Tasks', group: 'Tasks' },
-  { key: 'manage_registry', label: 'Kelola Dashboard Registry', group: 'Registry' },
-  { key: 'view_activity_log', label: 'Lihat Activity Log', group: 'Audit' },
-  { key: 'manage_users', label: 'Kelola User', group: 'Access' },
-  { key: 'manage_roles', label: 'Kelola Role & Permission', group: 'Access' },
-  { key: 'manage_teams', label: 'Kelola Tim', group: 'Access' },
-  { key: 'export_data', label: 'Export Data', group: 'Data' },
-]
-
-export const permissionCatalog = defaultPermissions
-
+/** Matches the `divisions` table 1:1 — small and fixed enough to keep static client-side. */
 export const unitOptions = ['GBO', 'Finance', 'CX & Experience', 'Technology', 'EDM Core']
-
-function nowStamp() {
-  const d = new Date()
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:00`
-}
-
-/** @param {AccessPermission[]} list @param {Record<string, boolean>} overrides */
-function allPermissions(list, overrides = {}) {
-  /** @type {Record<string, boolean>} */
-  const base = {}
-  for (const p of list) base[p.key] = false
-  return { ...base, ...overrides }
-}
-
-/** @returns {{ users: AccessUser[], roles: AccessRole[], teams: AccessTeam[], permissions: AccessPermission[] }} */
-function seedAccess() {
-  const permissions = defaultPermissions.map((p) => ({ ...p }))
-  const roles = [
-    {
-      id: 1,
-      name: 'Admin',
-      description: 'Akses penuh ke seluruh modul dan konfigurasi sistem.',
-      permissions: allPermissions(permissions, Object.fromEntries(permissions.map((p) => [p.key, true]))),
-    },
-    {
-      id: 2,
-      name: 'Manager',
-      description: 'Mengawasi operasional dan registry.',
-      permissions: allPermissions(permissions, {
-        view_monitoring: true,
-        manage_tasks: true,
-        manage_registry: true,
-        view_activity_log: true,
-        manage_teams: true,
-        export_data: true,
-      }),
-    },
-    {
-      id: 3,
-      name: 'PM',
-      description: 'Project manager untuk task dan dashboard.',
-      permissions: allPermissions(permissions, {
-        view_monitoring: true,
-        manage_tasks: true,
-        view_activity_log: true,
-      }),
-    },
-    {
-      id: 4,
-      name: 'Teknis',
-      description: 'Mengerjakan task dan memperbarui status.',
-      permissions: allPermissions(permissions, {
-        view_monitoring: true,
-        manage_tasks: true,
-        view_activity_log: true,
-      }),
-    },
-  ]
-
-  const teams = [
-    {
-      id: 1,
-      name: 'GBO Analytics',
-      unit: 'GBO',
-      description: 'Tim analitik untuk dashboard GBO dan SLA regional.',
-      lead_id: 2,
-      member_ids: [1, 2, 4, 5, 8, 10],
-      dashboards: ['GBO Dashboard', 'CX Dashboard'],
-      created_at: '2026-06-10 09:00:00',
-    },
-    {
-      id: 2,
-      name: 'FinSight Ops',
-      unit: 'Finance',
-      description: 'Operasional FinSight dan laporan keuangan.',
-      lead_id: 3,
-      member_ids: [3, 5, 6, 11],
-      dashboards: ['FinSight'],
-      created_at: '2026-06-12 11:30:00',
-    },
-    {
-      id: 3,
-      name: 'Platform EDM',
-      unit: 'EDM Core',
-      description: 'Tim inti monitoring, TRAXIS, dan GARD.',
-      lead_id: 1,
-      member_ids: [1, 7, 8, 9],
-      dashboards: ['TRAXIS', 'GARD', 'EDM Core Monitor'],
-      created_at: '2026-08-01 10:00:00',
-    },
-  ]
-
-  const users = [
-    {
-      id: 1,
-      name: 'Farras',
-      email: 'farras@edm.local',
-      role_id: 1,
-      unit: 'EDM Core',
-      team_ids: [1, 3],
-      status: 'active',
-      created_at: '2026-05-01 08:00:00',
-    },
-    {
-      id: 2,
-      name: 'Adhi Prasetio',
-      email: 'adhi.prasetio@edm.local',
-      role_id: 2,
-      unit: 'GBO',
-      team_ids: [1],
-      status: 'active',
-      created_at: '2026-05-12 09:30:00',
-    },
-    {
-      id: 3,
-      name: 'Atha Dwira',
-      email: 'atha.dwira@edm.local',
-      role_id: 2,
-      unit: 'Finance',
-      team_ids: [2],
-      status: 'active',
-      created_at: '2026-05-20 10:00:00',
-    },
-    {
-      id: 4,
-      name: 'Asep Wahyudi',
-      email: 'asep.wahyudi@edm.local',
-      role_id: 4,
-      unit: 'GBO',
-      team_ids: [1],
-      status: 'active',
-      created_at: '2026-06-02 11:15:00',
-    },
-    {
-      id: 5,
-      name: 'Alamsyah Putra',
-      email: 'alamsyah.putra@edm.local',
-      role_id: 3,
-      unit: 'GBO',
-      team_ids: [1, 2],
-      status: 'active',
-      created_at: '2026-06-08 13:40:00',
-    },
-    {
-      id: 6,
-      name: 'Panji Pujianto',
-      email: 'panji.pujianto@edm.local',
-      role_id: 4,
-      unit: 'Finance',
-      team_ids: [2],
-      status: 'active',
-      created_at: '2026-06-18 15:00:00',
-    },
-    {
-      id: 7,
-      name: 'Maggie Arsyad',
-      email: 'maggie.arsyad@edm.local',
-      role_id: 4,
-      unit: 'Technology',
-      team_ids: [3],
-      status: 'active',
-      created_at: '2026-07-01 09:00:00',
-    },
-    {
-      id: 8,
-      name: 'Farras Al-Risyad',
-      email: 'farras.al-risyad@edm.local',
-      role_id: 4,
-      unit: 'EDM Core',
-      team_ids: [1, 3],
-      status: 'active',
-      created_at: '2026-07-10 10:30:00',
-    },
-    {
-      id: 9,
-      name: 'Lifi',
-      email: 'lifi@edm.local',
-      role_id: 4,
-      unit: 'Technology',
-      team_ids: [3],
-      status: 'active',
-      created_at: '2026-08-04 09:20:00',
-    },
-    {
-      id: 10,
-      name: 'Mahdi',
-      email: 'mahdi@edm.local',
-      role_id: 4,
-      unit: 'GBO',
-      team_ids: [1],
-      status: 'active',
-      created_at: '2026-08-11 10:00:00',
-    },
-    {
-      id: 11,
-      name: 'Alfiv',
-      email: 'alfiv@edm.local',
-      role_id: 4,
-      unit: 'Finance',
-      team_ids: [2],
-      status: 'active',
-      created_at: '2026-08-18 11:10:00',
-    },
-  ]
-
-  return { users, roles, teams, permissions }
-}
-
-function loadAccess() {
-  if (typeof localStorage === 'undefined') return seedAccess()
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return seedAccess()
-    const parsed = JSON.parse(raw)
-    if (!parsed?.users?.length || !parsed?.roles?.length || !parsed?.teams?.length) return seedAccess()
-    if (!Array.isArray(parsed.permissions)) parsed.permissions = defaultPermissions.map((p) => ({ ...p }))
-    return parsed
-  } catch {
-    return seedAccess()
-  }
-}
-
-const initial = loadAccess()
 
 export const accessStore = $state({
   /** @type {AccessUser[]} */
-  users: initial.users,
+  users: [],
   /** @type {AccessRole[]} */
-  roles: initial.roles,
+  roles: [],
   /** @type {AccessTeam[]} */
-  teams: initial.teams,
+  teams: [],
   /** @type {AccessPermission[]} */
-  permissions: initial.permissions,
+  permissions: [],
+  loading: false,
+  /** @type {string | null} */
+  error: null,
 })
 
-function persist() {
-  if (typeof localStorage === 'undefined') return
-  localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify({
-      users: accessStore.users,
-      roles: accessStore.roles,
-      teams: accessStore.teams,
-      permissions: accessStore.permissions,
-    }),
-  )
+/** Call on app boot (or after any page that needs fresh data mounts). */
+export async function loadAccessFromApi() {
+  accessStore.loading = true
+  accessStore.error = null
+  try {
+    const [users, roles, teams, permissions] = await Promise.all([
+      api.get('/api/users'),
+      api.get('/api/roles'),
+      api.get('/api/teams'),
+      api.get('/api/permissions'),
+    ])
+    accessStore.users = users
+    accessStore.roles = roles
+    accessStore.teams = teams
+    accessStore.permissions = permissions
+    // Role atau permission yang berubah juga berlaku untuk akun yang sedang login.
+    await refreshCurrentUser()
+  } catch (e) {
+    accessStore.error = e instanceof Error ? e.message : String(e)
+  } finally {
+    accessStore.loading = false
+  }
 }
 
-/** @param {number} id */
+/** @param {string} id */
 export function getUser(id) {
-  return accessStore.users.find((u) => u.id === Number(id)) || null
+  return accessStore.users.find((u) => u.id === id) || null
 }
 
-/** @param {number} id */
+/** @param {string} id */
 export function getRole(id) {
-  return accessStore.roles.find((r) => r.id === Number(id)) || null
+  return accessStore.roles.find((r) => r.id === id) || null
 }
 
-/** @param {number} id */
+/** @param {string} id */
 export function getTeam(id) {
-  return accessStore.teams.find((t) => t.id === Number(id)) || null
+  return accessStore.teams.find((t) => t.id === id) || null
 }
 
-/** @param {number} roleId */
+/** @param {string} roleId */
 export function roleLabel(roleId) {
   return getRole(roleId)?.name || '—'
 }
 
-/** @param {number} userId */
+/** @param {string} userId */
 export function userLabel(userId) {
   return getUser(userId)?.name || '—'
 }
 
-/** @param {number[]} teamIds */
+/** @param {string[]} teamIds */
+/** Nama dashboard yang ditangani tim-tim user ini (lihat dashboardTeamOptions — "Tim" dilabeli per dashboard). */
 export function teamLabels(teamIds) {
-  return teamIds.map((id) => getTeam(id)?.name).filter(Boolean)
+  const names = new Set()
+  for (const id of teamIds) {
+    const team = getTeam(id)
+    if (team) team.dashboards.forEach((name) => names.add(name))
+  }
+  return [...names]
 }
 
 export function roleOptions() {
@@ -341,6 +126,21 @@ export function roleOptions() {
 
 export function teamOptions() {
   return accessStore.teams.map((t) => ({ value: t.id, label: t.name, unit: t.unit }))
+}
+
+/**
+ * Pilihan "Tim" dilabeli dari Dashboard Registry, bukan dari nama tim mentah — satu tim bisa
+ * menangani beberapa dashboard sekaligus, jadi mencentang salah satu dashboard yang ditangani
+ * tim yang sama akan ikut mencentang dashboard lain yang ditangani tim itu juga.
+ * @returns {{ value: string, label: string }[]}
+ */
+export function dashboardTeamOptions() {
+  return listDashboards({ sort: 'name_asc' })
+    .map((d) => {
+      const team = accessStore.teams.find((t) => t.dashboards.includes(d.name))
+      return team ? { value: team.id, label: d.name } : null
+    })
+    .filter((opt) => opt !== null)
 }
 
 export function userOptions() {
@@ -357,8 +157,8 @@ export function userOptions() {
  * }} filters
  */
 export function listUsers(filters = {}) {
-  const role = filters.role ? Number(filters.role) : 0
-  const team = filters.team ? Number(filters.team) : 0
+  const role = filters.role ? String(filters.role) : ''
+  const team = filters.team ? String(filters.team) : ''
   const unit = (filters.unit || '').trim()
   const status = (filters.status || '').trim()
   const q = (filters.q || '').trim().toLowerCase()
@@ -369,11 +169,26 @@ export function listUsers(filters = {}) {
     if (team && !u.team_ids.includes(team)) return false
     if (status && u.status !== status) return false
     if (q) {
-      const hay = `${u.name} ${u.email} ${roleLabel(u.role_id)} ${u.unit} ${teamLabels(u.team_ids).join(' ')}`.toLowerCase()
+      const hay = `${u.name} ${u.username} ${roleLabel(u.role_id)} ${u.unit} ${teamLabels(u.team_ids).join(' ')}`.toLowerCase()
       if (!hay.includes(q)) return false
     }
     return true
   })
+}
+
+/**
+ * @param {string} userId
+ * @param {{ name: string, username: string, role_id: string, unit?: string, team_ids?: string[], status?: UserStatus }} payload
+ * @returns {Promise<{ ok: true } | { ok: false, reason: string }>}
+ */
+export async function updateUser(userId, payload) {
+  try {
+    await api.put(`/api/users/${userId}`, payload)
+    await loadAccessFromApi()
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, reason: e instanceof Error ? e.message : String(e) }
+  }
 }
 
 /**
@@ -399,27 +214,16 @@ export function listTeams(filters = {}) {
 /**
  * @param {{
  *   name: string,
- *   email: string,
- *   role_id: number,
+ *   username: string,
+ *   role_id: string,
  *   unit: string,
- *   team_ids: number[],
+ *   team_ids: string[],
  *   status?: UserStatus,
  * }} payload
  */
-export function createUser(payload) {
-  const nextId = accessStore.users.reduce((max, u) => Math.max(max, u.id), 0) + 1
-  const user = {
-    id: nextId,
-    name: payload.name.trim(),
-    email: payload.email.trim(),
-    role_id: payload.role_id,
-    unit: payload.unit,
-    team_ids: payload.team_ids,
-    status: payload.status || 'active',
-    created_at: nowStamp(),
-  }
-  accessStore.users = [...accessStore.users, user]
-  persist()
+export async function createUser(payload) {
+  const user = await api.post('/api/users', payload)
+  await loadAccessFromApi()
   return user
 }
 
@@ -433,20 +237,9 @@ export function createUser(payload) {
  *   dashboards: string[],
  * }} payload
  */
-export function createTeam(payload) {
-  const nextId = accessStore.teams.reduce((max, t) => Math.max(max, t.id), 0) + 1
-  const team = {
-    id: nextId,
-    name: payload.name.trim(),
-    unit: payload.unit,
-    description: (payload.description || '').trim(),
-    lead_id: payload.lead_id,
-    member_ids: payload.member_ids,
-    dashboards: payload.dashboards,
-    created_at: nowStamp(),
-  }
-  accessStore.teams = [...accessStore.teams, team]
-  persist()
+export async function createTeam(payload) {
+  const team = await api.post('/api/teams', payload)
+  await loadAccessFromApi()
   return team
 }
 
@@ -457,115 +250,50 @@ export function createTeam(payload) {
  *   permissions?: Record<string, boolean>,
  * }} payload
  */
-export function createRole(payload) {
-  const nextId = accessStore.roles.reduce((max, r) => Math.max(max, r.id), 0) + 1
-  const role = {
-    id: nextId,
-    name: payload.name.trim(),
-    description: (payload.description || '').trim(),
-    permissions: allPermissions(accessStore.permissions, payload.permissions || {}),
-  }
-  accessStore.roles = [...accessStore.roles, role]
-  persist()
+export async function createRole(payload) {
+  const role = await api.post('/api/roles', payload)
+  await loadAccessFromApi()
   return role
 }
 
 /**
  * @param {number} roleId
  * @param {{ name: string, description?: string, permissions?: Record<string, boolean> }} payload
- * @returns {{ ok: true } | { ok: false, reason: string }}
+ * @returns {Promise<{ ok: true } | { ok: false, reason: string }>}
  */
-export function updateRole(roleId, payload) {
-  const role = getRole(roleId)
-  if (!role) return { ok: false, reason: 'Role tidak ditemukan' }
-  const name = payload.name.trim()
-  if (!name) return { ok: false, reason: 'Nama role wajib diisi' }
-  if (accessStore.roles.some((r) => r.id !== roleId && r.name.toLowerCase() === name.toLowerCase())) {
-    return { ok: false, reason: 'Nama role sudah dipakai' }
+export async function updateRole(roleId, payload) {
+  try {
+    await api.put(`/api/roles/${roleId}`, payload)
+    await loadAccessFromApi()
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, reason: e instanceof Error ? e.message : String(e) }
   }
-  accessStore.roles = accessStore.roles.map((r) =>
-    r.id === roleId
-      ? {
-          ...r,
-          name,
-          description: (payload.description || '').trim(),
-          permissions: payload.permissions
-            ? allPermissions(accessStore.permissions, payload.permissions)
-            : r.permissions,
-        }
-      : r,
-  )
-  persist()
-  return { ok: true }
 }
 
 /** @param {number} roleId @param {string} permKey @param {boolean} value */
-export function setRolePermission(roleId, permKey, value) {
-  const role = getRole(roleId)
-  if (!role) return false
-  role.permissions = { ...role.permissions, [permKey]: value }
-  accessStore.roles = [...accessStore.roles]
-  persist()
-  return true
+export async function setRolePermission(roleId, permKey, value) {
+  try {
+    await api.put(`/api/roles/${roleId}/permissions`, { perm_key: permKey, value })
+    await loadAccessFromApi()
+    return true
+  } catch {
+    return false
+  }
 }
 
 /**
  * @param {number} roleId
- * @returns {{ ok: true } | { ok: false, reason: string }}
+ * @returns {Promise<{ ok: true } | { ok: false, reason: string }>}
  */
-export function deleteRole(roleId) {
-  const role = getRole(roleId)
-  if (!role) return { ok: false, reason: 'Role tidak ditemukan' }
-  const used = countUsersInRole(roleId)
-  if (used > 0) {
-    return { ok: false, reason: `Role masih dipakai ${used} user. Pindahkan user ke role lain dulu.` }
+export async function deleteRole(roleId) {
+  try {
+    await api.del(`/api/roles/${roleId}`)
+    await loadAccessFromApi()
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, reason: e instanceof Error ? e.message : String(e) }
   }
-  if (accessStore.roles.length <= 1) return { ok: false, reason: 'Minimal harus ada satu role' }
-  accessStore.roles = accessStore.roles.filter((r) => r.id !== roleId)
-  persist()
-  return { ok: true }
-}
-
-/** @param {string} label */
-function slugKey(label) {
-  return label
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-}
-
-/**
- * @param {{ label: string, group?: string }} payload
- * @returns {{ ok: true, permission: AccessPermission } | { ok: false, reason: string }}
- */
-export function createPermission(payload) {
-  const label = payload.label.trim()
-  if (!label) return { ok: false, reason: 'Nama permission wajib diisi' }
-  if (accessStore.permissions.some((p) => p.label.toLowerCase() === label.toLowerCase())) {
-    return { ok: false, reason: 'Nama permission sudah dipakai' }
-  }
-  const base = slugKey(label) || 'permission'
-  let key = base
-  for (let n = 2; accessStore.permissions.some((p) => p.key === key); n++) key = `${base}_${n}`
-  const permission = { key, label, group: (payload.group || '').trim() || 'Lainnya' }
-  accessStore.permissions = [...accessStore.permissions, permission]
-  accessStore.roles = accessStore.roles.map((r) => ({ ...r, permissions: { ...r.permissions, [key]: false } }))
-  persist()
-  return { ok: true, permission }
-}
-
-/** @param {string} key */
-export function deletePermission(key) {
-  if (!accessStore.permissions.some((p) => p.key === key)) return false
-  accessStore.permissions = accessStore.permissions.filter((p) => p.key !== key)
-  accessStore.roles = accessStore.roles.map((r) => {
-    const { [key]: _removed, ...rest } = r.permissions
-    return { ...r, permissions: rest }
-  })
-  persist()
-  return true
 }
 
 /** @param {number} roleId */

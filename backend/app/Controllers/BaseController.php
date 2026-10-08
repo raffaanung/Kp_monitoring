@@ -42,4 +42,42 @@ abstract class BaseController extends Controller
         // Preload any models, libraries, etc, here.
         // $this->session = service('session');
     }
+
+    protected function jsonOk(mixed $data): ResponseInterface
+    {
+        return $this->response->setJSON([
+            'success' => true,
+            'data'    => $data,
+        ]);
+    }
+
+    protected function jsonError(string $message, int $status): ResponseInterface
+    {
+        return $this->response->setStatusCode($status)->setJSON([
+            'success' => false,
+            'message' => $message,
+        ]);
+    }
+
+    /** Id dari input user: kembalikan hanya kalau formatnya UUID, selain itu null. */
+    protected function uuidOrNull(mixed $value): ?string
+    {
+        return \App\Libraries\Id::isValid($value) ? $value : null;
+    }
+
+    /** The logged-in user's full row (with role_name/division_name), or null. */
+    protected function authUser(): ?array
+    {
+        $userId = session()->get('user_id');
+        if (! \App\Libraries\Id::isValid($userId)) {
+            return null;
+        }
+
+        $user = (new \App\Models\UserModel())->withRole($userId);
+        if ($user !== null) {
+            $user['permission_keys'] = (new \App\Models\RoleModel())->permissionKeysFor($user['role_id']);
+        }
+
+        return $user;
+    }
 }

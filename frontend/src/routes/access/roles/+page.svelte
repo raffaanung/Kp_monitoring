@@ -1,4 +1,4 @@
-﻿<script>
+<script>
   import GlassPanel from '$lib/GlassPanel.svelte'
   import SubmenuHeader from '$lib/SubmenuHeader.svelte'
   import {
@@ -35,7 +35,7 @@
   let confirm = $state(null)
   let confirmError = $state('')
 
-  /** @param {import('../../lib/accessStore.svelte.js').AccessRole} role */
+  /** @param {import('../lib/accessStore.svelte.js').AccessRole} role */
   function askDeleteRole(role) {
     confirmError = ''
     confirm = { id: role.id, name: role.name, users: countUsersInRole(role.id) }
@@ -45,9 +45,9 @@
     confirm = null
   }
 
-  function onConfirmDelete() {
+  async function onConfirmDelete() {
     if (!confirm) return
-    const result = deleteRole(confirm.id)
+    const result = await deleteRole(confirm.id)
     if (!result.ok) {
       confirmError = result.reason
       return
@@ -62,7 +62,7 @@
   let editPerms = $state(/** @type {Record<string, boolean>} */ ({}))
   let editError = $state('')
 
-  /** @param {import('../../lib/accessStore.svelte.js').AccessRole} role */
+  /** @param {import('../lib/accessStore.svelte.js').AccessRole} role */
   function openEdit(role) {
     editRoleId = role.id
     editName = role.name
@@ -82,10 +82,10 @@
   }
 
   /** @param {SubmitEvent} event */
-  function onEditSubmit(event) {
+  async function onEditSubmit(event) {
     event.preventDefault()
     if (editRoleId == null) return
-    const result = updateRole(editRoleId, { name: editName, description: editDescription, permissions: editPerms })
+    const result = await updateRole(editRoleId, { name: editName, description: editDescription, permissions: editPerms })
     if (!result.ok) {
       editError = result.reason
       return
@@ -99,7 +99,7 @@
   }
 
   /** @param {SubmitEvent} event */
-  function onAddSubmit(event) {
+  async function onAddSubmit(event) {
     event.preventDefault()
     error = ''
     const clean = name.trim()
@@ -111,8 +111,12 @@
       error = 'Nama role sudah dipakai'
       return
     }
-    createRole({ name: clean, description, permissions: newPerms })
-    addOpen = false
+    try {
+      await createRole({ name: clean, description, permissions: newPerms })
+      addOpen = false
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err)
+    }
   }
 
   /** @param {KeyboardEvent} e */
@@ -123,21 +127,21 @@
     closeConfirm()
   }
 
-  /** @param {import('../../lib/accessStore.svelte.js').AccessRole} role */
+  /** @param {import('../lib/accessStore.svelte.js').AccessRole} role */
   function enabledCount(role) {
     return permissions.filter((p) => role.permissions[p.key]).length
   }
 
-  /** @param {import('../../lib/accessStore.svelte.js').AccessRole} role @param {string} key */
+  /** @param {import('../lib/accessStore.svelte.js').AccessRole} role @param {string} key */
   function hasPerm(role, key) {
     return !!role.permissions[key]
   }
 
   /** @param {number} roleId @param {string} key */
-  function togglePerm(roleId, key) {
+  async function togglePerm(roleId, key) {
     const role = roles.find((r) => r.id === roleId)
     if (!role) return
-    setRolePermission(roleId, key, !role.permissions[key])
+    await setRolePermission(roleId, key, !role.permissions[key])
   }
 
   const groups = $derived.by(() => {
@@ -238,7 +242,7 @@
                     <td class="sticky-col perm-label">{perm.label}</td>
                     {#each roles as role}
                       <td class="cell-check">
-                        <label class="toggle" title={`${perm.label} Â· ${role.name}`}>
+                        <label class="toggle" title={`${perm.label} · ${role.name}`}>
                           <input
                             type="checkbox"
                             checked={hasPerm(role, perm.key)}
@@ -278,7 +282,7 @@
             <h2 id="add-role-title">Tambah Role</h2>
             <p>Buat peran baru, lalu atur permission-nya</p>
           </div>
-          <button type="button" class="close" aria-label="Tutup" onclick={closeAdd}>Ã—</button>
+          <button type="button" class="close" aria-label="Tutup" onclick={closeAdd}>×</button>
         </div>
 
         <label>
@@ -337,7 +341,7 @@
             <h2 id="edit-role-title">Edit Role</h2>
             <p>Ubah nama, deskripsi, dan permission role ini</p>
           </div>
-          <button type="button" class="close" aria-label="Tutup" onclick={closeEdit}>Ã—</button>
+          <button type="button" class="close" aria-label="Tutup" onclick={closeEdit}>×</button>
         </div>
 
         <label>
@@ -732,7 +736,7 @@
     }
   }
 
-  /* â”€â”€ Modal tambah role â”€â”€ */
+  /* ── Modal tambah role ── */
   .backdrop {
     position: fixed;
     inset: 0;
@@ -954,4 +958,3 @@
     }
   }
 </style>
-

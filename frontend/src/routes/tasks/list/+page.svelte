@@ -1,6 +1,5 @@
-﻿<script>
+<script>
   import { onMount } from 'svelte'
-  import { goto } from '$app/navigation'
   import GlassPanel from '$lib/GlassPanel.svelte'
   import SubmenuHeader from '$lib/SubmenuHeader.svelte'
   import {
@@ -17,7 +16,7 @@
   let status = $state('')
   let q = $state('')
 
-  /** Hidden extras â€” only from deep-link Beranda (hash), tidak ditampilkan di bar filter */
+  /** Hidden extras — only from deep-link Beranda (hash), tidak ditampilkan di bar filter */
   let pic = $state('')
   let overdue = $state('')
   let aktif = $state('')
@@ -85,15 +84,10 @@
   <GlassPanel>
     <SubmenuHeader
       eyebrow="Task"
-      title="List View"
+      title="List"
       sub="Tabel monitoring task"
       meta={`${items.length} task`}
     />
-
-    <div class="main-tabs" role="tablist">
-      <button type="button" class="main-tab" onclick={() => goto('/tasks/board')}>Board</button>
-      <button type="button" class="main-tab on" aria-selected="true">List</button>
-    </div>
 
     <form class="filters" onsubmit={onSubmit}>
       <label>
@@ -123,7 +117,7 @@
             <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.7" />
             <path d="m16.5 16.5 3.2 3.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
           </svg>
-          <input type="search" placeholder="Judul, PIC, dashboardâ€¦" bind:value={q} />
+          <input type="search" placeholder="Judul, PIC, dashboard…" bind:value={q} />
         </div>
       </label>
 
@@ -157,7 +151,7 @@
           <tbody>
             {#each items as task (task.id)}
               <tr class:late={isOverdue(task)}>
-                <td><span class="mono-id">#{task.id}</span></td>
+                <td><span class="mono-id">{task.code}</span></td>
                 <td>
                   <span class="task-link">{task.title}</span>
                 </td>
@@ -192,40 +186,6 @@
     flex-direction: column;
     gap: 12px;
     overflow: hidden;
-  }
-
-  .main-tabs {
-    display: flex;
-    gap: 16px;
-    margin-top: 16px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-  }
-
-  .main-tab {
-    background: transparent;
-    border: none;
-    font-size: 0.72rem;
-    font-weight: 650;
-    color: #6b6b6b;
-    padding: 0 0 8px 0;
-    cursor: pointer;
-    position: relative;
-  }
-
-  .main-tab.on {
-    color: #0f1b2e;
-  }
-
-  .main-tab.on::after {
-    content: '';
-    position: absolute;
-    bottom: -9px;
-    left: 0;
-    right: 0;
-    height: 2px;
-    background: #0f1b2e;
-    border-radius: 2px 2px 0 0;
   }
 
   .filters {
@@ -430,4 +390,3 @@
     background: rgba(225, 29, 72, 0.03);
   }
 </style>
-

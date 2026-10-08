@@ -1,5 +1,4 @@
-﻿<script>
-  import { page } from '$app/state';
+<script>
   import { goto } from '$app/navigation'
   import GlassPanel from '$lib/GlassPanel.svelte'
   import AttachmentPanel from '$lib/AttachmentPanel.svelte'
@@ -9,29 +8,59 @@
     updateRequirement,
     rememberDetailId,
     reqCode,
-    requirementStatusLabel,
+    versionRootId,
+    requirementVersions,
+    createRequirementVersion,
+    deleteRequirementVersion,
     requirementStatusOptions,
     requirementHealthLabel,
+    requirementTeamRoster,
     requirementStore,
   } from '$lib/requirementStore.svelte.js'
   import {
     canManageRequirements,
+    canCreateRequirement,
+    canAddAssignee,
     tasksForRequirement,
     workflowLabel,
     workflowColumns,
     workflowStatusColor,
     isOverdue,
+    currentUserName,
+    approveModuleTask,
+    requestRevisionModuleTask,
     setBoardDashboard,
     taskModuleStore,
   } from '$lib/taskModuleStore.svelte.js'
   import { formatDate } from '$lib/format.js'
+  import { portal } from '$lib/portal.js'
+
+  import { page } from '$app/state'
 
   let taskOpen = $state(false)
   let msg = $state('')
+  let versionMsg = $state('')
+  let versionOpen = $state(false)
+  let versionTitle = $state('')
+  let versionDescription = $state('')
+  /** @type {string[]} */
+  let versionTeam = $state([])
+  let versionError = $state('')
+  let savingVersion = $state(false)
+  let deletingVersion = $state(false)
+  let addingAssignee = $state(false)
+  let newAssigneeName = $state('')
+  let assigneeMsg = $state('')
 
   const item = $derived.by(() => {
     void requirementStore.items
     return page.params.id ? getRequirement(page.params.id) : null
+  })
+
+  /** Semua versi (V1, V2, ...) dari requirement ini, termasuk yang sedang dibuka. */
+  const versions = $derived.by(() => {
+    void requirementStore.items
+    return item ? requirementVersions(item.id) : []
   })
 
   const childTasks = $derived.by(() => {
@@ -65,7 +94,7 @@
         rows.push({
           at: a.at,
           title: a.action,
-          sub: `${a.actor} Â· #${t.id}`,
+          sub: `${a.actor} · #${t.id}`,
         })
       }
     }
@@ -73,7 +102,7 @@
       rows.push({
         at: item.created_at,
         title: 'Requirement dibuat',
-        sub: `${item.created_by} Â· ${reqCode(item.id)}`,
+        sub: `${item.created_by} · ${reqCode(versionRootId(item))}${item.version_no > 1 ? ' · V' + item.version_no : ''}`,
       })
     }
     return rows.sort((a, b) => b.at.localeCompare(a.at))
@@ -85,19 +114,165 @@
     return canManageRequirements(item.dashboard)
   })
 
+  /** Tambah versi baru mengikuti permission "create_requirement", terpisah dari hak kelola task/status di atas. */
+  const canAddVersion = $derived.by(() => {
+    void taskModuleStore.session
+    return canCreateRequirement()
+  })
+
+  /** Tombol Tambah Assignee mengikuti permission "add_assignee", terpisah dari hak kelola task/status di atas. */
+  const canAddAssigneePerm = $derived.by(() => {
+    void taskModuleStore.session
+    return canAddAssignee()
+  })
+
+  /** Task yang dibuat assignee (bukan owner) menunggu approval owner sebelum masuk Backlog/Kanban. */
+  const isRequirementOwner = $derived.by(() => {
+    void taskModuleStore.session
+    return item ? item.created_by === currentUserName() : false
+  })
+
+  /** @param {number} taskId */
+  async function quickApproveTask(taskId) {
+    await approveModuleTask(taskId, '')
+  }
+
+  /** @param {number} taskId */
+  async function quickReviseTask(taskId) {
+    await requestRevisionModuleTask(taskId, 'Perlu revisi.')
+  }
+
+  /** Teknis yang belum jadi assignee requirement ini, untuk dropdown Tambah Assignee. */
+  const availableAssignees = $derived.by(() => {
+    if (!item) return []
+    const current = item.team || []
+    return requirementTeamRoster().filter((m) => !current.includes(m.name))
+  })
+
+  /** Semua Teknis aktif, untuk checklist assignees di form Tambah Versi. */
+  const versionAssigneePool = $derived.by(() => requirementTeamRoster().map((m) => m.name))
+
   $effect(() => {
-    const id = page.params.id ? Number(page.params.id) : null
+    const id = page.params.id || null
     if (!id) return
     rememberDetailId(id)
     taskOpen = false
     msg = ''
+    versionMsg = ''
+    versionOpen = false
+    addingAssignee = false
+    assigneeMsg = ''
   })
 
+  /** @param {number} id */
+  function goToVersion(id) {
+    rememberDetailId(id)
+    goto(`/requirements/${id}`)
+  }
+
+  function openVersionModal() {
+    if (!item || !canAddVersion) return
+    versionTitle = item.title
+    versionDescription = item.description || ''
+    versionTeam = [...(item.team || [])]
+    versionError = ''
+    versionOpen = true
+  }
+
+  function closeVersionModal() {
+    versionOpen = false
+  }
+
+  /** @param {string} name */
+  function toggleVersionAssignee(name) {
+    versionTeam = versionTeam.includes(name)
+      ? versionTeam.filter((n) => n !== name)
+      : [...versionTeam, name]
+  }
+
+  async function confirmCreateVersion(event) {
+    event.preventDefault()
+    if (!item || !canAddVersion || savingVersion) return
+    versionError = ''
+    if (!versionTitle.trim()) {
+      versionError = 'Judul wajib diisi'
+      return
+    }
+    if (!versionDescription.trim()) {
+      versionError = 'Deskripsi wajib diisi'
+      return
+    }
+    savingVersion = true
+    const created = await createRequirementVersion(item.id, {
+      title: versionTitle,
+      description: versionDescription,
+      team: versionTeam,
+    })
+    savingVersion = false
+    if (!created) {
+      versionError = 'Gagal membuat versi baru'
+      return
+    }
+    versionOpen = false
+    goToVersion(created.id)
+  }
+
+  /** Hapus versi yang sedang dibuka. Peringatan konfirmasi dulu — tindakan tidak bisa dibatalkan. */
+  async function onDeleteVersion() {
+    if (!item || !canAddVersion || deletingVersion) return
+    const label = `${reqCode(versionRootId(item))}${item.version_no > 1 ? ' · V' + item.version_no : ''}`
+    const ok = confirm(`Hapus versi ${label} - "${item.title}"?\n\nTask yang pernah terhubung tidak ikut terhapus, hanya tautannya ke versi ini yang dilepas. Tindakan ini tidak bisa dibatalkan.`)
+    if (!ok) return
+
+    const currentId = item.id
+    const remaining = versions.filter((v) => v.id !== currentId)
+    // Pilih versi terdekat di bawah yang dihapus (mis. hapus V3 → balik ke V2), atau versi
+    // berikutnya kalau yang dihapus adalah V1.
+    const fallback = [...remaining].reverse().find((v) => v.version_no < item.version_no) || remaining[0]
+
+    deletingVersion = true
+    const deleted = await deleteRequirementVersion(currentId)
+    deletingVersion = false
+    if (!deleted) {
+      versionMsg = 'Gagal menghapus versi'
+      return
+    }
+    if (fallback) goToVersion(fallback.id)
+    else goto('/requirements/list')
+  }
+
   /** @param {'open' | 'in_progress' | 'done'} status */
-  function onStatus(status) {
+  async function onStatus(status) {
     if (!item || !canEdit) return
-    updateRequirement(item.id, { status })
+    await updateRequirement(item.id, { status })
     msg = 'Status diperbarui'
+  }
+
+  function openAddAssignee() {
+    if (!canAddAssigneePerm) return
+    assigneeMsg = ''
+    newAssigneeName = availableAssignees[0]?.name || ''
+    addingAssignee = true
+  }
+
+  function cancelAddAssignee() {
+    addingAssignee = false
+  }
+
+  async function confirmAddAssignee(event) {
+    event.preventDefault()
+    if (!item || !newAssigneeName) return
+    const ok = await updateRequirement(item.id, { team: [...(item.team || []), newAssigneeName] })
+    if (ok) addingAssignee = false
+    else assigneeMsg = 'Gagal menambah assignee'
+  }
+
+  /** @param {string} name */
+  async function removeAssignee(name) {
+    if (!item || !canEdit) return
+    if (!confirm(`Hapus ${name} dari assignees?`)) return
+    const ok = await updateRequirement(item.id, { team: (item.team || []).filter((n) => n !== name) })
+    if (!ok) assigneeMsg = 'Gagal menghapus assignee'
   }
 
   function openTaskModal() {
@@ -110,7 +285,7 @@
 
   /** @param {{ id: number }} created */
   function onTaskCreated(created) {
-    msg = `Task #${created.id} masuk Backlog Â· sudah di-assign`
+    msg = `Task #${created.id} masuk Backlog · sudah di-assign`
   }
 
   function openKanban() {
@@ -134,7 +309,7 @@
   {#if !item}
     <GlassPanel>
       <p class="state error">Requirement tidak ditemukan.</p>
-      <a class="ghost-btn" href="/requirements/list">â† Kembali ke Daftar</a>
+      <a class="ghost-btn" href="/requirements/list">← Kembali ke Daftar</a>
     </GlassPanel>
   {:else}
     <div class="layout">
@@ -142,7 +317,7 @@
         <div class="hero">
           <div class="hero-nav">
             <div class="action-pills" aria-label="Navigasi">
-              <a class="pill on" href="/requirements/list" aria-label="Kembali ke daftar" title="Kembali ke daftar">â†</a>
+              <a class="pill on" href="/requirements/list" aria-label="Kembali ke daftar" title="Kembali ke daftar">←</a>
             </div>
             <div class="hero-side">
               <div class="action-pills" aria-label="File Panduan">
@@ -161,13 +336,48 @@
             <div class="hero-main">
               <p class="eyebrow">Info Requirement</p>
               <div class="meta">
-                <span class="mono-id">{reqCode(item.id)}</span>
-                <span class={`chip st-${item.status}`}>{requirementStatusLabel(item.status)}</span>
+                <span class="mono-id">{reqCode(versionRootId(item))}</span>
                 <span class={`chip health-${item.health}`}>{requirementHealthLabel(item.health)}</span>
               </div>
-              <h2>{item.title}</h2>
+              <div class="title-row">
+                <h2>{item.title}</h2>
+                <div class="version-switch" aria-label="Versi requirement">
+                  {#if versions.length > 1}
+                    {#each versions as v (v.id)}
+                      <button
+                        type="button"
+                        class="version-pill"
+                        class:on={v.id === item.id}
+                        onclick={() => goToVersion(v.id)}
+                      >
+                        V{v.version_no}
+                      </button>
+                    {/each}
+                  {/if}
+                  {#if canAddVersion}
+                    <button
+                      type="button"
+                      class="version-add"
+                      onclick={openVersionModal}
+                      title="Buat versi baru dari requirement ini"
+                    >
+                      + Tambah Versi
+                    </button>
+                    <button
+                      type="button"
+                      class="version-delete"
+                      onclick={onDeleteVersion}
+                      disabled={deletingVersion}
+                      title="Hapus versi ini"
+                    >
+                      {deletingVersion ? 'Menghapus…' : 'Hapus Versi'}
+                    </button>
+                  {/if}
+                </div>
+              </div>
               <p class="lead">{item.description || 'Tidak ada deskripsi.'}</p>
               {#if msg}<p class="msg ok">{msg}</p>{/if}
+              {#if versionMsg}<p class="msg error">{versionMsg}</p>{/if}
             </div>
           </div>
 
@@ -180,19 +390,47 @@
                   <strong>{item.created_by}</strong>
                 </div>
               </div>
-              {#if item.team?.length}
-                <div class="assignees">
+              <div class="assignees">
+                <div class="assignees-head">
                   <span class="k">Assignees</span>
+                  {#if canAddAssigneePerm}
+                    <button type="button" class="assignee-add-btn" onclick={openAddAssignee}>+ Tambah Assignee</button>
+                  {/if}
+                </div>
+
+                {#if addingAssignee}
+                  <form class="assignee-add-form" onsubmit={confirmAddAssignee}>
+                    <select bind:value={newAssigneeName}>
+                      {#if availableAssignees.length === 0}
+                        <option value="">Semua Teknis sudah jadi assignee</option>
+                      {/if}
+                      {#each availableAssignees as m (m.name)}
+                        <option value={m.name}>{m.name}</option>
+                      {/each}
+                    </select>
+                    <button type="submit" class="assignee-save" disabled={!newAssigneeName}>Tambah</button>
+                    <button type="button" class="assignee-cancel" onclick={cancelAddAssignee}>Batal</button>
+                  </form>
+                {/if}
+
+                {#if assigneeMsg}<small class="assignee-error">{assigneeMsg}</small>{/if}
+
+                {#if item.team?.length}
                   <div class="avatar-stack">
                     {#each item.team as name}
                       <span class="avatar" title={name}>
                         <i class="face sm">{initials(name)}</i>
                         <em>{name}</em>
+                        {#if canEdit}
+                          <button type="button" class="avatar-remove" aria-label={`Hapus ${name}`} onclick={() => removeAssignee(name)}>×</button>
+                        {/if}
                       </span>
                     {/each}
                   </div>
-                </div>
-              {/if}
+                {:else}
+                  <p class="assignees-empty">Belum ada assignee.</p>
+                {/if}
+              </div>
             </div>
 
             <div class="facts">
@@ -291,11 +529,23 @@
                 <div class="task-main">
                   <strong>{t.title}</strong>
                   <small>
-                    {t.assignee || t.pic} Â· {formatDate(t.deadline)}
+                    {t.assignee || t.pic} · {formatDate(t.deadline)}
                     {#if isOverdue(t)} <em>Overdue</em>{/if}
                   </small>
+                  {#if t.approval_state === 'pending'}
+                    <small class="approval-note">Menunggu approval owner, belum masuk Kanban.</small>
+                  {:else if t.approval_state === 'revision'}
+                    <small class="approval-note rev">Diminta revisi oleh owner.</small>
+                  {/if}
                 </div>
-                <span class={`chip st-${t.status}`}>{workflowLabel(t.status)}</span>
+                {#if isRequirementOwner && t.approval_state === 'pending'}
+                  <div class="task-approve-acts">
+                    <button type="button" class="task-approve" onclick={() => quickApproveTask(t.id)}>Setujui</button>
+                    <button type="button" class="task-revise" onclick={() => quickReviseTask(t.id)}>Minta revisi</button>
+                  </div>
+                {:else}
+                  <span class={`chip st-${t.status}`}>{workflowLabel(t.status)}</span>
+                {/if}
               </li>
             {/each}
           </ul>
@@ -336,6 +586,70 @@
     onClose={closeTaskModal}
     onCreated={onTaskCreated}
   />
+{/if}
+
+{#if versionOpen && item}
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <div class="modal-backdrop" use:portal role="presentation" onclick={closeVersionModal} onkeydown={(e) => e.key === 'Escape' && closeVersionModal()}></div>
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <form
+    class="modal"
+    use:portal
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="create-version-title"
+    onclick={(e) => e.stopPropagation()}
+    onkeydown={(e) => e.key === 'Escape' && closeVersionModal()}
+    onsubmit={confirmCreateVersion}
+  >
+    <header class="modal-head">
+      <div class="modal-head-copy">
+        <p class="eyebrow">PM · Requirements</p>
+        <h2 id="create-version-title">Tambah Versi</h2>
+        <p class="hint">Versi baru dari {reqCode(versionRootId(item))} · task lama tidak ikut, mulai kosong.</p>
+      </div>
+      <button type="button" class="modal-close" aria-label="Tutup" onclick={closeVersionModal}>
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M7 7l10 10M17 7 7 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+        </svg>
+      </button>
+    </header>
+
+    <div class="modal-body">
+      <label class="field">
+        <span>Judul <em>*</em></span>
+        <input bind:value={versionTitle} maxlength="100" placeholder="Judul versi baru" />
+      </label>
+
+      <label class="field">
+        <span>Deskripsi <em>*</em></span>
+        <textarea rows="3" maxlength="600" bind:value={versionDescription} placeholder="Ruang lingkup & tujuan versi ini"></textarea>
+      </label>
+
+      <div class="field">
+        <span>Assignees</span>
+        {#if versionAssigneePool.length === 0}
+          <p class="assignees-empty">Belum ada Teknis aktif.</p>
+        {:else}
+          <div class="team-picker">
+            {#each versionAssigneePool as name}
+              <label class="team-check">
+                <input type="checkbox" checked={versionTeam.includes(name)} onchange={() => toggleVersionAssignee(name)} />
+                <span>{name}</span>
+              </label>
+            {/each}
+          </div>
+        {/if}
+      </div>
+
+      {#if versionError}<p class="msg error">{versionError}</p>{/if}
+    </div>
+
+    <div class="modal-actions">
+      <button type="button" class="ghost-btn" onclick={closeVersionModal}>Batal</button>
+      <button type="submit" class="primary" disabled={savingVersion}>{savingVersion ? 'Menyimpan…' : 'Buat Versi'}</button>
+    </div>
+  </form>
 {/if}
 
 <style>
@@ -491,6 +805,82 @@
     line-height: 1.2;
   }
 
+  .title-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .version-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    flex-wrap: wrap;
+  }
+
+  .version-pill,
+  .version-add {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 22px;
+    padding: 0 0.55rem;
+    border-radius: 999px;
+    border: 1px solid rgba(6, 95, 198, 0.18);
+    background: rgba(6, 95, 198, 0.06);
+    color: #065fc6;
+    font: inherit;
+    font-size: 0.58rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .version-pill:hover,
+  .version-add:hover {
+    background: rgba(6, 95, 198, 0.12);
+  }
+
+  .version-pill.on {
+    background: #065fc6;
+    border-color: #065fc6;
+    color: #fff;
+  }
+
+  .version-add {
+    border-style: dashed;
+  }
+
+  .version-add:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  .version-delete {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 22px;
+    padding: 0 0.55rem;
+    border-radius: 999px;
+    border: 1px dashed rgba(190, 18, 60, 0.25);
+    background: rgba(190, 18, 60, 0.05);
+    color: #be123c;
+    font: inherit;
+    font-size: 0.58rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .version-delete:hover {
+    background: rgba(190, 18, 60, 0.11);
+  }
+
+  .version-delete:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
   .lead {
     margin: 0;
     color: #6b6b6b;
@@ -553,6 +943,112 @@
   .assignees {
     display: grid;
     gap: 0.4rem;
+  }
+
+  .assignees-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .assignee-add-btn {
+    display: inline-flex;
+    align-items: center;
+    height: 20px;
+    padding: 0 0.5rem;
+    border-radius: 999px;
+    border: 1px dashed rgba(6, 95, 198, 0.3);
+    background: rgba(6, 95, 198, 0.06);
+    color: #065fc6;
+    font: inherit;
+    font-size: 0.56rem;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .assignee-add-btn:hover {
+    background: rgba(6, 95, 198, 0.12);
+  }
+
+  .assignee-add-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .assignee-add-form select {
+    height: 1.9rem;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    padding: 0 0.5rem;
+    font: inherit;
+    font-size: 0.62rem;
+    background: #fff;
+    min-width: 140px;
+  }
+
+  .assignee-save,
+  .assignee-cancel {
+    height: 1.9rem;
+    padding: 0 0.6rem;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    font: inherit;
+    font-size: 0.6rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .assignee-save {
+    background: #065fc6;
+    color: #fff;
+  }
+
+  .assignee-save:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .assignee-cancel {
+    background: rgba(0, 0, 0, 0.05);
+    color: #5c5c62;
+  }
+
+  .assignee-error {
+    color: #be123c;
+    font-size: 0.58rem;
+    font-weight: 600;
+  }
+
+  .assignees-empty {
+    margin: 0;
+    font-size: 0.6rem;
+    color: #8a8a90;
+  }
+
+  .avatar-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    margin-left: 0.1rem;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.06);
+    color: #6b6b6b;
+    font-size: 0.6rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .avatar-remove:hover {
+    background: rgba(190, 18, 60, 0.12);
+    color: #be123c;
   }
 
   .avatar-stack {
@@ -1005,6 +1501,44 @@
     font-weight: 750;
   }
 
+  .approval-note {
+    color: #9a6a20;
+    font-weight: 650;
+  }
+
+  .approval-note.rev {
+    color: #be123c;
+  }
+
+  .task-approve-acts {
+    display: flex;
+    gap: 0.35rem;
+    flex-shrink: 0;
+  }
+
+  .task-approve,
+  .task-revise {
+    height: 24px;
+    padding: 0 0.6rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font: inherit;
+    font-size: 0.58rem;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .task-approve {
+    background: #2f7a52;
+    color: #fff;
+  }
+
+  .task-revise {
+    background: rgba(0, 0, 0, 0.05);
+    color: #5c5c62;
+  }
+
   .timeline li {
     display: grid;
     grid-template-columns: 100px minmax(0, 1fr);
@@ -1158,7 +1692,7 @@
   .modal-backdrop {
     position: fixed;
     inset: 0;
-    z-index: 80;
+    z-index: 1000;
     background: rgba(15, 23, 42, 0.4);
     backdrop-filter: blur(6px);
     display: grid;
@@ -1167,12 +1701,18 @@
   }
 
   .modal {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1001;
     width: min(440px, 100%);
+    max-height: min(90vh, 640px);
     background: #fff;
     border-radius: 18px;
-    padding: 1.25rem;
-    display: grid;
-    gap: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.18);
   }
 
@@ -1182,9 +1722,87 @@
   }
 
   .hint {
-    margin: 0;
+    margin: 0.15rem 0 0;
     font-size: 0.68rem;
     color: #8a8a90;
+  }
+
+  .modal-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 1rem 1.1rem 0.85rem;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    flex-shrink: 0;
+  }
+
+  .modal-head-copy {
+    display: grid;
+    gap: 0.1rem;
+    min-width: 0;
+  }
+
+  .modal-close {
+    width: 28px;
+    height: 28px;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.05);
+    color: #6b6b6b;
+    cursor: pointer;
+    flex-shrink: 0;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal-close svg {
+    width: 14px;
+    height: 14px;
+    display: block;
+  }
+
+  .modal-close:hover {
+    background: rgba(0, 0, 0, 0.09);
+    color: #1a1a1a;
+  }
+
+  .modal-body {
+    display: grid;
+    gap: 0.75rem;
+    padding: 1rem 1.1rem;
+    overflow: auto;
+    min-height: 0;
+  }
+
+  .team-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    max-height: 140px;
+    overflow: auto;
+    padding: 0.1rem;
+  }
+
+  .team-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.3rem 0.6rem;
+    border-radius: 999px;
+    background: rgba(6, 95, 198, 0.05);
+    border: 1px solid rgba(6, 95, 198, 0.12);
+    font-size: 0.64rem;
+    font-weight: 600;
+    color: #1a1a1a;
+    cursor: pointer;
+  }
+
+  .team-check input {
+    width: auto;
+    height: auto;
   }
 
   .row2 {
@@ -1197,6 +1815,9 @@
     display: flex;
     justify-content: flex-end;
     gap: 0.5rem;
+    padding: 0.85rem 1.1rem 1rem;
+    border-top: 1px solid rgba(0, 0, 0, 0.06);
+    flex-shrink: 0;
   }
 
   @media (max-width: 980px) {
@@ -1262,4 +1883,3 @@
     }
   }
 </style>
-

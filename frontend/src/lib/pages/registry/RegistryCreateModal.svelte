@@ -236,14 +236,8 @@
                 <input
                   bind:value={formUser}
                   maxlength="80"
-                  list="dashboard-user-options"
                   placeholder="Masukkan nama pemohon..."
                 />
-                <datalist id="dashboard-user-options">
-                  {#each userOptions as user (user.id)}
-                    <option value={user.name}></option>
-                  {/each}
-                </datalist>
               </label>
             </div>
           </div>

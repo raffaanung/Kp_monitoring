@@ -1,4 +1,5 @@
 <script>
+  import { onMount } from 'svelte'
   import { portal } from './portal.js'
   import {
     addAttachments,
@@ -6,10 +7,10 @@
     attachmentStore,
     formatBytes,
     listAttachments,
+    loadAttachmentsFromApi,
     removeAttachment,
     useAttachment,
   } from './attachmentStore.svelte.js'
-  import { currentUserName } from './taskModuleStore.svelte.js'
   import { formatDate } from './format.js'
 
   /**
@@ -32,9 +33,14 @@
     return listAttachments(ownerType, ownerId)
   })
 
+  onMount(() => {
+    loadAttachmentsFromApi(ownerType, ownerId)
+  })
+
   function openModal() {
     error = ''
     open = true
+    loadAttachmentsFromApi(ownerType, ownerId)
   }
 
   function closeModal() {
@@ -59,7 +65,7 @@
     busy = true
     error = ''
     try {
-      const result = await addAttachments(ownerType, ownerId, selected, currentUserName())
+      const result = await addAttachments(ownerType, ownerId, selected)
       if (result.rejected.length) {
         error = result.rejected.map((item) => `${item.name}: ${item.reason}`).join('. ')
       }

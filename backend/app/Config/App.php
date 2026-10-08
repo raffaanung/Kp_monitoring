@@ -16,7 +16,7 @@ class App extends BaseConfig
      *
      * E.g., http://example.com/
      */
-    public string $baseURL = 'http://localhost/edm-task-monitoring/backend/';
+    public string $baseURL = 'http://localhost/edm-monitor/backend/';
 
     /**
      * Allowed Hostnames in the Site URL other than the hostname in the baseURL.

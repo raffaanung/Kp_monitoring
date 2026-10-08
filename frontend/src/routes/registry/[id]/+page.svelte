@@ -1,5 +1,4 @@
-﻿<script>
-  import { page } from '$app/state';
+<script>
   import { goto } from '$app/navigation'
   import GlassPanel from '$lib/GlassPanel.svelte'
   import SubmenuHeader from '$lib/SubmenuHeader.svelte'
@@ -18,6 +17,13 @@
     registryStore,
   } from '$lib/registryStore.svelte.js'
   import { formatDate } from '$lib/format.js'
+  import { listUsers } from '$lib/accessStore.svelte.js'
+  import { canCreateDashboard } from '$lib/taskModuleStore.svelte.js'
+
+  import { page } from '$app/state'
+
+  const pmOptions = $derived(listUsers({ role: 3, status: 'active' }))
+  const canManage = $derived(canCreateDashboard())
 
   /** @type {'overview' | 'tasks' | 'history' | 'actions'} */
   let tab = $state('overview')
@@ -33,6 +39,7 @@
   let editCode = $state('')
   let editDescription = $state('')
   let editOwner = $state('')
+  let editPm = $state('')
   let editPlatform = $state('')
   let editCategory = $state('')
   let editUrl = $state('')
@@ -41,9 +48,11 @@
   let editSource = $state('')
   let editRefresh = $state('')
   let editMsg = $state('')
+  let editError = $state('')
 
   let nextStatus = $state(/** @type {'active' | 'idle'} */ ('active'))
   let statusMsg = $state('')
+  let statusOk = $state(true)
   let deleteMsg = $state('')
 
   const item = $derived.by(() => {
@@ -54,7 +63,7 @@
   let lastLoadedId = $state(/** @type {number | null} */ (null))
 
   $effect(() => {
-    const id = page.params.id ? Number(page.params.id) : null
+    const id = page.params.id || null
     if (!id || lastLoadedId === id) return
     const d = getDashboard(id)
     if (!d) return
@@ -65,6 +74,7 @@
     editCode = d.code
     editDescription = d.description
     editOwner = d.owner
+    editPm = d.pm || ''
     editPlatform = d.platform
     editCategory = d.category
     editUrl = d.url
@@ -80,6 +90,7 @@
     taskError = ''
     taskOk = ''
     editMsg = ''
+    editError = ''
     statusMsg = ''
     deleteMsg = ''
     tab = 'overview'
@@ -107,14 +118,17 @@
     taskOk = 'Task berhasil ditambahkan'
   }
 
-  function onEdit(event) {
+  async function onEdit(event) {
     event.preventDefault()
     if (!item) return
-    updateDashboard(item.id, {
+    editMsg = ''
+    editError = ''
+    const ok = await updateDashboard(item.id, {
       name: editName.trim(),
       code: editCode.trim(),
       description: editDescription.trim(),
       owner: editOwner.trim(),
+      pm: editPm.trim(),
       platform: editPlatform.trim(),
       category: editCategory.trim(),
       url: editUrl.trim(),
@@ -125,21 +139,23 @@
         refresh_cadence: editRefresh.trim(),
       },
     })
-    editMsg = 'Dashboard berhasil diubah'
+    if (ok) editMsg = 'Dashboard berhasil diubah'
+    else editError = 'Gagal menyimpan perubahan. Pastikan nama Owner dan PIC benar.'
   }
 
-  function onChangeStatus(event) {
+  async function onChangeStatus(event) {
     event.preventDefault()
     if (!item) return
-    changeDashboardStatus(item.id, nextStatus)
-    statusMsg = `Status diubah ke ${registryStatusLabel(nextStatus)}`
+    const ok = await changeDashboardStatus(item.id, nextStatus)
+    statusOk = ok
+    statusMsg = ok ? `Status diubah ke ${registryStatusLabel(nextStatus)}` : 'Gagal mengubah status'
   }
 
-  function onDelete() {
+  async function onDelete() {
     if (!item) return
     if (!confirm(`Hapus dashboard "${item.name}" dari registry?`)) return
     const id = item.id
-    const ok = deleteDashboard(id)
+    const ok = await deleteDashboard(id)
     if (!ok) {
       deleteMsg = 'Gagal menghapus dashboard'
       return
@@ -163,10 +179,10 @@
       eyebrow="Dashboard Registry"
       title="Dashboard Detail"
       sub={item ? item.description : 'Detail dashboard tidak ditemukan'}
-      meta={item ? item.name : 'â€”'}
+      meta={item ? item.name : '—'}
     >
       {#snippet actions()}
-        <a class="btn-primary" href="/registry/list">â† Daftar</a>
+        <a class="btn-primary" href="/registry/list">← Daftar</a>
       {/snippet}
     </SubmenuHeader>
 
@@ -175,7 +191,7 @@
   {:else}
     <header>
       <div class="meta">
-        <span class="mono">#{item.id}</span>
+        <span class="mono">{item.code}</span>
         <span class={`badge status-${item.status}`}>{registryStatusLabel(item.status)}</span>
         <span class={`badge crit-${item.criticality}`}>{criticalityLabel(item.criticality)}</span>
       </div>
@@ -219,7 +235,7 @@
                 <div><dt>Platform</dt><dd>{item.platform}</dd></div>
                 <div><dt>Category</dt><dd>{item.category}</dd></div>
                 <div><dt>Version</dt><dd>{item.version}</dd></div>
-                <div><dt>URL</dt><dd>{item.url || 'â€”'}</dd></div>
+                <div><dt>URL</dt><dd>{item.url || '—'}</dd></div>
                 <div><dt>Created</dt><dd>{formatDate(item.created_at)}</dd></div>
                 <div><dt>Updated</dt><dd>{formatDate(item.updated_at)}</dd></div>
               </dl>
@@ -231,7 +247,7 @@
                 {#each metaEntries as entry}
                   <div>
                     <dt>{entry.key}</dt>
-                    <dd>{entry.value || 'â€”'}</dd>
+                    <dd>{entry.value || '—'}</dd>
                   </div>
                 {/each}
               </dl>
@@ -249,7 +265,7 @@
                     <li>
                       <div>
                         <strong>{task.title}</strong>
-                        <small>{task.pic || 'â€”'}</small>
+                        <small>{task.pic || '—'}</small>
                       </div>
                       <div class="chips">
                         {#if task.priority}
@@ -318,6 +334,7 @@
             {/if}
           </section>
         {:else}
+          {#if canManage}
           <div class="actions">
             <section>
               <h2>Edit Dashboard</h2>
@@ -336,9 +353,18 @@
                   <span>Deskripsi</span>
                   <textarea rows="3" bind:value={editDescription}></textarea>
                 </label>
+                <label>
+                  <span>PM (Project Manager)</span>
+                  <select bind:value={editPm}>
+                    <option value="">Pilih PIC...</option>
+                    {#each pmOptions as user (user.id)}
+                      <option value={user.name}>{user.name}</option>
+                    {/each}
+                  </select>
+                </label>
                 <div class="row2">
                   <label>
-                    <span>Owner</span>
+                    <span>Owner (PIC)</span>
                     <input bind:value={editOwner} />
                   </label>
                   <label>
@@ -381,6 +407,7 @@
                   </label>
                 </div>
                 {#if editMsg}<p class="msg ok">{editMsg}</p>{/if}
+                {#if editError}<p class="msg error">{editError}</p>{/if}
                 <button type="submit">Simpan perubahan</button>
               </form>
             </section>
@@ -398,16 +425,17 @@
                 </label>
                 <button type="submit">Update status</button>
               </form>
-              {#if statusMsg}<p class="msg ok">{statusMsg}</p>{/if}
+              {#if statusMsg}<p class="msg {statusOk ? 'ok' : 'error'}">{statusMsg}</p>{/if}
             </section>
 
             <section class="danger-zone">
               <h2>Delete Dashboard</h2>
-              <p>Hapus entry ini dari registry (data lokal FE).</p>
+              <p>Hapus dashboard ini dari registry. Datanya ditandai terhapus, tidak hilang dari database.</p>
               {#if deleteMsg}<p class="msg error">{deleteMsg}</p>{/if}
               <button type="button" class="danger" onclick={onDelete}>Hapus dashboard</button>
             </section>
           </div>
+          {/if}
         {/if}
       </div>
     {/key}
@@ -782,4 +810,3 @@
     }
   }
 </style>
-

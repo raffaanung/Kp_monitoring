@@ -1,7 +1,7 @@
 <script>
   import { goto } from '$app/navigation'
   import { portal } from './portal.js'
-  import { sessionPersonas, setSessionPersona } from './taskModuleStore.svelte.js'
+  import { logout } from './authStore.svelte.js'
 
   /** @type {{ name: string, label: string, avatar: string, currentId: string }} */
   let { name, label, avatar, currentId } = $props()
@@ -27,10 +27,28 @@
     open = false
   }
 
-  /** @param {string} id */
-  function pick(id) {
-    setSessionPersona(id)
+  async function doLogout() {
     open = false
+    await logout()
+    goto('/login')
+  }
+
+  /** @param {string} n */
+  function initials(n) {
+    return (n || '')
+      .split(' ')
+      .slice(0, 2)
+      .map((p) => p[0])
+      .join('')
+      .toUpperCase()
+  }
+
+  /** @param {string} n */
+  function faceTone(n) {
+    const tones = ['rose', 'sky', 'soft', 'mint', 'sand']
+    let h = 0
+    for (let i = 0; i < n.length; i++) h = (h + n.charCodeAt(i)) % tones.length
+    return tones[h]
   }
 </script>
 
@@ -41,10 +59,14 @@
     class="profile-chip"
     aria-haspopup="listbox"
     aria-expanded={open}
-    aria-label={`Ganti profil, sekarang ${name}`}
+    aria-label={`Menu profil ${name}`}
     onclick={toggle}
   >
-    <img class="avatar" src={avatar} alt="" />
+    {#if avatar}
+      <img class="avatar" src={avatar} alt="" />
+    {:else}
+      <i class="avatar face {faceTone(name)}">{initials(name)}</i>
+    {/if}
     <span class="profile-meta">
       <strong>{name}</strong>
       <small>{label}</small>
@@ -55,22 +77,12 @@
 {#if open}
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div class="scrim" use:portal role="presentation" onclick={close} onkeydown={(e) => e.key === 'Escape' && close()}></div>
-  <div class="menu" use:portal style={menuStyle} role="listbox" aria-label="Pilih profil dummy">
-    <p class="menu-title">Ganti profil</p>
-    {#each sessionPersonas as persona (persona.id)}
-      <button
-        type="button"
-        class="option"
-        class:on={persona.id === currentId}
-        role="option"
-        aria-selected={persona.id === currentId}
-        onclick={() => pick(persona.id)}
-      >
-        <strong>{persona.name}</strong>
-        <small>{persona.label}</small>
-      </button>
-    {/each}
+  <div class="menu" use:portal style={menuStyle} role="listbox" aria-label="Menu profil">
+    <p class="menu-title">{name} &middot; {label}</p>
     <a class="profile-link" href="/access/profile" onclick={close}>Buka halaman profil</a>
+    <button type="button" class="option logout" onclick={doLogout}>
+      <strong>Keluar</strong>
+    </button>
   </div>
 {/if}
 
@@ -105,6 +117,22 @@
     border-radius: 999px;
     object-fit: cover;
   }
+
+  .avatar.face {
+    display: inline-grid;
+    place-items: center;
+    font-size: 0.62rem;
+    font-weight: 700;
+    font-style: normal;
+    flex-shrink: 0;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+  }
+
+  .avatar.face.rose { background: #f3d5da; color: #8a2f45; }
+  .avatar.face.sky { background: #d5e8f8; color: #2f5f8a; }
+  .avatar.face.soft { background: #ebe7f6; color: #4a3d8f; }
+  .avatar.face.mint { background: #d8f0e4; color: #2f7a52; }
+  .avatar.face.sand { background: #f3e6d4; color: #8a5a2f; }
 
   .profile-meta {
     display: flex;
@@ -194,6 +222,10 @@
 
   .option.on small {
     color: #1a1a1a;
+  }
+
+  .option.logout strong {
+    color: #b91c1c;
   }
 
   .profile-link {

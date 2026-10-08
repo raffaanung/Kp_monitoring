@@ -3,11 +3,13 @@
     createModuleTask,
     teknisAssignees,
     assigneeOptions,
-    isCurrentUserPmOf,
+    canCreateTask,
   } from './taskModuleStore.svelte.js'
   import {
     listRequirements,
     reqCode,
+    versionRootId,
+    reqVersionSuffix,
     getRequirement,
     requirementStore,
   } from './requirementStore.svelte.js'
@@ -35,7 +37,7 @@
   let description = $state('')
   let assignee = $state('')
   let deadline = $state('')
-  let selectedReqId = $state(/** @type {number | ''} */ (''))
+  let selectedReqId = $state(/** @type {string} */ (''))
   let error = $state('')
 
   function today() {
@@ -44,30 +46,30 @@
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
   }
 
-  const lockedReq = $derived.by(() => {
+  /** Requirement yang jadi default saat modal dibuka dari dalam halaman requirement tertentu — tetap bisa diganti. */
+  const presetReq = $derived.by(() => {
     void requirementStore.items
     return requirementId ? getRequirement(requirementId) : null
   })
 
   const reqChoices = $derived.by(() => {
     void requirementStore.items
-    const dash = lockedReq?.dashboard || dashboard
+    const dash = presetReq?.dashboard || dashboard
     if (!dash) return listRequirements({})
     return listRequirements({ dashboard: dash }).filter((r) => r.status !== 'done')
   })
 
   const activeReq = $derived.by(() => {
     void requirementStore.items
-    if (lockedReq) return lockedReq
     if (selectedReqId === '' || selectedReqId == null) return null
-    return getRequirement(Number(selectedReqId))
+    return getRequirement(String(selectedReqId))
   })
 
   const assigneeList = $derived.by(() => {
     const team = Array.isArray(activeReq?.team) ? activeReq.team.filter(Boolean) : []
     const rest = assigneeOptions().filter((n) => !team.includes(n))
     const base = [...team, ...rest]
-    return base.length ? base : [...teknisAssignees]
+    return base.length ? base : teknisAssignees()
   })
 
   $effect(() => {
@@ -77,18 +79,18 @@
     deadline = today()
     error = ''
     selectedReqId = requirementId || (reqChoices[0]?.id ?? '')
-    const preferred = activeReq?.team?.[0] || assigneeList[0] || teknisAssignees[0] || ''
+    const preferred = activeReq?.team?.[0] || assigneeList[0] || teknisAssignees()[0] || ''
     assignee = preferred
   })
 
   $effect(() => {
-    if (!open || lockedReq) return
+    if (!open) return
     // Saat ganti requirement, default assignee ke anggota tim requirement
     const next = activeReq?.team?.[0] || assigneeList[0] || ''
     if (next && (!assignee || !assigneeList.includes(assignee))) assignee = next
   })
 
-  function submit(event) {
+  async function submit(event) {
     event.preventDefault()
     error = ''
 
@@ -97,8 +99,8 @@
       error = 'Pilih requirement terlebih dahulu'
       return
     }
-    if (!isCurrentUserPmOf(req.dashboard)) {
-      error = `Anda bukan PM untuk dashboard ${req.dashboard}`
+    if (!canCreateTask()) {
+      error = 'Anda tidak punya izin Tambah Task'
       return
     }
     if (!title.trim()) {
@@ -114,7 +116,7 @@
       return
     }
 
-    const created = createModuleTask({
+    const created = await createModuleTask({
       title: title.trim(),
       description: description.trim(),
       dashboard: req.dashboard,
@@ -125,7 +127,7 @@
     })
 
     if (!created) {
-      error = 'Gagal membuat task (pastikan Anda PM dashboard ini)'
+      error = 'Gagal membuat task'
       return
     }
 
@@ -167,28 +169,20 @@
       </header>
 
       <div class="body">
-        {#if lockedReq}
-          <label class="field">
-            <span>Requirement</span>
-            <input value={`${reqCode(lockedReq.id)} · ${lockedReq.title}`} disabled />
-          </label>
-          <p class="meta">Dashboard: <strong>{lockedReq.dashboard}</strong></p>
-        {:else}
-          <label class="field">
-            <span>Requirement <em>*</em></span>
-            <select bind:value={selectedReqId}>
-              {#if reqChoices.length === 0}
-                <option value="">Tidak ada requirement aktif</option>
-              {:else}
-                {#each reqChoices as r}
-                  <option value={r.id}>{reqCode(r.id)} · {r.title}</option>
-                {/each}
-              {/if}
-            </select>
-          </label>
-          {#if activeReq}
-            <p class="meta">Dashboard: <strong>{activeReq.dashboard}</strong></p>
-          {/if}
+        <label class="field">
+          <span>Requirement <em>*</em></span>
+          <select bind:value={selectedReqId}>
+            {#if reqChoices.length === 0}
+              <option value="">Tidak ada requirement aktif</option>
+            {:else}
+              {#each reqChoices as r}
+                <option value={r.id}>{reqCode(versionRootId(r))}{reqVersionSuffix(r)} · {r.title}</option>
+              {/each}
+            {/if}
+          </select>
+        </label>
+        {#if activeReq}
+          <p class="meta">Dashboard: <strong>{activeReq.dashboard}</strong></p>
         {/if}
 
         <label class="field">
