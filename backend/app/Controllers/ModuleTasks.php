@@ -349,7 +349,7 @@ class ModuleTasks extends BaseController
         }
         $dashboard = $task['dashboard_id'] ? (new DashboardModel())->find($task['dashboard_id']) : null;
         if ($dashboard === null || ! TaskPolicy::canDeleteTask($user, $dashboard)) {
-            return $this->jsonError('Only this dashboard's PM can delete the task', 403);
+            return $this->jsonError("Only this dashboard's PM can delete the task", 403);
         }
 
         $taskModel->delete($taskId);
@@ -386,7 +386,7 @@ class ModuleTasks extends BaseController
         // Owner requirement boleh geser langsung, apa pun role-nya (termasuk Admin) — sama seperti PM.
         $isOwner = $requirement !== null && TaskPolicy::isRequirementOwner($user, $requirement);
         if (! TaskPolicy::canUpdateBoard($user) && ! $isOwner) {
-            return $this->jsonError('You are not allowed to change this task's status', 403);
+            return $this->jsonError("You are not allowed to change this task's status", 403);
         }
         if ($task['status'] === $status) {
             return $this->jsonOk(['result' => 'moved', 'task' => $this->shapeDetailRow($taskModel->findRichById($taskId))]);
@@ -471,7 +471,7 @@ class ModuleTasks extends BaseController
         $isPm        = $dashboard !== null && TaskPolicy::isPmOfDashboard($user, $dashboard);
         $isOwner     = $requirement !== null && TaskPolicy::isRequirementOwner($user, $requirement);
         if (! $isPm && ! $isOwner) {
-            return $this->jsonError('Only this dashboard's PM or the requirement owner can decide', 403);
+            return $this->jsonError("Only this dashboard's PM or the requirement owner can decide", 403);
         }
 
         $moveModel = new TaskStatusMoveModel();
