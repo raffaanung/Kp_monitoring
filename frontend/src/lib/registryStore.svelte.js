@@ -167,43 +167,6 @@ export async function changeDashboardStatus(id, status) {
   }
 }
 
-/** @param {number} id @param {string} key @param {string} value */
-export async function setDashboardField(id, key, value) {
-  const clean = (key || '').trim()
-  if (!clean) return false
-  try {
-    await api.post(`/api/dashboards/${id}/fields`, { key: clean, value })
-    await loadDashboardsFromApi()
-    return true
-  } catch {
-    return false
-  }
-}
-
-/** @param {number} id @param {string} oldKey @param {string} newKey @param {string} value */
-export async function renameDashboardField(id, oldKey, newKey, value) {
-  const clean = (newKey || '').trim()
-  if (!clean) return false
-  try {
-    await api.put(`/api/dashboards/${id}/fields`, { old_key: oldKey, new_key: clean, value })
-    await loadDashboardsFromApi()
-    return true
-  } catch {
-    return false
-  }
-}
-
-/** @param {number} id @param {string} key */
-export async function removeDashboardField(id, key) {
-  try {
-    await api.del(`/api/dashboards/${id}/fields`, { key })
-    await loadDashboardsFromApi()
-    return true
-  } catch {
-    return false
-  }
-}
-
 /**
  * Dashboard requirement counts are now computed live server-side (quick_stats.requirements_total),
  * so this just re-syncs the cached list after a requirement is created elsewhere.
@@ -276,11 +239,11 @@ export const criticalityOptions = [
 export const dashboardFilterOptions = []
 
 export const sortOptions = [
-  { value: 'updated_desc', label: 'Terbaru diperbarui' },
-  { value: 'updated_asc', label: 'Terlama diperbarui' },
-  { value: 'name_asc', label: 'Nama A-Z' },
-  { value: 'name_desc', label: 'Nama Z-A' },
-  { value: 'criticality_desc', label: 'Kritikalitas tinggi' },
-  { value: 'criticality_asc', label: 'Kritikalitas rendah' },
+  { value: 'updated_desc', label: 'Recently updated' },
+  { value: 'updated_asc', label: 'Least recently updated' },
+  { value: 'name_asc', label: 'Name A-Z' },
+  { value: 'name_desc', label: 'Name Z-A' },
+  { value: 'criticality_desc', label: 'Highest priority' },
+  { value: 'criticality_asc', label: 'Lowest priority' },
   { value: 'status_asc', label: 'Status' },
 ]

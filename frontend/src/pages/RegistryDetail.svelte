@@ -176,7 +176,7 @@
 <section class="page">
   <GlassPanel>
     <SubmenuHeader
-      eyebrow="Dashboard Registry"
+      eyebrow="Workspaces"
       title="Dashboard Detail"
       sub={item ? item.description : 'Detail dashboard tidak ditemukan'}
       meta={item ? item.name : '—'}

@@ -12,7 +12,6 @@
   import TaskBoard from './pages/TaskBoard.svelte'
   import TaskList from './pages/TaskList.svelte'
   import TaskDetail from './pages/TaskDetail.svelte'
-  import RequirementList from './pages/RequirementList.svelte'
   import RequirementNew from './pages/RequirementNew.svelte'
   import RequirementDetail from './pages/RequirementDetail.svelte'
   import RequirementDetailGate from './pages/RequirementDetailGate.svelte'
@@ -47,8 +46,6 @@
     '/tasks/new': withTransition(TaskBoard),
     '/tasks/detail': withTransition(TaskBoard),
     '/tasks/:id': withTransition(TaskDetail),
-    '/requirements': withTransition(RequirementList),
-    '/requirements/list': withTransition(RequirementList),
     '/requirements/new': withTransition(RequirementNew),
     '/requirements/detail': withTransition(RequirementDetailGate),
     '/requirements/:id': withTransition(RequirementDetail),

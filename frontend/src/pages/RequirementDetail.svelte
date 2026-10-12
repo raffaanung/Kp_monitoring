@@ -238,7 +238,7 @@
       return
     }
     if (fallback) goToVersion(fallback.id)
-    else push('/requirements/list')
+    else push('/registry/list')
   }
 
   /** @param {'open' | 'in_progress' | 'done'} status */
@@ -309,7 +309,7 @@
   {#if !item}
     <GlassPanel>
       <p class="state error">Requirement tidak ditemukan.</p>
-      <a class="ghost-btn" href="/requirements/list" use:link>← Kembali ke Daftar</a>
+      <a class="ghost-btn" href="/registry/list" use:link>← Kembali</a>
     </GlassPanel>
   {:else}
     <div class="layout">
@@ -317,7 +317,7 @@
         <div class="hero">
           <div class="hero-nav">
             <div class="action-pills" aria-label="Navigasi">
-              <a class="pill on" href="/requirements/list" use:link aria-label="Kembali ke daftar" title="Kembali ke daftar">←</a>
+              <a class="pill on" href="/registry/list" use:link aria-label="Kembali" title="Kembali">←</a>
             </div>
             <div class="hero-side">
               <div class="action-pills" aria-label="File Panduan">

@@ -9,7 +9,7 @@
   const FEATURES = [
     { label: 'Real-time', color: '#7c8cf8' },
     { label: 'Analytics', color: '#34d399' },
-    { label: 'Terintegrasi', color: '#f59e0b' },
+    { label: 'Integrated', color: '#f59e0b' },
   ]
 
   let username = $state('')
@@ -57,10 +57,10 @@
           <span class="live-dot" aria-hidden="true"></span>
           Operation Monitoring <span class="dot-sep">•</span> Live
         </span>
-        <h1 class="brand-title">Kelola Tugas,<br />Tingkatkan Produktivitas</h1>
+        <h1 class="brand-title">Manage Tasks,<br />Raise Productivity</h1>
         <p class="brand-sub">
-          Pantau, kelola, dan capai target tim Anda dalam satu platform yang terintegrasi secara
-          real-time.
+          Track, manage, and hit your team targets on one integrated
+          platform, in real time.
         </p>
 
         <div class="brand-tags" role="list">
@@ -107,7 +107,7 @@
         <header class="form-head">
           <img src={logoFull} alt="EDM Task Monitoring" class="form-logo" />
           <h2 class="form-title">Selamat datang kembali</h2>
-          <p class="form-sub">Masuk ke akun EDM Task Monitoring Anda</p>
+          <p class="form-sub">Sign in to your EDM Task Monitoring account</p>
         </header>
 
         <span class="dash-tag">
@@ -166,7 +166,7 @@
               <input
                 id="password"
                 type={showPassword ? 'text' : 'password'}
-                placeholder="Masukkan password"
+                placeholder="Enter your password"
                 autocomplete="current-password"
                 bind:value={password}
                 onfocus={() => {
@@ -179,7 +179,7 @@
               <button
                 type="button"
                 class="eye"
-                aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
                 onclick={() => {
                   showPassword = !showPassword
                 }}
@@ -212,9 +212,9 @@
           <div class="form-row">
             <label class="check">
               <input type="checkbox" bind:checked={remember} />
-              <span>Ingat saya</span>
+              <span>Remember me</span>
             </label>
-            <button type="button" class="link-quiet">Lupa password?</button>
+            <button type="button" class="link-quiet">Forgot password?</button>
           </div>
 
           {#if error}
@@ -222,7 +222,7 @@
           {/if}
 
           <button type="submit" class="btn-primary" disabled={submitting}>
-            {submitting ? 'Memeriksa…' : 'Masuk'}
+            {submitting ? 'Checking…' : 'Sign in'}
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path
                 d="M5 12h14M13 6l6 6-6 6"

@@ -26,12 +26,12 @@ class Roles extends BaseController
         $permissions = $this->request->getJsonVar('permissions', true) ?? [];
 
         if ($name === '') {
-            return $this->jsonError('Nama role wajib diisi', 422);
+            return $this->jsonError('Role name is required', 422);
         }
 
         $model = new RoleModel();
         if ($model->where('scope', 'global')->where('name', $name)->first() !== null) {
-            return $this->jsonError('Nama role sudah dipakai', 422);
+            return $this->jsonError('That role name is already in use', 422);
         }
 
         $id = Id::new();
@@ -49,7 +49,7 @@ class Roles extends BaseController
         $model  = new RoleModel();
         $role   = $model->find($roleId);
         if ($role === null) {
-            return $this->jsonError('Role tidak ditemukan', 404);
+            return $this->jsonError('Role not found', 404);
         }
 
         $name        = trim((string) $this->request->getJsonVar('name'));
@@ -57,11 +57,11 @@ class Roles extends BaseController
         $permissions = $this->request->getJsonVar('permissions', true);
 
         if ($name === '') {
-            return $this->jsonError('Nama role wajib diisi', 422);
+            return $this->jsonError('Role name is required', 422);
         }
         $dup = $model->where('scope', 'global')->where('name', $name)->where('id !=', $roleId)->first();
         if ($dup !== null) {
-            return $this->jsonError('Nama role sudah dipakai', 422);
+            return $this->jsonError('That role name is already in use', 422);
         }
 
         $model->update($roleId, ['name' => $name, 'description' => $description]);
@@ -78,15 +78,15 @@ class Roles extends BaseController
         $model  = new RoleModel();
         $role   = $model->find($roleId);
         if ($role === null) {
-            return $this->jsonError('Role tidak ditemukan', 404);
+            return $this->jsonError('Role not found', 404);
         }
 
         $used = $model->countUsers($roleId);
         if ($used > 0) {
-            return $this->jsonError("Role masih dipakai {$used} user. Pindahkan user ke role lain dulu.", 422);
+            return $this->jsonError("Role is still assigned to {$used} user. Move those users to another role first.", 422);
         }
         if ($model->where('scope', 'global')->countAllResults() <= 1) {
-            return $this->jsonError('Minimal harus ada satu role', 422);
+            return $this->jsonError('At least one role is required', 422);
         }
 
         $model->delete($roleId);
@@ -102,12 +102,12 @@ class Roles extends BaseController
 
         $model = new RoleModel();
         if ($model->find($roleId) === null) {
-            return $this->jsonError('Role tidak ditemukan', 404);
+            return $this->jsonError('Role not found', 404);
         }
 
         $ok = $model->setPermission($roleId, $permKey, $value);
         if (! $ok) {
-            return $this->jsonError('Permission tidak ditemukan', 404);
+            return $this->jsonError('Permission not found', 404);
         }
 
         return $this->jsonOk($this->findShaped($roleId));

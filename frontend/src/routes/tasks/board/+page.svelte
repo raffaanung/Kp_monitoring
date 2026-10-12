@@ -1,8 +1,6 @@
 <script>
-  import { goto } from '$app/navigation'
   import GlassPanel from '$lib/GlassPanel.svelte'
   import SubmenuHeader from '$lib/SubmenuHeader.svelte'
-  import PmCreateTaskModal from '$lib/PmCreateTaskModal.svelte'
   import {
     workflowColumns,
     tasksByColumn,
@@ -18,7 +16,6 @@
     setBoardTab,
     listInboxTasks,
     inboxNeedsMyAction,
-    canCreateTask,
     canUpdateBoard,
     canCommentOnTask,
     isCurrentUserPmOf,
@@ -36,9 +33,13 @@
     getModuleTask,
     readEvidenceFile,
   } from '$lib/taskModuleStore.svelte.js'
+  import TaskViewSwitch from '$lib/TaskViewSwitch.svelte'
+  import TaskDetail from '../[id]/+page.svelte'
   import { formatDate, formatDateTime } from '$lib/format.js'
   import { portal } from '$lib/portal.js'
   import { listRequirements, reqCode, versionRootId, reqVersionSuffix, requirementStore } from '$lib/requirementStore.svelte.js'
+
+  let { lockedDashboard = '', initialRequirement = '', embedded = false, flow = false, onOpenTask = () => {}, onOpenList = () => {} } = $props()
 
   let dragId = $state(/** @type {number | null} */ (null))
   let overColumn = $state(/** @type {string | null} */ (null))
@@ -59,13 +60,27 @@
   /** Inline comment composer on card */
   let commentOpenId = $state(/** @type {number | null} */ (null))
   let commentDraft = $state('')
-  /** PM: create task + assign */
-  let createTaskOpen = $state(false)
   /** '' = semua requirement di dashboard yang dipilih */
   let requirementId = $state('')
+  /** Task yang dibuka di tab Status approval */
+  let focusTaskId = $state('')
+  let seenDash = ''
 
   const dashboards = $derived(boardDashboardOptions())
-  const selectedDashboard = $derived(resolveBoardDashboard())
+  const selectedDashboard = $derived(lockedDashboard || resolveBoardDashboard())
+
+  $effect(() => {
+    if (lockedDashboard) setBoardDashboard(lockedDashboard)
+  })
+  $effect(() => {
+    if (!embedded) return
+    requirementId = String(initialRequirement || '')
+  })
+  $effect(() => {
+    const dash = selectedDashboard
+    if (seenDash && seenDash !== dash) focusTaskId = ''
+    seenDash = dash
+  })
   const requirements = $derived.by(() => {
     void requirementStore.items
     return listRequirements({ dashboard: selectedDashboard, sort: 'title_asc' })
@@ -77,11 +92,6 @@
   const session = $derived.by(() => {
     void taskModuleStore.session
     return taskModuleStore.session
-  })
-  const canAdd = $derived.by(() => {
-    void taskModuleStore.session
-    void taskModuleStore.boardDashboard
-    return canCreateTask()
   })
   const canDrag = $derived.by(() => {
     void taskModuleStore.session
@@ -112,13 +122,26 @@
   /** @param {{ requirement_id?: string | null }} task */
   function inRequirement(task) {
     if (!requirementId) return true
-    return task.requirement_id === requirementId
+    return String(task.requirement_id) === String(requirementId)
   }
 
   const inboxItems = $derived.by(() => {
     void taskModuleStore.items
     void requirementId
     return listInboxTasks(selectedDashboard).filter(inRequirement)
+  })
+  const approvalTasks = $derived.by(() => {
+    void taskModuleStore.items
+    return taskModuleStore.items
+      .filter((task) => {
+        if (selectedDashboard && task.dashboard !== selectedDashboard) return false
+        return inRequirement(task)
+      })
+      .sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')))
+  })
+  const activeApprovalId = $derived.by(() => {
+    if (focusTaskId && approvalTasks.some((task) => String(task.id) === focusTaskId)) return focusTaskId
+    return approvalTasks[0] ? String(approvalTasks[0].id) : ''
   })
   const myActionCount = $derived.by(() => {
     void taskModuleStore.items
@@ -239,7 +262,7 @@
     } catch (err) {
       moveEvidence = null
       moveFileLabel = ''
-      moveMsg = err instanceof Error ? err.message : 'Gagal membaca file'
+      moveMsg = err instanceof Error ? err.message : 'Could not read the file'
     }
   }
 
@@ -250,7 +273,7 @@
       evidence: moveEvidence,
     })
     if (result === 'requested') {
-      moveMsg = 'Request dikirim ke PM'
+      moveMsg = 'Request sent to the PM'
       setTimeout(() => {
         closeMoveConfirm()
         setBoardTab('inbox')
@@ -261,7 +284,7 @@
       closeMoveConfirm()
       return
     }
-    moveMsg = 'Gagal mengajukan pindah (mungkin sudah ada request)'
+    moveMsg = 'Could not request the move (a request may already exist)'
   }
 
   function onKeydown(e) {
@@ -300,7 +323,7 @@
     } catch (err) {
       reviewFiles = { ...reviewFiles, [id]: null }
       reviewFileLabels = { ...reviewFileLabels, [id]: '' }
-      alert(err instanceof Error ? err.message : 'Gagal membaca file')
+      alert(err instanceof Error ? err.message : 'Could not read the file')
     }
   }
 
@@ -326,7 +349,7 @@
   }
 
   /** @param {number} id @param {string} [fallback] */
-  async function cardRevise(id, fallback = 'Perlu revisi.') {
+  async function cardRevise(id, fallback = 'Needs revision.') {
     const task = getModuleTask(id)
     if (!task) return
     const note = inboxNote(id).trim() || fallback
@@ -341,7 +364,7 @@
   async function cardReject(id) {
     const task = getModuleTask(id)
     if (!task) return
-    const fallback = task.status_move ? 'Request pindah ditolak.' : 'Ditolak.'
+    const fallback = task.status_move ? 'Move request rejected.' : 'Rejected.'
     await cardRevise(id, fallback)
   }
 
@@ -364,10 +387,11 @@
     toggleComment(id)
   }
 
-  /** Judul task tetap jadi jalan ke halaman detail lengkap (approve/reject, riwayat, dll). @param {number} id */
+  /** Judul task membuka halaman journey di tab Status approval. @param {number} id */
   function goToCardDetail(id) {
     rememberDetailId(id)
-    goto(`/tasks/${id}`)
+    focusTaskId = String(id)
+    setBoardTab('inbox')
   }
 
   /** @param {SubmitEvent} e @param {number} id */
@@ -380,184 +404,92 @@
   }
 </script>
 
-<section class="page">
-  <GlassPanel>
+<section class="page" class:embedded class:flow>
+  <GlassPanel class="fill">
+    {#if !flow}
     <SubmenuHeader
       eyebrow="Task"
       title="Board"
-      sub="Kanban per dashboard · pindah status teknis butuh approval PM"
+      sub="Kanban by dashboard · an engineer status move needs PM approval"
       meta={selectedDashboard || '—'}
     >
       {#snippet actions()}
-        <label class="ctrl">
-          <span>Dashboard</span>
-          <select
-            class="ctrl-input"
-            value={selectedDashboard}
-            onchange={(e) => {
-              requirementId = ''
-              setBoardDashboard(/** @type {HTMLSelectElement} */ (e.currentTarget).value)
-            }}
-          >
-            {#each dashboards as name}
-              <option value={name}>{name}</option>
-            {/each}
-          </select>
-        </label>
+        {#if !lockedDashboard}
+          <label class="ctrl">
+            <span>Dashboard</span>
+            <select
+              class="ctrl-input"
+              value={selectedDashboard}
+              onchange={(e) => {
+                requirementId = ''
+                setBoardDashboard(/** @type {HTMLSelectElement} */ (e.currentTarget).value)
+              }}
+            >
+              {#each dashboards as name}
+                <option value={name}>{name}</option>
+              {/each}
+            </select>
+          </label>
+        {/if}
         <label class="ctrl">
           <span>Requirement</span>
           <select class="ctrl-input req-filter" bind:value={requirementId}>
-            <option value="">Semua requirement</option>
+            <option value="">All requirements</option>
             {#each requirements as req (req.id)}
               <option value={String(req.id)}>{reqCode(versionRootId(req))}{reqVersionSuffix(req)} · {req.title}</option>
             {/each}
           </select>
         </label>
-        {#if canAdd}
-          <button type="button" class="btn-primary" onclick={() => (createTaskOpen = true)}>
-            + Tambah Task
-          </button>
-        {/if}
       {/snippet}
     </SubmenuHeader>
+    {/if}
 
-    <div class="tabs" role="tablist" aria-label="Board views">
-      <button
-        type="button"
-        role="tab"
-        class="tab"
-        class:on={boardTab === 'kanban'}
-        aria-selected={boardTab === 'kanban'}
-        onclick={() => setBoardTab('kanban')}
-      >
-        Kanban
-      </button>
-      <button
-        type="button"
-        role="tab"
-        class="tab"
-        class:on={boardTab === 'inbox'}
-        aria-selected={boardTab === 'inbox'}
-        onclick={() => setBoardTab('inbox')}
-      >
-        Status approval
-        {#if myActionCount > 0}
-          <span class="tab-alert">{myActionCount}</span>
-        {:else if inboxItems.length > 0}
-          <span class="tab-count">{inboxItems.length}</span>
-        {/if}
-      </button>
+    <div class="board-tools">
+    <TaskViewSwitch active={boardTab === 'inbox' ? 'inbox' : 'kanban'} alertCount={myActionCount} inboxCount={inboxItems.length} {embedded} onList={onOpenList}>
+      {#if !flow}
       <p class="tab-hint">
         {#if role === 'viewer' || role === 'manager'}
           Mode view saja
         {:else if asPmHere}
-          Anda PM {selectedDashboard} · drag langsung · review request teknis
+          You are the PM of {selectedDashboard} · drag freely · review engineer requests
         {:else if role === 'pm'}
-          PM {pmOfDashboard(selectedDashboard) || '—'} · Anda PM dashboard lain
+          PM {pmOfDashboard(selectedDashboard) || '—'} · you are the PM of another dashboard
         {:else}
-          Teknis · drag = ajukan pindah status (butuh approval PM)
+          Engineer · drag = request a status move (needs PM approval)
         {/if}
       </p>
+      {/if}
+    </TaskViewSwitch>
     </div>
-  </GlassPanel>
 
   {#if boardTab === 'inbox'}
-    <div class="inbox-rail">
-      {#if inboxItems.length === 0}
-        <p class="inbox-empty">Tidak ada request pindah status untuk {selectedDashboard}.</p>
-      {:else}
-        <div class="inbox-list">
-          {#each inboxItems as task (task.id)}
-            {@const canActMove = (isCurrentUserPmOf(task.dashboard) || isTaskOwner(task)) && Boolean(task.status_move)}
-            {@const canActLegacy =
-              task.requirement_owner === session.name &&
-              !task.status_move &&
-              task.approval_state === 'pending'}
-            {@const canResubmit =
-              task.approval_state === 'revision' &&
-              (task.created_by === session.name || task.requirement_owner === session.name)}
-            {@const canAct = canActMove || canActLegacy}
-            {@const badgeState = task.status_move
-              ? 'pending'
-              : task.approval_state === 'revision'
-                ? 'revision'
-                : task.approval_state === 'approved'
-                  ? 'approved'
-                  : 'pending'}
-            {@const badgeText = task.status_move
-              ? `Pindah ${workflowLabel(task.status_move.from)} → ${workflowLabel(task.status_move.to)}`
-              : approvalLabel(task.approval_state)}
-            {@const actor = task.status_move?.requested_by || task.created_by}
-            {@const when = formatDateTime(task.status_move?.at || task.updated_at || task.created_at)}
-            {@const existingNote = task.status_move?.note || task.approval_note || ''}
-            <article class="inbox-card" class:rev={badgeState === 'revision'}>
-              <div class="inbox-card-top">
-                <h3 class="inbox-card-title">
-                  {task.status_move ? 'Status approval' : 'Task approval'}
-                </h3>
-                <span class={`appr a-${badgeState}`}>
-                  <i class="appr-dot" aria-hidden="true"></i>
-                  {badgeText}
-                </span>
-              </div>
-
-              <p class="inbox-task-name">{task.title}</p>
-
-              <p class="inbox-reviewer">
-                {badgeState === 'approved' ? 'Reviewer' : 'Diajukan'}:
-                <strong>{actor}</strong>
-                <span aria-hidden="true">·</span>
-                {when}
-              </p>
-
-              <label class="inbox-masukan">
-                <span>Masukan</span>
-                {#if canAct}
-                  <textarea
-                    rows="3"
-                    placeholder="Tulis catatan review…"
-                    value={Object.hasOwn(reviewNotes, task.id) ? reviewNotes[task.id] : existingNote}
-                    oninput={(e) => setInboxNote(task.id, /** @type {HTMLTextAreaElement} */ (e.currentTarget).value)}
-                  ></textarea>
-                {:else}
-                  <textarea
-                    rows="3"
-                    readonly
-                    value={existingNote || (badgeState === 'revision' ? 'Menunggu perbaikan dari teknis.' : 'Belum ada masukan.')}
-                  ></textarea>
-                {/if}
-              </label>
-
-              {#if canAct}
-                <label class="inbox-file">
-                  <span>Lampiran bukti (opsional, max 900 KB)</span>
-                  <input type="file" onchange={(e) => onReviewFile(task.id, e)} />
-                  {#if reviewFileLabels[task.id]}
-                    <em>{reviewFileLabels[task.id]}</em>
-                  {/if}
-                </label>
-              {/if}
-
-              <div class="inbox-acts">
-                {#if canAct}
-                  <button type="button" class="act approve" onclick={() => cardApprove(task.id)}>Setujui</button>
-                  <button type="button" class="act reject" onclick={() => cardReject(task.id)}>Tolak</button>
-                {:else if canResubmit && role !== 'viewer'}
-                  <button type="button" class="act approve" onclick={() => resubmitModuleTask(task.id)}>
-                    Ajukan ulang
-                  </button>
-                {/if}
-              </div>
-            </article>
-          {/each}
-        </div>
-      {/if}
-    </div>
+    {#if activeApprovalId}
+      <div class="approval-embed">
+        {#if approvalTasks.length > 1}
+          <div class="approval-picks" role="tablist" aria-label="Task">
+            {#each approvalTasks as task (task.id)}
+              <button
+                type="button"
+                class="approval-pick"
+                class:on={String(task.id) === activeApprovalId}
+                onclick={() => (focusTaskId = String(task.id))}
+              >
+                {task.title}
+              </button>
+            {/each}
+          </div>
+        {/if}
+        <TaskDetail taskId={activeApprovalId} embedded inApproval />
+      </div>
+    {:else}
+      <p class="inbox-empty">No tasks on this requirement yet.</p>
+    {/if}
   {:else}
     <div class="board-rail">
       <div class="board">
         {#each workflowColumns as col}
           {@const cards = tasksByColumn(col.key, selectedDashboard).filter(inRequirement)}
+          <div class="column-shell">
           <div
             class="column tone-{columnTone[col.key] || 'sand'}"
             class:drop={overColumn === col.key}
@@ -575,7 +507,7 @@
                 <span class="status-mark" aria-hidden="true"></span>
                 <div>
                   <h3>{col.label}</h3>
-                  <p>Drag antar kolom</p>
+                  <p>Drag between columns</p>
                 </div>
               </div>
               <span class="count">{cards.length}</span>
@@ -630,7 +562,7 @@
                           {/each}
                         </ul>
                         {#if comments.length > 2}
-                          <p class="c-more">+{comments.length - 2} komentar lain</p>
+                          <p class="c-more">+{comments.length - 2} more comments</p>
                         {/if}
                       {:else if comment}
                         <p class="card-comment">{comment.body}</p>
@@ -646,11 +578,11 @@
                             <textarea
                               rows="2"
                               bind:value={commentDraft}
-                              placeholder="Tulis komentar…"
+                              placeholder="Write a comment…"
                               onkeydown={(e) => e.stopPropagation()}
                             ></textarea>
                             <div class="c-acts">
-                              <button type="button" class="c-ghost" onclick={() => toggleComment(task.id)}>Batal</button>
+                              <button type="button" class="c-ghost" onclick={() => toggleComment(task.id)}>Cancel</button>
                               <button type="submit" class="c-send">Kirim</button>
                             </div>
                           </form>
@@ -668,20 +600,22 @@
                           </button>
                         {/if}
                       {:else if comments.length > 0}
-                        <span class="c-count-only">{comments.length} komentar</span>
+                        <span class="c-count-only">{comments.length} comments</span>
                       {/if}
                     </div>
                   </div>
                 </article>
               {:else}
-                <p class="empty">Belum ada task</p>
+                <p class="empty">No tasks yet</p>
               {/each}
             </div>
+          </div>
           </div>
         {/each}
       </div>
     </div>
   {/if}
+  </GlassPanel>
 </section>
 
 {#if moveTask && moveConfirmTo}
@@ -701,20 +635,20 @@
       <div class="modal-body">
         <div class="modal-head">
           <div>
-            <h2 id="move-req-title">Ajukan pindah status</h2>
+            <h2 id="move-req-title">Request a status move</h2>
             <p>
               {workflowLabel(moveTask.status)} → <strong>{workflowLabel(moveConfirmTo)}</strong>
               · menunggu PM ({pmOfDashboard(moveTask.dashboard) || '—'})
             </p>
           </div>
-          <button type="button" class="close" aria-label="Tutup" onclick={closeMoveConfirm}>×</button>
+          <button type="button" class="close" aria-label="Close" onclick={closeMoveConfirm}>×</button>
         </div>
         <div class="review-summary">
           <strong>{moveTask.title}</strong>
         </div>
         <label>
           <span>Catatan (opsional)</span>
-          <textarea rows="2" bind:value={moveNote} placeholder="Alasan pindah kolom…"></textarea>
+          <textarea rows="2" bind:value={moveNote} placeholder="Reason for the move…"></textarea>
         </label>
         <label class="file-field">
           <span>Bukti pengerjaan (opsional, max 900 KB)</span>
@@ -723,19 +657,13 @@
         </label>
         {#if moveMsg}<p class="error">{moveMsg}</p>{/if}
         <div class="actions">
-          <button type="button" class="ghost" onclick={closeMoveConfirm}>Batal</button>
+          <button type="button" class="ghost" onclick={closeMoveConfirm}>Cancel</button>
           <button type="button" class="primary" onclick={submitMoveRequest}>Kirim ke PM</button>
         </div>
       </div>
     </div>
   </div>
 {/if}
-
-<PmCreateTaskModal
-  open={createTaskOpen}
-  dashboard={selectedDashboard}
-  onClose={() => (createTaskOpen = false)}
-/>
 
 <style>
   :global(.submenu-head .actions select.req-filter) {
@@ -744,11 +672,108 @@
 
   .page {
     min-height: 0;
-    flex: 1;
+    height: 100%;
+    flex: 1 1 auto;
     display: flex;
     flex-direction: column;
     gap: 12px;
     overflow: hidden;
+  }
+
+  .page.embedded {
+    height: 68vh;
+  }
+
+  .page.embedded.flow {
+    height: auto !important;
+    max-height: none !important;
+    flex: none !important;
+    overflow: visible !important;
+    gap: 8px;
+  }
+
+  .page.embedded.flow :global(.panel-glow.fill),
+  .page.embedded.flow :global(.panel-glow.fill .panel) {
+    flex: none !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0;
+    overflow: visible !important;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .page.embedded.flow .board-tools {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.65rem;
+    min-height: 32px;
+  }
+
+  .page.embedded.flow .board-tools :global(.tabs) {
+    flex: 0 0 auto;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    gap: 6px;
+  }
+
+  .page.embedded.flow .board-rail,
+  .page.embedded.flow .board,
+  .page.embedded.flow .column-shell,
+  .page.embedded.flow .column,
+  .page.embedded.flow .cards,
+  .page.embedded.flow .approval-embed,
+  .page.embedded.flow .inbox-rail {
+    flex: none !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0;
+    overflow: visible !important;
+  }
+
+  .page.embedded.flow .board-rail {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    flex: 0 0 auto !important;
+  }
+
+  .page.embedded.flow .board {
+    display: grid !important;
+    grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    flex: 0 0 auto !important;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .page.embedded.flow .column-shell {
+    width: auto;
+    min-width: 0;
+  }
+
+  .page.embedded.flow .column,
+  .page.embedded.flow .cards,
+  .page.embedded.flow .card,
+  .page.embedded.flow .empty {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .page.embedded.flow .column-shell,
+  .page.embedded.flow .column {
+    height: auto !important;
+  }
+
+  .page.embedded.flow .column {
+    flex: 1 1 auto !important;
   }
 
   .tabs {
@@ -872,10 +897,51 @@
 
   .inbox-task-name {
     margin: -4px 0 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    font: inherit;
     font-size: 0.66rem;
     font-weight: 600;
-    color: #5a7088;
+    color: #065fc6;
     line-height: 1.35;
+    cursor: pointer;
+  }
+
+  .approval-embed {
+    flex: 1;
+    min-height: 0;
+    margin-top: 8px;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .approval-picks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .approval-pick {
+    height: auto;
+    min-height: 0;
+    padding: 5px 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    background: #fff;
+    color: #4a6080;
+    font-size: 0.65rem;
+    font-weight: 650;
+    cursor: pointer;
+  }
+
+  .approval-pick.on {
+    background: #0f1b2e;
+    border-color: #0f1b2e;
+    color: #fff;
   }
 
   .inbox-reviewer {
@@ -1051,8 +1117,9 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    padding: 14px;
-    border-radius: 28px;
+    margin-top: 8px;
+    padding: 12px;
+    border-radius: 20px;
     overflow: hidden;
     background:
       radial-gradient(90% 120% at 100% 0%, rgba(51, 158, 245, 0.45), transparent 55%),
@@ -1069,17 +1136,33 @@
     min-height: 0;
     display: grid;
     grid-template-columns: repeat(6, minmax(210px, 1fr));
-    align-items: start;
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
     gap: 12px;
-    overflow: auto;
+    overflow-x: auto;
+    overflow-y: hidden;
     padding: 2px;
   }
 
-  .column {
+  .column-shell {
     min-width: 0;
-    min-height: 300px;
+    min-height: 0;
     display: flex;
     flex-direction: column;
+    padding: 5px;
+    border-radius: 24px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(255, 255, 255, 0.74) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.95);
+    box-shadow: 0 4px 12px rgba(4, 42, 92, 0.12);
+  }
+
+  .column {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     gap: 12px;
     border-radius: 20px;
     padding: 14px 12px;
@@ -1171,12 +1254,18 @@
     gap: 10px;
     align-content: start;
     flex: 1;
+    min-height: 0;
+    overflow-y: auto;
   }
 
   .cards.is-empty {
     display: flex;
-    align-items: center;
-    justify-content: center;
+    align-items: flex-start;
+    justify-content: stretch;
+  }
+
+  .cards.is-empty .empty {
+    width: 100%;
   }
 
   .card {

@@ -88,7 +88,7 @@ export async function addAttachments(ownerType, ownerId, files) {
       continue
     }
     if (!file.size) {
-      rejected.push({ name: file.name, reason: 'file kosong' })
+      rejected.push({ name: file.name, reason: 'empty file' })
       continue
     }
     try {
@@ -99,7 +99,7 @@ export async function addAttachments(ownerType, ownerId, files) {
       const meta = await api.postForm('/api/attachments', form)
       added.push(meta)
     } catch (e) {
-      rejected.push({ name: file.name, reason: e instanceof Error ? e.message : 'gagal diunggah' })
+      rejected.push({ name: file.name, reason: e instanceof Error ? e.message : 'upload failed' })
     }
   }
 

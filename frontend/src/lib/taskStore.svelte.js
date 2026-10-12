@@ -96,7 +96,7 @@ export function delayLabel(deadlineISO, ref = new Date()) {
   const today = startOfDay(ref).getTime()
   const due = new Date(`${deadlineISO}T00:00:00`).getTime()
   const days = Math.round((today - due) / 86_400_000)
-  if (days <= 0) return days === 0 ? 'hari ini' : ''
+  if (days <= 0) return days === 0 ? 'today' : ''
   if (days === 1) return '1 hari'
   return `${days} hari`
 }
@@ -113,7 +113,7 @@ export function relativeWhen(isoDatetime, ref = new Date()) {
   const days = Math.floor(hours / 24)
   if (days === 1) return 'Kemarin'
   if (days < 7) return `${days} hari lalu`
-  return new Date(isoDatetime).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
+  return new Date(isoDatetime).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })
 }
 
 /** @returns {FeTask[]} */
@@ -509,7 +509,7 @@ export function dayBucket(ref = new Date()) {
   return [
     {
       key: toISODate(day),
-      label: 'Hari ini',
+      label: 'Today',
       weekNo: 1,
       start: day,
       end: day,
@@ -519,7 +519,7 @@ export function dayBucket(ref = new Date()) {
 
 /** @param {number} year @param {number} monthIndex */
 export function monthLabel(year, monthIndex) {
-  return new Date(year, monthIndex, 1).toLocaleDateString('id-ID', {
+  return new Date(year, monthIndex, 1).toLocaleDateString('en-US', {
     month: 'long',
     year: 'numeric',
   })

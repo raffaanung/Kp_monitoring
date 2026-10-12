@@ -1,9 +1,9 @@
-﻿<script>
+<script>
   import { goto } from '$app/navigation'
 
   // Legacy route: submenu Requirement Detail dihapus â€” arahkan ke daftar.
   $effect(() => {
-    goto('/requirements/list')
+    goto('/registry/list')
   })
 </script>
 

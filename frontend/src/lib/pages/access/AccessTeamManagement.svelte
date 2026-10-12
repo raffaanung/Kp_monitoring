@@ -60,11 +60,11 @@
     event.preventDefault()
     error = ''
     if (!name.trim()) {
-      error = 'Nama tim wajib diisi'
+      error = 'Team name is required'
       return
     }
     if (!leadId) {
-      error = 'Team lead wajib dipilih'
+      error = 'Team lead is required'
       return
     }
     createTeam({
@@ -98,11 +98,11 @@
     <SubmenuHeader
       eyebrow="User Access"
       title="Team Management"
-      sub="Daftar tim operasional dan akses dashboard"
+      sub="Operational teams and dashboard access"
       meta={`${items.length} tim`}
     >
       {#snippet actions()}
-        <button type="button" class="btn-primary" onclick={openAdd}>+ Tambah Tim</button>
+        <button type="button" class="btn-primary" onclick={openAdd}>+ Add Team</button>
       {/snippet}
     </SubmenuHeader>
 
@@ -110,7 +110,7 @@
       <label>
         <span>Unit</span>
         <select bind:value={unit}>
-          <option value="">Semua</option>
+          <option value="">All</option>
           {#each unitOptions as name}
             <option value={name}>{name}</option>
           {/each}
@@ -118,13 +118,13 @@
       </label>
 
       <label class="grow">
-        <span>Cari</span>
+        <span>Search</span>
         <div class="search">
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.7" />
             <path d="m16.5 16.5 3.2 3.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
           </svg>
-          <input type="search" placeholder="Nama tim, unit, dashboardâ€¦" bind:value={q} />
+          <input type="search" placeholder="Team name, unit, dashboard…" bind:value={q} />
         </div>
       </label>
 
@@ -134,7 +134,7 @@
 
   <GlassPanel class="fill table-panel">
     {#if items.length === 0}
-      <p class="state">Tidak ada tim yang cocok.</p>
+      <p class="state">No matching teams.</p>
     {:else}
       <div class="table-wrap">
         <table>
@@ -144,7 +144,7 @@
               <th>Tim</th>
               <th>Unit</th>
               <th>Lead</th>
-              <th>Anggota</th>
+              <th>Members</th>
               <th>Dashboard</th>
               <th></th>
             </tr>
@@ -206,14 +206,14 @@
       <form class="modal-body" onsubmit={onAddSubmit}>
         <div class="modal-head">
           <div>
-            <h2 id="add-team-title">Tambah Tim</h2>
-            <p>Buat tim baru dan tentukan lead serta dashboard</p>
+            <h2 id="add-team-title">Add Team</h2>
+            <p>Create a team and set its lead and dashboards</p>
           </div>
-          <button type="button" class="close" aria-label="Tutup" onclick={closeAdd}>Ã—</button>
+          <button type="button" class="close" aria-label="Close" onclick={closeAdd}>Ã—</button>
         </div>
 
         <label>
-          <span>Nama tim</span>
+          <span>Team name</span>
           <input bind:value={name} placeholder="Contoh: GBO Analytics" />
         </label>
 
@@ -237,12 +237,12 @@
         </div>
 
         <label>
-          <span>Deskripsi</span>
-          <textarea rows="2" bind:value={description} placeholder="Opsional"></textarea>
+          <span>Description</span>
+          <textarea rows="2" bind:value={description} placeholder="Optional"></textarea>
         </label>
 
         <fieldset class="pick-block">
-          <legend>Anggota</legend>
+          <legend>Members</legend>
           <div class="pick-grid">
             {#each users as opt}
               <label class="check">
@@ -276,8 +276,8 @@
         {#if error}<p class="error">{error}</p>{/if}
 
         <div class="actions">
-          <button type="button" class="ghost" onclick={closeAdd}>Batal</button>
-          <button type="submit" class="primary">Simpan tim</button>
+          <button type="button" class="ghost" onclick={closeAdd}>Cancel</button>
+          <button type="submit" class="primary">Save team</button>
         </div>
       </form>
     </div>

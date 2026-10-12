@@ -62,15 +62,15 @@
     event.preventDefault()
     error = ''
     if (!name.trim()) {
-      error = 'Nama wajib diisi'
+      error = 'Name is required'
       return
     }
     if (!/^\d{8}$/.test(username.trim())) {
-      error = 'Username harus 8 digit angka'
+      error = 'Username must be 8 digits'
       return
     }
     if (password.length < 6) {
-      error = 'Password minimal 6 karakter'
+      error = 'Password must be at least 6 characters'
       return
     }
     try {
@@ -112,11 +112,11 @@
     event.preventDefault()
     editError = ''
     if (!editName.trim()) {
-      editError = 'Nama wajib diisi'
+      editError = 'Name is required'
       return
     }
     if (!/^\d{8}$/.test(editUsername.trim())) {
-      editError = 'Username harus 8 digit angka'
+      editError = 'Username must be 8 digits'
       return
     }
     const res = await updateUser(editId, {
@@ -157,11 +157,11 @@
     <SubmenuHeader
       eyebrow="User Access"
       title="User List"
-      sub="Kelola akun pengguna, peran, unit, dan tim"
+      sub="Manage user accounts, roles, units, and teams"
       meta={`${items.length} user`}
     >
       {#snippet actions()}
-        <button type="button" class="btn-primary" onclick={openAdd}>+ Tambah User</button>
+        <button type="button" class="btn-primary" onclick={openAdd}>+ Add User</button>
       {/snippet}
     </SubmenuHeader>
 
@@ -169,7 +169,7 @@
       <label>
         <span>Peran</span>
         <select bind:value={role}>
-          <option value="">Semua</option>
+          <option value="">All</option>
           {#each roles as opt}
             <option value={opt.value}>{opt.label}</option>
           {/each}
@@ -179,20 +179,20 @@
       <label>
         <span>Status</span>
         <select bind:value={status}>
-          <option value="">Semua</option>
+          <option value="">All</option>
           <option value="active">Aktif</option>
           <option value="inactive">Nonaktif</option>
         </select>
       </label>
 
       <label class="grow">
-        <span>Cari</span>
+        <span>Search</span>
         <div class="search">
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.7" />
             <path d="m16.5 16.5 3.2 3.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
           </svg>
-          <input type="search" placeholder="Nama, username, unit, tim…" bind:value={q} />
+          <input type="search" placeholder="Name, username, unit, team…" bind:value={q} />
         </div>
       </label>
 
@@ -202,7 +202,7 @@
 
   <GlassPanel class="fill table-panel">
     {#if items.length === 0}
-      <p class="state">Tidak ada user yang cocok.</p>
+      <p class="state">No matching users.</p>
     {:else}
       <div class="table-wrap">
         <table>
@@ -274,14 +274,14 @@
       <form class="modal-body" onsubmit={onAddSubmit}>
         <div class="modal-head">
           <div>
-            <h2 id="add-user-title">Tambah User</h2>
-            <p>Buat akun pengguna baru dengan peran dan password</p>
+            <h2 id="add-user-title">Add User</h2>
+            <p>Create a user account with a role and password</p>
           </div>
-          <button type="button" class="close" aria-label="Tutup" onclick={closeAdd}>×</button>
+          <button type="button" class="close" aria-label="Close" onclick={closeAdd}>×</button>
         </div>
 
         <label>
-          <span>Nama lengkap</span>
+          <span>Full name</span>
           <input bind:value={name} placeholder="Contoh: Alamsyah Putra" />
         </label>
 
@@ -308,8 +308,8 @@
         {#if error}<p class="error">{error}</p>{/if}
 
         <div class="actions">
-          <button type="button" class="ghost" onclick={closeAdd}>Batal</button>
-          <button type="submit" class="primary">Simpan user</button>
+          <button type="button" class="ghost" onclick={closeAdd}>Cancel</button>
+          <button type="submit" class="primary">Save user</button>
         </div>
       </form>
     </div>
@@ -335,13 +335,13 @@
         <div class="modal-head">
           <div>
             <h2 id="edit-user-title">Edit User</h2>
-            <p>Ubah peran, unit, dan tim {editName}</p>
+            <p>Edit role, unit, and team for {editName}</p>
           </div>
-          <button type="button" class="close" aria-label="Tutup" onclick={closeEdit}>×</button>
+          <button type="button" class="close" aria-label="Close" onclick={closeEdit}>×</button>
         </div>
 
         <label>
-          <span>Nama lengkap</span>
+          <span>Full name</span>
           <input bind:value={editName} placeholder="Contoh: Alamsyah Putra" />
         </label>
 
@@ -397,8 +397,8 @@
         {#if editError}<p class="error">{editError}</p>{/if}
 
         <div class="actions">
-          <button type="button" class="ghost" onclick={closeEdit}>Batal</button>
-          <button type="submit" class="primary">Simpan perubahan</button>
+          <button type="button" class="ghost" onclick={closeEdit}>Cancel</button>
+          <button type="submit" class="primary">Save changes</button>
         </div>
       </form>
     </div>
@@ -427,69 +427,87 @@
 
   label {
     display: grid;
-    gap: 6px;
-    min-width: 120px;
+    gap: 4px;
+    min-width: 148px;
+    align-content: end;
   }
 
   label.grow {
     flex: 1;
-    min-width: 180px;
+    min-width: 200px;
   }
 
   label span {
-    font-size: 0.56rem;
+    font-size: 0.52rem;
     font-weight: 650;
-    color: #6b6b6b;
+    color: #8a8a90;
+    line-height: 1;
   }
 
-  select,
-  input,
-  .apply {
-    height: 2.45rem;
+  .filters select,
+  .filters .search,
+  .filters .apply {
+    height: 34px;
+    box-sizing: border-box;
     border: 1px solid rgba(0, 0, 0, 0.08);
-    border-radius: 14px;
-    padding: 0 0.85rem;
-    background: rgba(255, 255, 255, 0.78);
+    border-radius: 999px;
+    background-color: rgba(255, 255, 255, 0.9);
     font: inherit;
-    font-size: 0.68rem;
+    font-size: 0.65rem;
+    font-weight: 600;
     color: #1a1a1a;
   }
 
-  .search {
+  .filters select {
+    appearance: none;
+    -webkit-appearance: none;
+    text-align: left;
+    width: 100%;
+    min-width: 148px;
+    padding: 0 1.7rem 0 0.85rem;
+    line-height: 32px;
+    cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b6b6b' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.7rem center;
+    background-size: 12px 12px;
+  }
+
+  .filters .search {
     display: flex;
     align-items: center;
     gap: 8px;
-    height: 2.45rem;
     padding: 0 0.85rem;
-    border-radius: 14px;
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    background: rgba(255, 255, 255, 0.78);
   }
 
-  .search svg {
-    width: 15px;
-    height: 15px;
+  .filters .search svg {
+    width: 14px;
+    height: 14px;
     color: #7a7a80;
     flex-shrink: 0;
   }
 
-  .search input {
+  .filters .search input {
     border: 0;
     background: transparent;
     padding: 0;
     height: auto;
     width: 100%;
     outline: none;
+    font: inherit;
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: #1a1a1a;
   }
 
-  .apply {
+  .filters .apply {
     background: #1a1a1a;
     color: #fff;
     border-color: transparent;
     font-weight: 700;
     cursor: pointer;
-    padding: 0 1.1rem;
-    border-radius: 999px;
+    padding: 0 1rem;
+    align-self: end;
   }
 
   :global(.table-panel) {

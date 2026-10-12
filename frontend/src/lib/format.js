@@ -2,7 +2,7 @@ export function formatDate(value) {
   if (!value) return '—'
   const d = new Date(value)
   if (Number.isNaN(d.getTime())) return value
-  return d.toLocaleDateString('id-ID', {
+  return d.toLocaleDateString('en-US', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
@@ -15,7 +15,7 @@ export function formatDateTime(value) {
   const raw = String(value).trim()
   const d = new Date(raw.includes('T') ? raw : raw.replace(' ', 'T'))
   if (Number.isNaN(d.getTime())) return raw
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
   const day = d.getDate()
   const mon = months[d.getMonth()]
   const hh = String(d.getHours()).padStart(2, '0')

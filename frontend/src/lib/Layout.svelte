@@ -45,79 +45,53 @@
 
   const path = $derived(page.url.pathname || '/')
   const isLoginPage = $derived(path === '/login')
-  const onTasks = $derived(path.startsWith('/tasks'))
-  const onRequirements = $derived(path.startsWith('/requirements'))
   const onRegistry = $derived(path.startsWith('/registry'))
-  const onAccess = $derived(path.startsWith('/access'))
-  
-  let workboardOpen = $state(false);
-  let settingsOpen = $state(false);
-
-  $effect(() => {
-    if (onTasks || onRequirements) workboardOpen = true;
-    if (onAccess) settingsOpen = true;
-  });
+  const onAccess = $derived(path.startsWith('/access') || path.startsWith('/settings/profile'))
 
   /** Same labels as sidebar nav — driven by current route */
   const section = $derived.by(() => {
     if (path.startsWith('/tasks/board') || path === '/tasks' || path === '/tasks/new' || path === '/tasks/detail') {
-      return { title: 'Workboard', sub: 'Kanban Board' }
+      return { title: 'Task', sub: 'Board' }
     }
     if (path.startsWith('/tasks/list')) {
-      return { title: 'Workboard', sub: 'List' }
+      return { title: 'Task', sub: 'List Task' }
     }
     if (path.startsWith('/tasks')) {
-      return { title: 'Workboard', sub: 'Detail' }
+      return { title: 'Task', sub: 'Detail' }
     }
     if (path.startsWith('/requirements')) {
-      return { title: 'Workboard', sub: 'Requirements & Backlog' }
+      return { title: 'Requirements', sub: 'Detail Requirement' }
     }
     if (path.startsWith('/registry')) {
-      return { title: 'Katalog Aplikasi', sub: 'Daftar Portofolio Aplikasi' }
+      return { title: 'Workspaces', sub: 'Dashboard List' }
     }
     if (/^\/activity-log\/log-/.test(path)) {
-      return { title: 'Activity Log', sub: 'Detail perubahan' }
+      return { title: 'Activity Log', sub: 'Change detail' }
     }
     if (path.startsWith('/activity-log')) {
-      return { title: 'Activity Log', sub: 'Riwayat aktivitas sistem' }
+      return { title: 'Activity Log', sub: 'System activity history' }
     }
     if (path === '/access/users' || path === '/access') {
-      return { title: 'Settings & Access', sub: 'User List' }
+      return { title: 'User Access', sub: 'User List' }
     }
     if (path.startsWith('/access/roles')) {
-      return { title: 'Settings & Access', sub: 'Role Management' }
+      return { title: 'User Access', sub: 'Role Management' }
     }
-    if (path === '/access/profile') {
-      return { title: 'Settings & Access', sub: 'Profile' }
+    if (path === '/access/profile' || path.startsWith('/settings/profile')) {
+      return { title: 'User Access', sub: 'Profile' }
     }
     if (path.startsWith('/access')) {
-      return { title: 'Settings & Access', sub: 'Manajemen akses pengguna' }
+      return { title: 'User Access', sub: 'User access management' }
     }
-    return { title: 'Dashboard', sub: 'Overview operasional proyek' }
+    return { title: 'Operation Monitoring', sub: 'Ringkasan operasional harian' }
   })
 
   const isHome = $derived(path === '/')
 
-  function isTaskSub(sub) {
-    if (sub === 'board') return path === '/tasks/board' || path === '/tasks'
-    if (sub === 'list') return path === '/tasks/list'
-    return false
-  }
-
-  function isRequirementSub(sub) {
-    if (sub === 'list') return path.startsWith('/requirements')
-    return false
-  }
-
-  function isRegistrySub(sub) {
-    if (sub === 'list') return path.startsWith('/registry')
-    return false
-  }
-
   function isAccessSub(sub) {
     if (sub === 'users') return path === '/access' || path === '/access/users'
     if (sub === 'roles') return path === '/access/roles'
-    if (sub === 'profile') return path === '/access/profile'
+    if (sub === 'profile') return path === '/access/profile' || path.startsWith('/settings/profile')
     return false
   }
 
@@ -128,14 +102,14 @@
 {:else}
 <div class="shell" class:expanded={railExpanded}>
   <div class="rail-wrap">
-    <aside class="rail" aria-label="Navigasi utama" aria-expanded={railExpanded}>
+    <aside class="rail" aria-label="Main navigation" aria-expanded={railExpanded}>
       <div class="rail-inner">
         <div class="rail-top">
           <button
             type="button"
             class="circle rail-toggle"
-            aria-label={railExpanded ? 'Sembunyikan navigasi' : 'Tampilkan navigasi'}
-            title={railExpanded ? 'Sembunyikan' : 'Tampilkan'}
+            aria-label={railExpanded ? 'Hide navigation' : 'Show navigation'}
+            title={railExpanded ? 'Hide' : 'Show'}
             onclick={() => setRailExpanded(!railExpanded)}
           >
             <span class="toggle-icon collapse" aria-hidden="true">
@@ -153,7 +127,7 @@
         </div>
 
         <nav>
-          <a href="/" class="nav-item" class:active={isHome} aria-label="Dashboard" title="Dashboard">
+          <a href="/" class="nav-item" class:active={isHome} aria-label="Operation Monitoring" title="Operation Monitoring">
             <span class="circle" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none">
                 <rect x="3.5" y="4.5" width="17" height="13" rx="2.2" stroke="currentColor" stroke-width="1.7" />
@@ -161,19 +135,18 @@
                 <path d="M8 19.5h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
               </svg>
             </span>
-            <span class="nav-label">Dashboard</span>
+            <span class="nav-label">Operation Monitoring</span>
           </a>
 
           <a
             href="/registry/list"
-            
             class="nav-item"
             class:active={onRegistry}
-            aria-label="Katalog Aplikasi"
-            title="Katalog Aplikasi"
+            aria-label="Workspaces"
+            title="Workspaces"
             onclick={() => {
               if (window.location.hash.includes('/registry/list')) {
-                window.dispatchEvent(new CustomEvent('reset-registry'));
+                window.dispatchEvent(new CustomEvent('reset-registry'))
               }
             }}
           >
@@ -182,48 +155,11 @@
                 <path d="M13 4.5 8.2 13h3.1L11 19.5 15.8 11h-3.1L13 4.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" />
               </svg>
             </span>
-            <span class="nav-label">Katalog Aplikasi</span>
+            <span class="nav-label">Workspaces</span>
           </a>
 
-          <!-- Workboard Group -->
-          <div class="nav-group" class:open={workboardOpen}>
-            <button
-              type="button"
-              class="nav-item"
-              class:active={onTasks || onRequirements}
-              aria-label="Workboard"
-              title="Workboard"
-              onclick={() => { workboardOpen = !workboardOpen; }}
-            >
-              <span class="circle" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none">
-                  <path d="M7 6.5h10M7 12h10M7 17.5h6.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
-                  <path d="M4.5 6.5h.01M4.5 12h.01M4.5 17.5h.01" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" />
-                </svg>
-              </span>
-              <span class="nav-label">Workboard</span>
-              <span class="nav-chevron" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none">
-                  <path d="m9 6 6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-              </span>
-            </button>
-            <div class="subnav" class:visible={workboardOpen}>
-              <a href="/requirements/list" class="sub-item" class:on={onRequirements}>Backlog & Requirements</a>
-              <a href="/tasks/board" class="sub-item" class:on={onTasks}>Kanban Board</a>
-            </div>
-          </div>
-
-          <!-- Settings & Access Group -->
-          <div class="nav-group" class:open={settingsOpen}>
-            <button
-              type="button"
-              class="nav-item"
-              class:active={onAccess}
-              aria-label="Settings & Access"
-              title="Settings & Access"
-              onclick={() => { settingsOpen = !settingsOpen; }}
-            >
+          <div class="nav-group" class:open={onAccess}>
+            <a href="/access/users" class="nav-item" class:active={onAccess} aria-label="User Access" title="User Access">
               <span class="circle" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none">
                   <circle cx="12" cy="8.5" r="3.2" stroke="currentColor" stroke-width="1.7" />
@@ -231,17 +167,20 @@
                   <path d="M16.5 7.5h3.5M18.25 5.75v3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
                 </svg>
               </span>
-              <span class="nav-label">Settings & Access</span>
+              <span class="nav-label">User Access</span>
               <span class="nav-chevron" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none">
                   <path d="m9 6 6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
               </span>
-            </button>
-            <div class="subnav" class:visible={settingsOpen}>
-              <a href="/access/users" class="sub-item" class:on={isAccessSub('users')}>Users</a>
-              <a href="/access/roles" class="sub-item" class:on={isAccessSub('roles')}>Roles</a>
-            </div>
+            </a>
+            {#if railExpanded}
+              <div class="subnav" class:visible={onAccess} aria-label="Sub menu User Access">
+                <a href="/access/users" class="sub-item" class:on={isAccessSub('users')}>User List</a>
+                <a href="/access/roles" class="sub-item" class:on={isAccessSub('roles')}>Role Management</a>
+                <a href="/access/profile" class="sub-item" class:on={isAccessSub('profile')}>Profile</a>
+              </div>
+            {/if}
           </div>
 
           <a href="/activity-log" class="nav-item" class:active={path.startsWith('/activity-log')} aria-label="Activity Log" title="Activity Log">
@@ -258,8 +197,8 @@
         <button
           type="button"
           class="nav-item rail-foot"
-          aria-label="Keluar"
-          title="Keluar"
+          aria-label="Log out"
+          title="Log out"
           onclick={() => {
             try { localStorage.removeItem('edm-session') } catch { /* ignore */ }
             goto('/login')
@@ -271,7 +210,7 @@
               <path d="M11 12h8.5M17.2 9.2 20 12l-2.8 2.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
           </span>
-          <span class="nav-label">Keluar</span>
+          <span class="nav-label">Log out</span>
         </button>
       </div>
     </aside>
@@ -298,9 +237,11 @@
         </div>
       </header>
     {/if}
-    <div class="stage-body">
-      {@render children()}
-    </div>
+    {#key page.url.pathname}
+      <div class="stage-body page-enter">
+        {@render children()}
+      </div>
+    {/key}
   </div>
 </div>
 {/if}
@@ -332,10 +273,11 @@
   }
 
   .shell.expanded .rail-wrap {
-    width: 248px;
+    width: 272px;
   }
 
   .rail {
+    box-sizing: border-box;
     width: calc(100% - 20px);
     height: calc(100% - 28px);
     margin: 14px 8px 14px 12px;
@@ -352,7 +294,7 @@
   }
 
   .rail-inner {
-    width: 216px;
+    width: 240px;
     height: 100%;
     display: flex;
     flex-direction: column;
@@ -378,11 +320,10 @@
   }
 
   .rail-menu-title {
-    font-size: 0.75rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: #8e8e93;
+    font-size: 0.68rem;
+    font-weight: 750;
+    letter-spacing: -0.02em;
+    color: #1a1a1a;
     white-space: nowrap;
     opacity: 0;
     transform: translateX(-6px);
@@ -450,8 +391,8 @@
     display: block;
     padding: 0.42rem 0.75rem;
     border-radius: 8px;
-    font-size: 0.75rem;
-    font-weight: 600;
+    font-size: 0.65rem;
+    font-weight: 550;
     color: #6b6b6b;
     text-decoration: none;
     transition: background 0.15s ease, color 0.15s ease;
@@ -551,8 +492,8 @@
   }
 
   .nav-label {
-    font-size: 0.85rem;
-    font-weight: 600;
+    font-size: 0.68rem;
+    font-weight: 650;
     color: #2a2a2a;
     white-space: nowrap;
     opacity: 0;
@@ -636,7 +577,7 @@
 
   :global(.shell.expanded nav .nav-item.active .nav-label) {
     color: #1a1a1a;
-    font-weight: 700;
+    font-weight: 750;
   }
 
   :global(.shell.expanded nav .nav-item.active .nav-chevron) {
@@ -650,6 +591,44 @@
   .rail-foot {
     margin-top: auto;
     flex-shrink: 0;
+  }
+
+  .shell:not(.expanded) .rail-inner {
+    width: 100%;
+    align-items: center;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .shell:not(.expanded) .rail-top {
+    justify-content: center;
+  }
+
+  .shell:not(.expanded) .rail-top,
+  .shell:not(.expanded) nav,
+  .shell:not(.expanded) .nav-group {
+    width: 100%;
+    align-items: center;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .shell:not(.expanded) .nav-item {
+    width: 48px;
+    justify-content: center;
+    gap: 0;
+    padding: 4px 0;
+  }
+
+  .shell:not(.expanded) .nav-label,
+  .shell:not(.expanded) .nav-chevron,
+  .shell:not(.expanded) .rail-menu-title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
   }
 
   .stage {
@@ -797,6 +776,41 @@
     display: flex;
     flex-direction: column;
     overflow: visible;
+  }
+
+  .page-enter {
+    animation: page-enter 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .page-enter > :global(*) {
+    animation: page-enter-child 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  @keyframes page-enter {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes page-enter-child {
+    from {
+      opacity: 0;
+      transform: translateY(10px) scale(0.995);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .page-enter,
+    .page-enter > :global(*) {
+      animation: none;
+    }
   }
 
   @media (max-width: 900px) {

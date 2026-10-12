@@ -26,7 +26,7 @@ class Teams extends BaseController
         $dashboards  = $this->request->getJsonVar('dashboards') ?? [];
 
         if ($name === '' || $leadId === null) {
-            return $this->jsonError('Nama tim dan team lead wajib diisi', 422);
+            return $this->jsonError('Team name and team lead are required', 422);
         }
 
         $divisionId = $unit !== '' ? (new DivisionModel())->idForName($unit) : null;
@@ -52,7 +52,7 @@ class Teams extends BaseController
             }
         }
 
-        return $this->jsonError('Gagal membuat tim', 500);
+        return $this->jsonError('Could not create the team', 500);
     }
 
     /** @param array<string, mixed> $row */

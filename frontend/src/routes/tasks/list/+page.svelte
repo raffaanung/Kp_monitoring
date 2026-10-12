@@ -1,5 +1,6 @@
 <script>
   import { onMount } from 'svelte'
+  import { goto } from '$app/navigation'
   import GlassPanel from '$lib/GlassPanel.svelte'
   import SubmenuHeader from '$lib/SubmenuHeader.svelte'
   import {
@@ -9,8 +10,11 @@
     dashboardOptions,
     isOverdue,
   } from '$lib/taskModuleStore.svelte.js'
+  import TaskViewSwitch from '$lib/TaskViewSwitch.svelte'
   import { formatDate } from '$lib/format.js'
   import { readHashTaskFilters } from '$lib/taskNav.js'
+
+  let { lockedDashboard = '', embedded = false, onOpenTask = () => {}, onOpenBoard = () => {} } = $props()
 
   let dashboard = $state('')
   let status = $state('')
@@ -42,11 +46,28 @@
   }
 
   onMount(() => {
+    if (lockedDashboard) {
+      dashboard = lockedDashboard
+      applied = { ...applied, dashboard: lockedDashboard }
+      return
+    }
     applyFromQuery(/** @type {Record<string, string>} */ (readHashTaskFilters()))
     const onHash = () => applyFromQuery(/** @type {Record<string, string>} */ (readHashTaskFilters()))
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
   })
+
+  $effect(() => {
+    if (!lockedDashboard || applied.dashboard === lockedDashboard) return
+    dashboard = lockedDashboard
+    applied = { ...applied, dashboard: lockedDashboard }
+  })
+
+  /** @param {number | string} id */
+  function openTask(id) {
+    if (embedded) onOpenTask(id)
+    else goto(`/tasks/${id}`)
+  }
 
   const items = $derived(listModuleTasks(applied))
   const dashboards = $derived(dashboardOptions())
@@ -80,53 +101,59 @@
   }
 </script>
 
-<section class="page">
+<section class="page" class:embedded>
   <GlassPanel>
     <SubmenuHeader
       eyebrow="Task"
-      title="List"
+      title="List Task"
       sub="Tabel monitoring task"
       meta={`${items.length} task`}
-    />
+    >
+      {#snippet actions()}
+        <form class="filters" onsubmit={onSubmit}>
+          {#if !lockedDashboard}
+            <label class="ctrl">
+              <span>Dashboard</span>
+              <select class="ctrl-input" bind:value={dashboard}>
+                <option value="">All</option>
+                {#each dashboards as name}
+                  <option value={name}>{name}</option>
+                {/each}
+              </select>
+            </label>
+          {/if}
 
-    <form class="filters" onsubmit={onSubmit}>
-      <label>
-        <span>Dashboard</span>
-        <select bind:value={dashboard}>
-          <option value="">Semua</option>
-          {#each dashboards as name}
-            <option value={name}>{name}</option>
-          {/each}
-        </select>
-      </label>
+          <label class="ctrl">
+            <span>Status</span>
+            <select class="ctrl-input" bind:value={status}>
+              <option value="">All</option>
+              {#each workflowColumns as col}
+                <option value={col.key}>{col.label}</option>
+              {/each}
+            </select>
+          </label>
 
-      <label>
-        <span>Status</span>
-        <select bind:value={status}>
-          <option value="">Semua</option>
-          {#each workflowColumns as col}
-            <option value={col.key}>{col.label}</option>
-          {/each}
-        </select>
-      </label>
+          <label class="ctrl">
+            <span>Search</span>
+            <div class="ctrl-input search">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.7" />
+                <path d="m16.5 16.5 3.2 3.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+              </svg>
+              <input type="search" placeholder="Title, assignee, dashboard…" bind:value={q} />
+            </div>
+          </label>
 
-      <label class="grow">
-        <span>Cari</span>
-        <div class="search">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.7" />
-            <path d="m16.5 16.5 3.2 3.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
-          </svg>
-          <input type="search" placeholder="Judul, PIC, dashboard…" bind:value={q} />
-        </div>
-      </label>
+          <button type="submit" class="btn-primary">Terapkan</button>
+        </form>
+      {/snippet}
+    </SubmenuHeader>
 
-      <button type="submit" class="apply">Terapkan</button>
-    </form>
+    <TaskViewSwitch active="list" {embedded} onBoard={onOpenBoard} />
 
     {#if deepLinkActive}
       <p class="deep">
-        Filter tambahan dari Beranda aktif.
+        Extra filters from Operation Monitoring are active.
         <button type="button" onclick={clearDeepLink}>Reset</button>
       </p>
     {/if}
@@ -134,7 +161,7 @@
 
   <GlassPanel class="fill table-panel">
     {#if items.length === 0}
-      <p class="state">Tidak ada task yang cocok.</p>
+      <p class="state">No matching tasks.</p>
     {:else}
       <div class="table-wrap">
         <table>
@@ -142,9 +169,9 @@
             <tr>
               <th>ID</th>
               <th>Task</th>
-              <th>Dashboard</th>
+              {#if !lockedDashboard}<th>Dashboard</th>{/if}
               <th>Status</th>
-              <th>PIC</th>
+              <th>Assignee</th>
               <th>Deadline</th>
             </tr>
           </thead>
@@ -153,9 +180,9 @@
               <tr class:late={isOverdue(task)}>
                 <td><span class="mono-id">{task.code}</span></td>
                 <td>
-                  <span class="task-link">{task.title}</span>
+                  <button type="button" class="task-link" onclick={() => openTask(task.id)}>{task.title}</button>
                 </td>
-                <td>{task.dashboard}</td>
+                {#if !lockedDashboard}<td>{task.dashboard}</td>{/if}
                 <td><span class={`chip st-${task.status}`}>{workflowLabel(task.status)}</span></td>
                 <td>
                   <span class="pic">
@@ -188,60 +215,29 @@
     overflow: hidden;
   }
 
+  .page.embedded {
+    height: 68vh;
+  }
+
   .filters {
     display: flex;
-    flex-wrap: wrap;
+    align-items: flex-end;
     gap: 10px;
-    align-items: end;
-    margin-top: 14px;
-    padding-top: 14px;
-    border-top: 1px solid rgba(0, 0, 0, 0.06);
-  }
-
-  label {
-    display: grid;
-    gap: 6px;
-    min-width: 140px;
-  }
-
-  label.grow {
-    flex: 1;
-    min-width: 220px;
-  }
-
-  label span {
-    font-size: 0.56rem;
-    font-weight: 650;
-    color: #6b6b6b;
-  }
-
-  select,
-  input,
-  .apply {
-    height: 2.45rem;
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    border-radius: 14px;
-    padding: 0 0.85rem;
-    background: rgba(255, 255, 255, 0.78);
-    font: inherit;
-    font-size: 0.68rem;
-    color: #1a1a1a;
+    margin: 0;
+    flex-wrap: wrap;
   }
 
   .search {
     display: flex;
     align-items: center;
-    gap: 8px;
-    height: 2.45rem;
-    padding: 0 0.85rem;
-    border-radius: 14px;
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    background: rgba(255, 255, 255, 0.78);
+    gap: 6px;
+    min-width: 180px;
+    max-width: 240px;
   }
 
   .search svg {
-    width: 15px;
-    height: 15px;
+    width: 14px;
+    height: 14px;
     color: #7a7a80;
     flex-shrink: 0;
   }
@@ -253,16 +249,10 @@
     height: auto;
     width: 100%;
     outline: none;
-  }
-
-  .apply {
-    background: #1a1a1a;
-    color: #fff;
-    border-color: transparent;
-    font-weight: 700;
-    cursor: pointer;
-    padding: 0 1.1rem;
-    border-radius: 999px;
+    font: inherit;
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: #1a1a1a;
   }
 
   .deep {
@@ -336,8 +326,19 @@
   }
 
   .task-link {
+    border: 0;
+    background: none;
+    padding: 0;
+    font: inherit;
     font-weight: 700;
     color: #0f1b2e;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .task-link:hover {
+    color: #065fc6;
+    text-decoration: underline;
   }
 
   .chip {

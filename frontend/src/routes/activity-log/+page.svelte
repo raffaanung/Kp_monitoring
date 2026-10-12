@@ -63,7 +63,7 @@
 <section class="page">
   <GlassPanel>
     <SubmenuHeader
-      title="Riwayat"
+      title="History"
       meta={`${items.length} entri`}
     />
 
@@ -81,7 +81,7 @@
       <label>
         <span>Dashboard</span>
         <select bind:value={dashboard}>
-          <option value="">Semua</option>
+          <option value="">All</option>
           {#each dashboards as item (item.id)}
             <option value={item.name}>{item.name}</option>
           {/each}
@@ -94,7 +94,7 @@
 
   <GlassPanel class="fill table-panel">
     {#if items.length === 0}
-      <p class="state">Tidak ada entri yang cocok.</p>
+      <p class="state">No matching entries.</p>
     {:else}
       <div class="table-wrap">
         <table>

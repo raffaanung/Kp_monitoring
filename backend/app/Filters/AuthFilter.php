@@ -13,7 +13,7 @@ class AuthFilter implements FilterInterface
         if (! \App\Libraries\Id::isValid(session()->get('user_id'))) {
             return service('response')
                 ->setStatusCode(401)
-                ->setJSON(['success' => false, 'message' => 'Belum login']);
+                ->setJSON(['success' => false, 'message' => 'Not signed in']);
         }
 
         return null;

@@ -1,20 +1,18 @@
 <script>
-  import { goto } from '$app/navigation';
   import GlassPanel from '$lib/GlassPanel.svelte';
   import SubmenuHeader from '$lib/SubmenuHeader.svelte';
   import {
     listDashboards,
-    registryStatusLabel,
     registryStatusOptions,
-    dashboardFilterOptions,
+    criticalityLabel,
     sortOptions,
     rememberDetailId,
     changeDashboardStatus,
   } from '$lib/registryStore.svelte.js';
-  import { canCreateDashboard } from '$lib/taskModuleStore.svelte.js';
+  import { requirementStatusSummary, requirementStore } from '$lib/requirementStore.svelte.js';
+  import { canCreateDashboard, listModuleTasks, taskModuleStore } from '$lib/taskModuleStore.svelte.js';
   import { listUsers } from '$lib/accessStore.svelte.js';
   import { portal } from '$lib/portal.js';
-  import { formatDate } from '$lib/format.js';
   import RegistrySopModal from '$lib/pages/registry/RegistrySopModal.svelte';
   import RegistryCreateModal from '$lib/pages/registry/RegistryCreateModal.svelte';
   import RegistryDetailPanel from '$lib/pages/registry/RegistryDetailPanel.svelte';
@@ -25,17 +23,11 @@
   let q = $state("");
   let sort = $state("updated_desc");
 
-  let expandedRows = $state(new Set());
   let selectedSopItem = $state(null);
   let selectedDetail = $state(null);
   let detailActiveTab = $state("overview");
 
-  let applied = $state({
-    status: "",
-    dashboard: "",
-    q: "",
-    sort: "updated_desc",
-  });
+  const applied = $derived({ status, dashboard, q: q.trim(), sort });
 
   $effect(() => {
     const handleReset = () => {
@@ -45,7 +37,30 @@
     return () => window.removeEventListener("reset-registry", handleReset);
   });
 
+  $effect(() => {
+    document.documentElement.classList.toggle("registry-detail-lock", !!selectedDetail);
+    return () => document.documentElement.classList.remove("registry-detail-lock");
+  });
+
   const items = $derived(listDashboards(applied));
+
+  const progressById = $derived.by(() => {
+    void requirementStore.items;
+    void taskModuleStore.items;
+    /** @type {Record<string, { totalReq: number, pct: number, totalTask: number }>} */
+    const map = {};
+    for (const item of items) {
+      const summary = requirementStatusSummary(item.name);
+      const totalReq = summary.reduce((sum, row) => sum + row.count, 0);
+      const done = summary.find((row) => row.value === 'done')?.count ?? 0;
+      map[item.id] = {
+        totalReq,
+        pct: totalReq ? Math.round((done / totalReq) * 100) : 0,
+        totalTask: listModuleTasks({ dashboard: item.name }).length,
+      };
+    }
+    return map;
+  });
 
   // Pagination State
   let currentPage = $state(1);
@@ -73,6 +88,60 @@
     ).length,
   );
 
+  const unitCount = $derived(new Set(allDashboards.map((d) => d.category).filter(Boolean)).size);
+  const picCount = $derived(new Set(allDashboards.map((d) => d.owner).filter(Boolean)).size);
+  const activePct = $derived(allItemsCount ? Math.round((prodCount / allItemsCount) * 100) : 0);
+  const reqKpi = $derived.by(() => {
+    void requirementStore.items;
+    const summary = requirementStatusSummary();
+    const total = summary.reduce((sum, row) => sum + row.count, 0);
+    const done = summary.find((row) => row.value === 'done')?.count ?? 0;
+    return { total, done, pct: total ? Math.round((done / total) * 100) : 0 };
+  });
+  const highPriorityCount = $derived(allDashboards.filter((d) => d.criticality === 'high').length);
+  const registryMetrics = $derived([
+    {
+      label: 'Status Active',
+      value: String(prodCount),
+      note: `${activePct}% of ${allItemsCount} dashboard`,
+      icon: 'active',
+      tone: 'mint',
+      filter: 'active',
+    },
+    {
+      label: 'Status Idle',
+      value: String(devCount),
+      note: devCount ? 'inactive · click to filter' : 'all dashboards are active',
+      icon: 'idle',
+      tone: 'lavender',
+      filter: 'idle',
+    },
+    {
+      label: 'Requirement',
+      value: String(reqKpi.total),
+      note: `${reqKpi.done} selesai · ${reqKpi.pct}% progress`,
+      icon: 'req',
+      tone: 'sky',
+      filter: '',
+    },
+    {
+      label: 'Prioritas Tinggi',
+      value: String(highPriorityCount),
+      note: highPriorityCount ? 'dashboards need attention' : 'all clear',
+      icon: 'priority',
+      tone: highPriorityCount ? 'rose' : 'sand',
+      filter: '',
+    },
+    {
+      label: 'Units Involved',
+      value: String(unitCount),
+      note: `${picCount} PICs in charge`,
+      icon: 'unit',
+      tone: 'peach',
+      filter: '',
+    },
+  ]);
+
   function getInitial(name = "") {
     if (!name) return "?";
     return name.trim().charAt(0).toUpperCase();
@@ -87,251 +156,163 @@
       "Feb",
       "Mar",
       "Apr",
-      "Mei",
+      "May",
       "Jun",
       "Jul",
-      "Agu",
+      "Aug",
       "Sep",
-      "Okt",
+      "Oct",
       "Nov",
-      "Des",
+      "Dec",
     ];
     return `${String(d.getDate()).padStart(2, "0")} ${months[d.getMonth()]} ${d.getFullYear()}`;
   }
 
-  function onSubmit(event) {
-    event.preventDefault();
-    applied = { status, dashboard, q, sort };
-    currentPage = 1; // reset pagination
-  }
+  $effect(() => {
+    void applied;
+    currentPage = 1;
+  });
 
   let createOpen = $state(false);
 
   const canAdd = $derived(canCreateDashboard());
   const pmOptions = $derived(listUsers({ status: "active" }));
-  const userOptions = $derived(listUsers({ status: "active" }));
-
   function openCreate() {
     createOpen = true;
   }
 
+  /** @param {{ id: string }} item */
+  function openDashboard(item) {
+    selectedDetail = item;
+    rememberDetailId(item.id);
+    detailActiveTab = "overview";
+  }
 
 </script>
 
-<section class="page" class:detail={!!selectedDetail}>
+<section class="page registry-page" class:detail={!!selectedDetail}>
   {#if !selectedDetail}
     <GlassPanel class="header-panel">
       <SubmenuHeader
-        eyebrow="Dashboard Registry"
-        title="Daftar Dashboard"
-        sub="Katalog status dashboard, dokumen SOP, PIC, dan pembaruan terakhir."
-        meta={`${items.length} dari ${allItemsCount} dashboard`}
+        eyebrow="Workspaces"
+        title="Dashboard List"
+        sub="Dashboard status, SOP documents, PIC, and the latest update."
+        meta={`${items.length} of ${allItemsCount} dashboards`}
       >
         {#snippet actions()}
           {#if canAdd}
             <button type="button" class="btn-primary" onclick={openCreate}
-              >+ Tambah Dashboard</button
+              >+ Add Dashboard</button
             >
           {/if}
         {/snippet}
       </SubmenuHeader>
 
-      <!-- Summary Cards Grid -->
-      <div class="stats-grid" style="margin-top: 28px;">
-        <!-- Card 1 -->
-        <div class="stat-card">
-          <div class="stat-top">
-            <span class="stat-title">Total Aplikasi</span>
-            <div class="icon-wrapper blue-solid-icon">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                ><rect width="18" height="18" x="3" y="3" rx="2" /><path
-                  d="M3 9h18"
-                /><path d="M9 21V9" /></svg
+      <div class="reg-metrics-rail">
+        <div class="reg-metrics">
+          {#each registryMetrics as m (m.label)}
+            <div class="reg-metric-shell">
+              <button
+                type="button"
+                class="reg-metric-card {m.tone}"
+                class:active={m.filter && status === m.filter}
+                disabled={!m.filter}
+                onclick={() => m.filter && (status = status === m.filter ? '' : m.filter)}
               >
+                <span class="reg-metric-label">{m.label}</span>
+                <span class="reg-metric-mid">
+                  <strong class="reg-metric-value">{m.value}</strong>
+                  <span class="reg-metric-icon" aria-hidden="true">
+                    {#if m.icon === 'active'}
+                      <svg viewBox="0 0 24 24" fill="none"><path d="M13 3 4 14h7l-1 7 9-11h-7l1-7Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+                    {:else if m.icon === 'idle'}
+                      <svg viewBox="0 0 24 24" fill="none"><path d="M12 4.5a7.5 7.5 0 1 1 0 15 7.5 7.5 0 0 1 0-15Z" stroke="currentColor" stroke-width="1.7"/><path d="M10 9.5v5M14 9.5v5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+                    {:else if m.icon === 'req'}
+                      <svg viewBox="0 0 24 24" fill="none"><path d="M14 4H8a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8l-4-4Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M14 4v4h4M9.5 13h5M9.5 16.5h3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+                    {:else if m.icon === 'priority'}
+                      <svg viewBox="0 0 24 24" fill="none"><path d="M12 9v4M12 16.2h.01M10.4 4.8 3.6 17a1.8 1.8 0 0 0 1.6 2.7h13.6a1.8 1.8 0 0 0 1.6-2.7L13.6 4.8a1.8 1.8 0 0 0-3.2 0Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    {:else}
+                      <svg viewBox="0 0 24 24" fill="none"><path d="M4.5 19.5v-10l7.5-5 7.5 5v10M9.5 19.5v-5h5v5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    {/if}
+                  </span>
+                </span>
+                <small class="reg-metric-note">{m.note}</small>
+              </button>
             </div>
-          </div>
-          <div class="stat-bottom">
-            <div class="stat-value">{allItemsCount}</div>
-            <div class="stat-sub">Semua aplikasi & dashboard terdaftar</div>
-          </div>
-        </div>
-
-        <!-- Card 2 -->
-        <div class="stat-card">
-          <div class="stat-top">
-            <span class="stat-title">Active</span>
-            <div class="icon-wrapper green-icon">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                ><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg
-              >
-            </div>
-          </div>
-          <div class="stat-bottom">
-            <div class="stat-value">{prodCount}</div>
-            <div class="stat-sub">Aplikasi yang sudah live & dipakai user</div>
-          </div>
-        </div>
-
-        <!-- Card 3 -->
-        <div class="stat-card">
-          <div class="stat-top">
-            <span class="stat-title">Idle</span>
-            <div class="icon-wrapper yellow-icon">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                ><path
-                  d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"
-                /></svg
-              >
-            </div>
-          </div>
-          <div class="stat-bottom">
-            <div class="stat-value">{devCount}</div>
-            <div class="stat-sub">Masih dalam tahap pengerjaan</div>
-          </div>
+          {/each}
         </div>
       </div>
 
-      <!-- Filter & Search Bar -->
-      <form class="redesign-filters" onsubmit={onSubmit}>
-        <div class="filter-field grow-field">
-          <div class="input-with-icon">
-            <svg
-              class="search-icon"
-              xmlns="http://www.w3.org/2000/svg"
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              ><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg
-            >
-            <input
-              id="search-input"
-              type="search"
-              placeholder="Cari nama dashboard, kode SOP, PIC, platform..."
-              bind:value={q}
-            />
+      <form class="filters" onsubmit={(event) => event.preventDefault()}>
+        <label class="grow">
+          <span>Search</span>
+          <div class="search">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.7" />
+              <path d="m16.5 16.5 3.2 3.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+            </svg>
+            <input type="search" placeholder="Name, code, SOP, PIC, platform…" bind:value={q} />
           </div>
-        </div>
+        </label>
 
-        <div class="filter-field">
+        <label>
+          <span>Status</span>
           <select id="status-select" bind:value={status}>
-            <option value="">Semua Status</option>
+            <option value="">All</option>
             {#each registryStatusOptions as opt}
               <option value={opt.value}>{opt.label}</option>
             {/each}
           </select>
-        </div>
+        </label>
 
-        <div class="filter-field">
+        <label>
+          <span>Sort</span>
           <select id="sort-select" bind:value={sort}>
             {#each sortOptions as opt}
               <option value={opt.value}>{opt.label}</option>
             {/each}
           </select>
-        </div>
+        </label>
 
-        <button type="submit" class="apply-btn">Terapkan</button>
       </form>
     </GlassPanel>
 
-    <GlassPanel class="table-panel">
+    <GlassPanel class="fill table-panel">
       {#if items.length === 0}
         <div class="empty-state">
-          <p>Tidak ada dashboard yang cocok dengan pencarian Anda.</p>
+          <p>No dashboards match your search.</p>
         </div>
       {:else}
         <div class="redesign-table-wrap">
           <table class="redesign-table">
             <thead>
               <tr>
-                <th>DAFTAR DASHBOARD</th>
+                <th>Dashboard</th>
                 <th>PIC</th>
-                <th>STATUS DASHBOARD</th>
-                <th>LAST UPDATES</th>
+                <th>Total Requirement</th>
+                <th>Total Task</th>
+                <th>Status</th>
+                <th>Last Update</th>
+                <th>Progress Requirement</th>
+                <th>Work Priority</th>
               </tr>
             </thead>
             <tbody>
               {#each paginatedItems as item (item.id)}
-                <tr>
+                <tr class="dash-row" onclick={() => openDashboard(item)}>
                   <!-- Column 1: Dashboard Info -->
                   <td>
                     <div class="dashboard-cell">
                       <div class="avatar-badge">{item.code || "DB"}</div>
                       <div class="dashboard-info">
-                        <div
-                          class="name-wrap"
-                          style="display:flex; align-items:center; gap:6px;"
-                        >
-                          <a
-                            href="#"
-                            onclick={(e) => {
-                              e.preventDefault();
-                              selectedDetail = item;
-                              rememberDetailId(item.id);
-                              detailActiveTab = "overview";
-                            }}
-                            class="dash-name"
-                          >
-                            {item.name}
-                          </a>
-                          {#if item.url}
-                            <a
-                              href={item.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              class="ext-link"
-                              title="Buka URL"
-                            >
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                width="13"
-                                height="13"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="2.5"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                ><path
-                                  d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"
-                                ></path><polyline points="15 3 21 3 21 9"
-                                ></polyline><line x1="10" y1="14" x2="21" y2="3"
-                                ></line></svg
-                              >
-                            </a>
-                          {/if}
+                        <div class="name-wrap">
+                          <span class="dash-name">{item.name}</span>
                         </div>
-                        <span class="dash-meta"
-                          >{item.platform} • {item.category}</span
-                        >
+                        <span class="dash-meta">{item.platform} · {item.category}</span>
                       </div>
                     </div>
                   </td>
 
-                  <!-- Column 2: PIC -->
                   <td>
                     <div class="pic-cell">
                       <div class="pic-avatar">{getInitial(item.owner)}</div>
@@ -339,7 +320,10 @@
                     </div>
                   </td>
 
-                  <!-- Column 3: Status -->
+                  <td class="count-cell">{progressById[item.id]?.totalReq ?? 0}</td>
+                  <td class="count-cell">{progressById[item.id]?.totalTask ?? 0}</td>
+
+                  <!-- Status -->
                   <td>
                     <!-- <span class={`status-pill pill-${item.status}`}>
                     <span class="dot"></span>
@@ -348,6 +332,7 @@
                     <select
                       class={`status-dropdown pill-${item.status}`}
                       value={item.status}
+                      onclick={(e) => e.stopPropagation()}
                       onchange={(e) =>
                         changeDashboardStatus(item.id, e.target.value)}
                     >
@@ -363,12 +348,21 @@
                       <span class="date-main"
                         >{formatDateDisplay(item.updated_at)}</span
                       >
-                      <span class="date-sub"
-                        >Rev: {item.updated_at
-                          ? item.updated_at.slice(0, 10)
-                          : "-"}</span
-                      >
+                      <span class="date-sub">Rev. {item.updated_at ? item.updated_at.slice(0, 10) : "-"}</span>
                     </div>
+                  </td>
+
+                  <td>
+                    <div class="req-progress" title="{progressById[item.id]?.pct ?? 0}% of requirements done">
+                      <div class="req-progress-track" aria-hidden="true">
+                        <span class="req-progress-fill" style="width: {progressById[item.id]?.pct ?? 0}%"></span>
+                      </div>
+                      <span class="req-progress-pct">{progressById[item.id]?.pct ?? 0}%</span>
+                    </div>
+                  </td>
+
+                  <td>
+                    <span class="crit-badge crit-{item.criticality || 'low'}">{criticalityLabel(item.criticality) || '—'}</span>
                   </td>
 
                 </tr>
@@ -380,12 +374,12 @@
         <!-- PAGINATION BAR -->
         <div class="pagination-bar">
           <div class="pagination-info">
-            Menampilkan <strong>{showingStart}–{showingEnd}</strong> dari
-            <strong>{totalItems}</strong> data
+            Showing <strong>{showingStart}–{showingEnd}</strong> of
+            <strong>{totalItems}</strong>
           </div>
           <div class="pagination-controls">
             <div class="per-page">
-              <span>Tampil:</span>
+              <span>Show:</span>
               <select
                 bind:value={itemsPerPage}
                 onchange={() => {
@@ -459,4 +453,4 @@
 
 <RegistrySopModal bind:selectedSopItem />
 
-<RegistryCreateModal bind:createOpen {pmOptions} {userOptions} />
+<RegistryCreateModal bind:createOpen {pmOptions} />

@@ -25,18 +25,18 @@ class Users extends BaseController
         $status   = (string) ($this->request->getJsonVar('status') ?: 'active');
 
         if ($name === '' || $roleId === null) {
-            return $this->jsonError('Nama dan role wajib diisi', 422);
+            return $this->jsonError('Name and role are required', 422);
         }
         if (! preg_match('/^\d{8}$/', $username)) {
-            return $this->jsonError('Username harus 8 digit angka', 422);
+            return $this->jsonError('Username must be 8 digits', 422);
         }
         if (strlen($password) < 6) {
-            return $this->jsonError('Password minimal 6 karakter', 422);
+            return $this->jsonError('Password must be at least 6 characters', 422);
         }
 
         $userModel = new UserModel();
         if ($userModel->findByUsername($username) !== null) {
-            return $this->jsonError('Username sudah dipakai', 422);
+            return $this->jsonError('That username is already in use', 422);
         }
 
         $divisionId = $unit !== '' ? (new DivisionModel())->idForName($unit) : null;
@@ -66,7 +66,7 @@ class Users extends BaseController
     {
         $userModel = new UserModel();
         if ($userModel->find($id) === null) {
-            return $this->jsonError('User tidak ditemukan', 404);
+            return $this->jsonError('User not found', 404);
         }
 
         $name     = trim((string) $this->request->getJsonVar('name'));
@@ -77,15 +77,15 @@ class Users extends BaseController
         $status   = (string) ($this->request->getJsonVar('status') ?: 'active');
 
         if ($name === '' || $roleId === null) {
-            return $this->jsonError('Nama dan role wajib diisi', 422);
+            return $this->jsonError('Name and role are required', 422);
         }
         if (! preg_match('/^\d{8}$/', $username)) {
-            return $this->jsonError('Username harus 8 digit angka', 422);
+            return $this->jsonError('Username must be 8 digits', 422);
         }
 
         $dup = $userModel->where('username', $username)->where('id !=', $id)->first();
         if ($dup !== null) {
-            return $this->jsonError('Username sudah dipakai', 422);
+            return $this->jsonError('That username is already in use', 422);
         }
 
         $divisionId = $unit !== '' ? (new DivisionModel())->idForName($unit) : null;

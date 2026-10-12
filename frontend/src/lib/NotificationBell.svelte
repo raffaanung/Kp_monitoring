@@ -59,7 +59,7 @@
   <button
     type="button"
     class="bell"
-    aria-label="Notifikasi"
+    aria-label="Notifications"
     aria-expanded={open}
     onclick={toggle}
   >
@@ -75,9 +75,9 @@
   </button>
 
   {#if open}
-    <div class="panel" role="dialog" aria-label="Daftar notifikasi">
+    <div class="panel" role="dialog" aria-label="Notifications">
       <div class="panel-head">
-        <strong>Notifikasi</strong>
+        <strong>Notifications</strong>
         {#if unread > 0}
           <button type="button" class="mark" onclick={onMarkAll}
             >Tandai dibaca</button
@@ -85,7 +85,7 @@
         {/if}
       </div>
       {#if notifs.length === 0}
-        <p class="empty">Belum ada notifikasi.</p>
+        <p class="empty">No notifications yet.</p>
       {:else}
         <ul>
           {#each notifs.slice(0, 12) as n (n.id)}

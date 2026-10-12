@@ -104,11 +104,11 @@
     error = ''
     const clean = name.trim()
     if (!clean) {
-      error = 'Nama role wajib diisi'
+      error = 'Role name is required'
       return
     }
     if (roles.some((r) => r.name.toLowerCase() === clean.toLowerCase())) {
-      error = 'Nama role sudah dipakai'
+      error = 'That role name is already in use'
       return
     }
     try {
@@ -161,12 +161,12 @@
     <SubmenuHeader
       eyebrow="User Access"
       title="Role Management"
-      sub="Daftar peran dan matriks permission"
+      sub="Roles and the permission matrix"
       meta={`${roles.length} role`}
     >
       {#snippet actions()}
         <div class="head-actions">
-          <button type="button" class="btn-primary" onclick={openAdd}>+ Tambah Role</button>
+          <button type="button" class="btn-primary" onclick={openAdd}>+ Add Role</button>
         </div>
       {/snippet}
     </SubmenuHeader>
@@ -195,8 +195,8 @@
                   <button
                     type="button"
                     class="icon-btn icon-del"
-                    title={`Hapus role ${role.name}`}
-                    aria-label={`Hapus role ${role.name}`}
+                    title={`Delete role ${role.name}`}
+                    aria-label={`Delete role ${role.name}`}
                     onclick={() => askDeleteRole(role)}
                   >
                     {@render trashIcon()}
@@ -229,7 +229,7 @@
               {#if permissions.length === 0}
                 <tr>
                   <td class="empty" colspan={roles.length + 1}>
-                    Belum ada permission. Klik "+ Tambah Permission" untuk membuat.
+                    No permissions yet. Click "+ Add Permission" to create one.
                   </td>
                 </tr>
               {/if}
@@ -279,24 +279,24 @@
       <form class="modal-body" onsubmit={onAddSubmit}>
         <div class="modal-head">
           <div>
-            <h2 id="add-role-title">Tambah Role</h2>
-            <p>Buat peran baru, lalu atur permission-nya</p>
+            <h2 id="add-role-title">Add Role</h2>
+            <p>Create a role, then set its permissions</p>
           </div>
-          <button type="button" class="close" aria-label="Tutup" onclick={closeAdd}>×</button>
+          <button type="button" class="close" aria-label="Close" onclick={closeAdd}>×</button>
         </div>
 
         <label>
-          <span>Nama role</span>
+          <span>Role name</span>
           <input bind:value={name} placeholder="Contoh: Auditor" />
         </label>
 
         <label>
-          <span>Deskripsi</span>
-          <input bind:value={description} placeholder="Contoh: Hanya melihat dan menyetujui" />
+          <span>Description</span>
+          <input bind:value={description} placeholder="e.g. View and approve only" />
         </label>
 
         <fieldset class="perm-pick">
-          <legend>Permission awal (opsional)</legend>
+          <legend>Initial permissions (optional)</legend>
           <div class="perm-grid">
             {#each permissions as perm}
               <label class="check">
@@ -314,8 +314,8 @@
         {#if error}<p class="error">{error}</p>{/if}
 
         <div class="actions">
-          <button type="button" class="ghost" onclick={closeAdd}>Batal</button>
-          <button type="submit" class="primary">Simpan role</button>
+          <button type="button" class="ghost" onclick={closeAdd}>Cancel</button>
+          <button type="submit" class="primary">Save role</button>
         </div>
       </form>
     </div>
@@ -339,19 +339,19 @@
         <div class="modal-head">
           <div>
             <h2 id="edit-role-title">Edit Role</h2>
-            <p>Ubah nama, deskripsi, dan permission role ini</p>
+            <p>Edit this role's name, description, and permissions</p>
           </div>
-          <button type="button" class="close" aria-label="Tutup" onclick={closeEdit}>×</button>
+          <button type="button" class="close" aria-label="Close" onclick={closeEdit}>×</button>
         </div>
 
         <label>
-          <span>Nama role</span>
+          <span>Role name</span>
           <input bind:value={editName} placeholder="Contoh: Auditor" />
         </label>
 
         <label>
-          <span>Deskripsi</span>
-          <input bind:value={editDescription} placeholder="Contoh: Hanya melihat dan menyetujui" />
+          <span>Description</span>
+          <input bind:value={editDescription} placeholder="e.g. View and approve only" />
         </label>
 
         <fieldset class="perm-pick">
@@ -373,8 +373,8 @@
         {#if editError}<p class="error">{editError}</p>{/if}
 
         <div class="actions">
-          <button type="button" class="ghost" onclick={closeEdit}>Batal</button>
-          <button type="submit" class="primary">Simpan perubahan</button>
+          <button type="button" class="ghost" onclick={closeEdit}>Cancel</button>
+          <button type="submit" class="primary">Save changes</button>
         </div>
       </form>
     </div>
@@ -395,14 +395,14 @@
       {@render glass()}
 
       <div class="modal-body">
-        <h2 id="confirm-title">Hapus role "{confirm.name}"?</h2>
+        <h2 id="confirm-title">Delete role "{confirm.name}"?</h2>
         {#if confirm.users > 0}
           <p class="lead">
-            Role ini masih dipakai <strong>{confirm.users} user</strong>. Pindahkan user-nya ke role lain
-            dulu di halaman User, baru role bisa dihapus.
+            This role is still assigned to <strong>{confirm.users} user</strong>. Move those users to another role
+            on the Users page first, then this role can be deleted.
           </p>
         {:else}
-          <p class="lead">Role dan semua centang permission-nya akan dihapus. Tindakan ini tidak bisa dibatalkan.</p>
+          <p class="lead">The role and all of its permissions will be deleted. This cannot be undone.</p>
         {/if}
 
         {#if confirmError}<p class="error">{confirmError}</p>{/if}
@@ -411,8 +411,8 @@
           {#if confirm.users > 0}
             <button type="button" class="primary" onclick={closeConfirm}>Mengerti</button>
           {:else}
-            <button type="button" class="ghost" onclick={closeConfirm}>Batal</button>
-            <button type="button" class="danger" onclick={onConfirmDelete}>Hapus</button>
+            <button type="button" class="ghost" onclick={closeConfirm}>Cancel</button>
+            <button type="button" class="danger" onclick={onConfirmDelete}>Delete</button>
           {/if}
         </div>
       </div>

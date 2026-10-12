@@ -1,37 +1,57 @@
 <script>
   import { portal } from '$lib/portal.js';
   import { createDashboard } from '$lib/registryStore.svelte.js';
-  import { currentUserName } from '$lib/taskModuleStore.svelte.js';
 
   let { 
     createOpen = $bindable(), 
-    pmOptions = [], 
-    userOptions = [] 
+    pmOptions = []
   } = $props();
+
+  const steps = [
+    { title: 'Identitas', desc: 'Name, unit & PIC' },
+    { title: 'Teknologi', desc: 'Framework, backend, front end' },
+    { title: 'Infrastructure', desc: 'Development & production' },
+  ];
+  const profileSpec = [
+    { key: 'framework', label: 'Framework', placeholder: 'Contoh: SvelteKit' },
+    { key: 'framework_version', label: 'Framework Version', placeholder: 'Contoh: 2.5' },
+    { key: 'backend', label: 'Backend', placeholder: 'Contoh: CodeIgniter' },
+    { key: 'backend_version', label: 'Backend Version', placeholder: 'Contoh: 4.5' },
+    { key: 'frontend', label: 'Front End', placeholder: 'Contoh: Svelte' },
+  ];
+  const envSpec = [
+    { key: 'db', label: 'Database Engine', placeholder: 'Contoh: PostgreSQL' },
+    { key: 'ip', label: 'IP Address', placeholder: 'Contoh: 10.0.0.12' },
+    { key: 'db_name', label: 'Database Name', placeholder: 'Database name' },
+    { key: 'db_user', label: 'Database Username', placeholder: 'Database username' },
+    { key: 'db_pass', label: 'Password', placeholder: 'Database password', secret: true },
+  ];
+  const envs = [
+    { key: 'development', label: 'Development' },
+    { key: 'production', label: 'Production' },
+  ];
 
   let currentStep = $state(1);
   let formName = $state("");
-  let formCode = $state("");
-  let formPlatform = $state("");
   let formDescription = $state("");
-  let formPm = $state("");
-  let formUser = $state("");
   let formCategory = $state("");
-  let formPriority = $state("medium");
-  let formStartDate = $state("");
-  let formTargetDate = $state("");
-  let formTechStack = $state("");
+  let formPic = $state("");
+  /** @type {Record<string, string>} */
+  let formMeta = $state({});
   let formError = $state("");
+  let saving = $state(false);
 
   function closeCreate() {
     createOpen = false;
   }
 
   function nextStep() {
-    if (currentStep === 1) {
-      formError = "";
-      currentStep = 2;
+    formError = "";
+    if (currentStep === 1 && (!formName.trim() || !formPic.trim())) {
+      formError = "Application name and PIC are required.";
+      return;
     }
+    if (currentStep < steps.length) currentStep += 1;
   }
 
   function prevStep() {
@@ -44,36 +64,38 @@
     currentStep = step;
   }
 
-  function onCreate(event) {
+  async function onCreate(event) {
     event.preventDefault();
-
-    const name = formName.trim();
-    const pm = formPm.trim();
-    if (!name || !pm) {
-      formError = "Nama aplikasi dan PM wajib diisi sebelum menyimpan.";
-      if (!name) currentStep = 1;
-      else if (!pm) currentStep = 2;
+    if (currentStep < steps.length) {
+      nextStep();
       return;
     }
-    const deploy = formPlatform.trim();
-    const userName = formUser.trim();
-    const created = createDashboard({
+
+    const name = formName.trim();
+    const pic = formPic.trim();
+    if (!name || !pic) {
+      formError = "Application name and PIC are required before saving.";
+      currentStep = 1;
+      return;
+    }
+    /** @type {Record<string, string>} */
+    const metadata = {};
+    for (const [key, value] of Object.entries(formMeta)) {
+      const trimmed = String(value ?? '').trim();
+      if (trimmed) metadata[key] = trimmed;
+    }
+    saving = true;
+    const created = await createDashboard({
       name,
-      code: formCode.trim(),
       description: formDescription.trim(),
-      pm,
-      owner: userName || currentUserName(),
-      url: deploy,
-      platform: deploy || "Custom",
-      actor: currentUserName(),
       category: formCategory,
-      criticality: formPriority,
-      start_date: formStartDate,
-      target_date: formTargetDate,
-      tech_stack: formTechStack,
+      owner: pic,
+      pm: pic,
+      metadata,
     });
+    saving = false;
     if (!created) {
-      formError = "Gagal menyimpan. Dashboard dengan nama tersebut mungkin sudah ada.";
+      formError = "Could not save. A dashboard with that name may already exist.";
       return;
     }
     createOpen = false;
@@ -98,71 +120,59 @@
     onclick={(e) => e.stopPropagation()}
     onsubmit={onCreate}
   >
-    <!-- LEFT SIDEBAR -->
     <div class="wizard-left">
       <div class="left-header">
-        <h2 id="add-dashboard-title">Registrasi Proyek</h2>
+        <h2 id="add-dashboard-title">Project Registration</h2>
         <p>
-          Ikuti panduan langkah demi langkah untuk mendaftarkan aplikasi baru ke
-          dalam registry.
+          Follow the steps to register a new application in the
+          registry.
         </p>
       </div>
 
       <div class="wizard-steps-v">
-        <!-- svelte-ignore a11y_click_events_have_key_events -->
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div
-          class="step-v"
-          class:active={currentStep === 1}
-          class:done={currentStep > 1}
-          onclick={() => goToStep(1)}
-        >
-          <div class="v-circle">
-            {#if currentStep > 1}
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="3"><polyline points="20 6 9 17 4 12" /></svg
-              >
-            {:else}
-              1
-            {/if}
+        {#each steps as step, index}
+          {@const number = index + 1}
+          {#if index > 0}
+            <div class="v-line" class:active={currentStep > index}></div>
+          {/if}
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div
+            class="step-v"
+            class:active={currentStep === number}
+            class:done={currentStep > number}
+            onclick={() => goToStep(number)}
+          >
+            <div class="v-circle">
+              {#if currentStep > number}
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="3"><polyline points="20 6 9 17 4 12" /></svg
+                >
+              {:else}
+                {number}
+              {/if}
+            </div>
+            <div class="v-info">
+              <span class="v-title">{step.title}</span>
+              <span class="v-desc">{step.desc}</span>
+            </div>
           </div>
-          <div class="v-info">
-            <span class="v-title">Identitas</span>
-            <span class="v-desc">Nama & informasi dasar</span>
-          </div>
-        </div>
-
-        <div class="v-line" class:active={currentStep > 1}></div>
-
-        <!-- svelte-ignore a11y_click_events_have_key_events -->
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div
-          class="step-v"
-          class:active={currentStep === 2}
-          onclick={() => goToStep(2)}
-        >
-          <div class="v-circle">2</div>
-          <div class="v-info">
-            <span class="v-title">Teknis & Timeline</span>
-            <span class="v-desc">PM, target, tech stack</span>
-          </div>
-        </div>
+        {/each}
       </div>
     </div>
 
-    <!-- RIGHT PANEL -->
     <div class="wizard-right">
       <header class="wizard-right-head">
         <button
           type="button"
           class="dash-close"
-          aria-label="Tutup"
+          aria-label="Close"
           onclick={closeCreate}
         >
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -180,14 +190,14 @@
         {#if currentStep === 1}
           <div class="wizard-pane">
             <div class="pane-title-wrap">
-              <h4 class="pane-title">Identitas & Stakeholder</h4>
+              <h4 class="pane-title">Dashboard Identity</h4>
               <p class="pane-sub">
-                Lengkapi informasi dasar mengenai aplikasi/dashboard.
+                General information shown at the top of the dashboard detail.
               </p>
             </div>
 
             <label>
-              <span>Nama Aplikasi / Dashboard <span class="req">*</span></span>
+              <span>Application / Dashboard Name <span class="req">*</span></span>
               <input
                 bind:value={formName}
                 maxlength="80"
@@ -196,110 +206,96 @@
               />
             </label>
             <label>
-              Kode Aplikasi (Opsional)
-              <input
-                bind:value={formCode}
-                maxlength="6"
-                placeholder="Contoh: EDM, OPR"
-              />
-              <span class="input-hint"
-                >Singkatan unik, maksimal 6 karakter.</span
-              >
-            </label>
-            <label>
-              Deskripsi Scope Aplikasi
+              Description
               <textarea
                 rows="3"
                 maxlength="600"
                 bind:value={formDescription}
-                placeholder="Deskripsikan fungsi dan tujuan aplikasi ini..."
+                placeholder="Describe what this application does..."
               ></textarea>
             </label>
+            <label>
+              Unit
+              <select bind:value={formCategory}>
+                <option value="">Select a unit...</option>
+                <option value="Finance">Finance</option>
+                <option value="HR">HR</option>
+                <option value="Operations">Operations</option>
+                <option value="Sales">Sales</option>
+                <option value="Marketing">Marketing</option>
+                <option value="IT">IT</option>
+                <option value="Legal">Legal</option>
+                <option value="General">Other / General</option>
+              </select>
+            </label>
+            <label>
+              <span>PIC <span class="req">*</span></span>
+              <select bind:value={formPic} required>
+                <option value="">Select a PIC...</option>
+                {#each pmOptions as user (user.id)}
+                  <option value={user.name}>{user.name}</option>
+                {/each}
+              </select>
+            </label>
+          </div>
+        {:else if currentStep === 2}
+          <div class="wizard-pane">
+            <div class="pane-title-wrap">
+              <h4 class="pane-title">Teknologi</h4>
+              <p class="pane-sub">
+                Framework and stack used by this application.
+              </p>
+            </div>
 
             <div class="grid-2">
-              <label>
-                Kategori / Departemen
-                <select bind:value={formCategory}>
-                  <option value="">Pilih Kategori...</option>
-                  <option value="Finance">Finance</option>
-                  <option value="HR">HR</option>
-                  <option value="Operations">Operations</option>
-                  <option value="Sales">Sales</option>
-                  <option value="Marketing">Marketing</option>
-                  <option value="IT">IT</option>
-                  <option value="Legal">Legal</option>
-                  <option value="General">Lainnya / General</option>
-                </select>
-              </label>
-              <label>
-                Pemohon (Business Owner)
-                <input
-                  bind:value={formUser}
-                  maxlength="80"
-                  placeholder="Masukkan nama pemohon..."
-                />
-              </label>
+              {#each profileSpec as field (field.key)}
+                <label>
+                  {field.label}
+                  <input
+                    bind:value={formMeta[field.key]}
+                    maxlength="200"
+                    placeholder={field.placeholder}
+                  />
+                </label>
+              {/each}
             </div>
           </div>
         {:else}
           <div class="wizard-pane">
             <div class="pane-title-wrap">
-              <h4 class="pane-title">Detail Teknis & Timeline</h4>
+              <h4 class="pane-title">Infrastructure</h4>
               <p class="pane-sub">
-                Spesifikasi teknis, tenggat waktu, dan penanggung jawab.
+                Links and database access for each environment.
               </p>
             </div>
 
-            <div class="grid-2">
-              <label>
-                <span>PM (Project Manager) <span class="req">*</span></span>
-                <select bind:value={formPm} required>
-                  <option value="">Pilih PM...</option>
-                  {#each pmOptions as user (user.id)}
-                    <option value={user.name}>{user.name}</option>
+            {#each envs as env (env.key)}
+              <div class="wizard-env">
+                <h5 class="wizard-env-title">{env.label}</h5>
+                <label>
+                  Link {env.label}
+                  <input
+                    bind:value={formMeta[`${env.key}_link`]}
+                    maxlength="500"
+                    placeholder="https://..."
+                  />
+                </label>
+                <div class="grid-2">
+                  {#each envSpec as field (field.key)}
+                    <label>
+                      {field.label}
+                      <input
+                        type={field.secret ? 'password' : 'text'}
+                        autocomplete={field.secret ? 'new-password' : 'off'}
+                        bind:value={formMeta[`${env.key}_${field.key}`]}
+                        maxlength="200"
+                        placeholder={field.placeholder}
+                      />
+                    </label>
                   {/each}
-                </select>
-              </label>
-              <label>
-                Prioritas Pengerjaan
-                <select bind:value={formPriority}>
-                  <option value="high">Tinggi (High)</option>
-                  <option value="medium">Sedang (Medium)</option>
-                  <option value="low">Rendah (Low)</option>
-                </select>
-              </label>
-            </div>
-
-            <div class="grid-2">
-              <label>
-                Tanggal Mulai
-                <input type="date" bind:value={formStartDate} />
-              </label>
-              <label>
-                Target Selesai
-                <input type="date" bind:value={formTargetDate} />
-              </label>
-            </div>
-
-            <label>
-              Platform / Tujuan Deploy
-              <input
-                bind:value={formPlatform}
-                maxlength="200"
-                placeholder="Contoh: Web, Mobile, https://app..."
-              />
-            </label>
-            <label>
-              Tech Stack
-              <input
-                bind:value={formTechStack}
-                maxlength="150"
-                placeholder="Contoh: Svelte, Laravel, PostgreSQL"
-              />
-              <span class="input-hint"
-                >Pisahkan dengan koma jika lebih dari satu.</span
-              >
-            </label>
+                </div>
+              </div>
+            {/each}
           </div>
         {/if}
       </div>
@@ -313,35 +309,18 @@
       <footer class="wizard-foot">
         {#if currentStep === 1}
           <button type="button" class="dash-cancel" onclick={closeCreate}
-            >Batal</button
+            >Cancel</button
           >
-          <button type="button" class="dash-save wizard-btn" onclick={nextStep}>
-            Selanjutnya
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7" /></svg
-            >
-          </button>
         {:else}
           <button type="button" class="dash-cancel" onclick={prevStep}
-            >Kembali</button
+            >Back</button
           >
-          <button type="submit" class="dash-save wizard-btn finish">
-            Simpan Proyek
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.5"><path d="M20 6L9 17l-5-5" /></svg
-            >
+        {/if}
+        {#if currentStep < steps.length}
+          <button type="button" class="dash-save wizard-btn" onclick={nextStep}>Next</button>
+        {:else}
+          <button type="submit" class="dash-save wizard-btn finish" disabled={saving}>
+            {saving ? 'Saving...' : 'Save Project'}
           </button>
         {/if}
       </footer>

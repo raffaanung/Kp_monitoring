@@ -77,11 +77,11 @@
           </svg>
         </div>
         <div class="header-text">
-          <h3>Ubah Informasi Umum</h3>
+          <h3>Edit General Information</h3>
           <p>Perbarui identitas dan detail utama aplikasi ini.</p>
         </div>
       </div>
-      <button type="button" class="dash-close close-btn-premium" onclick={closeEdit} aria-label="Tutup">
+      <button type="button" class="dash-close close-btn-premium" onclick={closeEdit} aria-label="Close">
         <svg viewBox="0 0 24 24" fill="none"><path d="M7 7l10 10M17 7 7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
       </button>
     </header>
@@ -89,7 +89,7 @@
     <div class="wizard-body-scroll edit-body">
       <div class="form-group-premium">
         <label>
-          <span>Nama Aplikasi / Dashboard <span class="req">*</span></span>
+          <span>Application / Dashboard Name <span class="req">*</span></span>
           <input class="input-premium" bind:value={formName} required maxlength="80" placeholder="Contoh: Operation Dashboard" />
         </label>
       </div>
@@ -111,8 +111,8 @@
       
       <div class="form-group-premium">
         <label>
-          <span>Deskripsi Scope Aplikasi</span>
-          <textarea class="input-premium textarea-premium" rows="3" bind:value={formDescription} maxlength="600" placeholder="Jelaskan fungsi aplikasi secara singkat..."></textarea>
+          <span>Application scope</span>
+          <textarea class="input-premium textarea-premium" rows="3" bind:value={formDescription} maxlength="600" placeholder="Briefly describe what this application does..."></textarea>
         </label>
       </div>
       
@@ -122,7 +122,7 @@
             <span>Kategori</span>
             <div class="select-wrapper">
               <select class="input-premium" bind:value={formCategory}>
-                <option value="">Pilih Kategori...</option>
+                <option value="">Select a category...</option>
                 <option value="Finance">Finance</option>
                 <option value="HR">HR</option>
                 <option value="Operations">Operations</option>
@@ -130,14 +130,14 @@
                 <option value="Marketing">Marketing</option>
                 <option value="IT">IT</option>
                 <option value="Legal">Legal</option>
-                <option value="General">Lainnya / General</option>
+                <option value="General">Other / General</option>
               </select>
             </div>
           </label>
         </div>
         <div class="form-group-premium">
           <label>
-            <span>Prioritas Pengerjaan</span>
+            <span>Work priority</span>
             <div class="select-wrapper">
               <select class="input-premium" bind:value={formPriority}>
                 <option value="high">Tinggi (High)</option>
@@ -153,7 +153,7 @@
         <div class="form-group-premium">
           <label>
             <span>PIC / Pemohon</span>
-            <input class="input-premium" bind:value={formUser} list="edit-user-options" placeholder="Pilih atau ketik PIC..." />
+            <input class="input-premium" bind:value={formUser} list="edit-user-options" placeholder="Select or type a PIC..." />
             <datalist id="edit-user-options">
               {#each userOptions as user}
                 <option value={user.name}></option>
@@ -171,14 +171,14 @@
     </div>
     
     <footer class="edit-footer">
-      <button type="button" class="btn-cancel-premium" onclick={closeEdit}>Batal</button>
+      <button type="button" class="btn-cancel-premium" onclick={closeEdit}>Cancel</button>
       <button type="submit" class="btn-save-premium">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
           <polyline points="17 21 17 13 7 13 7 21"></polyline>
           <polyline points="7 3 7 8 15 8"></polyline>
         </svg>
-        Simpan Perubahan
+        Save Changes
       </button>
     </footer>
   </form>

@@ -38,8 +38,8 @@
   {#if !team}
     <GlassPanel>
       <div class="empty-state">
-        <p>Tim tidak ditemukan.</p>
-        <a href="/access/teams" class="back">â† Kembali ke daftar tim</a>
+        <p>Team not found.</p>
+        <a href="/access/teams" class="back">← Back to team list</a>
       </div>
     </GlassPanel>
   {:else}
@@ -47,11 +47,11 @@
       <SubmenuHeader
         eyebrow="User Access"
         title="Team Detail"
-        sub={team.description || 'Detail anggota dan dashboard tim'}
+        sub={team.description || 'Team members and dashboards'}
         meta={team.name}
       >
         {#snippet actions()}
-          <a href="/access/teams" class="btn-ghost">â† Daftar Tim</a>
+          <a href="/access/teams" class="btn-ghost">← Team list</a>
         {/snippet}
       </SubmenuHeader>
 
@@ -65,7 +65,7 @@
           <strong>{lead?.name || 'â€”'}</strong>
         </div>
         <div class="meta-card">
-          <span class="label">Anggota</span>
+          <span class="label">Members</span>
           <strong>{members.length} orang</strong>
         </div>
         <div class="meta-card">
@@ -77,9 +77,9 @@
 
     <div class="columns">
       <GlassPanel class="fill">
-        <h3>Anggota Tim</h3>
+        <h3>Team Members</h3>
         {#if members.length === 0}
-          <p class="state">Belum ada anggota.</p>
+          <p class="state">No members yet.</p>
         {:else}
           <div class="member-list">
             {#each members as user (user.id)}
@@ -107,7 +107,7 @@
       <GlassPanel class="fill side">
         <h3>Dashboard Terkait</h3>
         {#if team.dashboards.length === 0}
-          <p class="state">Belum ada dashboard.</p>
+          <p class="state">No dashboards yet.</p>
         {:else}
           <ul class="dash-list">
             {#each team.dashboards as dash}

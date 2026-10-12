@@ -81,7 +81,7 @@
     <p class="menu-title">{name} &middot; {label}</p>
     <a class="profile-link" href="/access/profile" onclick={close}>Buka halaman profil</a>
     <button type="button" class="option logout" onclick={doLogout}>
-      <strong>Keluar</strong>
+      <strong>Log out</strong>
     </button>
   </div>
 {/if}

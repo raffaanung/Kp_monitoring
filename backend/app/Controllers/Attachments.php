@@ -15,7 +15,7 @@ class Attachments extends BaseController
         $ownerType = (string) $this->request->getGet('owner_type');
         $ownerId   = $this->uuidOrNull($this->request->getGet('owner_id'));
         if ($ownerType === '' || $ownerId === null) {
-            return $this->jsonError('owner_type dan owner_id wajib diisi', 422);
+            return $this->jsonError('owner_type and owner_id are required', 422);
         }
 
         $rows = (new AttachmentModel())->forOwner($ownerType, $ownerId);
@@ -30,16 +30,16 @@ class Attachments extends BaseController
         $file      = $this->request->getFile('file');
 
         if (! in_array($ownerType, ['requirement', 'dashboard'], true) || $ownerId === null) {
-            return $this->jsonError('owner_type dan owner_id wajib diisi', 422);
+            return $this->jsonError('owner_type and owner_id are required', 422);
         }
         if ($file === null || ! $file->isValid()) {
-            return $this->jsonError('File tidak valid', 422);
+            return $this->jsonError('That file is not valid', 422);
         }
         if ($file->getSize() > self::MAX_BYTES) {
-            return $this->jsonError('File lebih dari 20 MB', 422);
+            return $this->jsonError('File is larger than 20 MB', 422);
         }
         if (! $file->getSize()) {
-            return $this->jsonError('File kosong', 422);
+            return $this->jsonError('The file is empty', 422);
         }
 
         $user = $this->authUser();
@@ -78,7 +78,7 @@ class Attachments extends BaseController
         $model = new AttachmentModel();
         $row   = $model->find($id);
         if ($row === null) {
-            return $this->jsonError('File tidak ditemukan', 404);
+            return $this->jsonError('File not found', 404);
         }
         $path = WRITEPATH . 'uploads/' . $row['file_path'];
         if (is_file($path)) {
@@ -93,11 +93,11 @@ class Attachments extends BaseController
     {
         $row = (new AttachmentModel())->find($id);
         if ($row === null) {
-            return $this->jsonError('File tidak ditemukan', 404);
+            return $this->jsonError('File not found', 404);
         }
         $path = WRITEPATH . 'uploads/' . $row['file_path'];
         if (! is_file($path)) {
-            return $this->jsonError('File tidak ditemukan', 404);
+            return $this->jsonError('File not found', 404);
         }
 
         $isPdf       = $row['file_kind'] === 'pdf';

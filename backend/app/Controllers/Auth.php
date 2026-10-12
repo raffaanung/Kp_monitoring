@@ -15,18 +15,18 @@ class Auth extends BaseController
         $password = (string) $this->request->getJsonVar('password');
 
         if ($username === '' || $password === '') {
-            return $this->jsonError('Username dan password wajib diisi', 422);
+            return $this->jsonError('Username and password are required', 422);
         }
 
         $userModel = new UserModel();
         $user      = $userModel->findByUsername($username);
 
         if ($user === null || $user['password_hash'] === null || ! password_verify($password, $user['password_hash'])) {
-            return $this->jsonError('Username atau password salah', 401);
+            return $this->jsonError('Incorrect username or password', 401);
         }
 
         if ($user['status'] !== 'active') {
-            return $this->jsonError('Akun tidak aktif', 403);
+            return $this->jsonError('This account is inactive', 403);
         }
 
         session()->regenerate();
@@ -39,23 +39,23 @@ class Auth extends BaseController
     {
         $user = $this->authUser();
         if ($user === null) {
-            return $this->jsonError('Belum login', 401);
+            return $this->jsonError('Not signed in', 401);
         }
 
         $name     = trim((string) $this->request->getJsonVar('name'));
         $username = trim((string) $this->request->getJsonVar('username'));
 
         if ($name === '') {
-            return $this->jsonError('Nama tampilan wajib diisi', 422);
+            return $this->jsonError('Display name is required', 422);
         }
         if (! preg_match('/^\d{8}$/', $username)) {
-            return $this->jsonError('Username harus 8 digit angka', 422);
+            return $this->jsonError('Username must be 8 digits', 422);
         }
 
         $userModel = new UserModel();
         $dup       = $userModel->where('username', $username)->where('id !=', $user['id'])->first();
         if ($dup !== null) {
-            return $this->jsonError('Username sudah dipakai', 422);
+            return $this->jsonError('That username is already in use', 422);
         }
 
         $userModel->update($user['id'], ['name' => $name, 'username' => $username]);
@@ -67,17 +67,17 @@ class Auth extends BaseController
     {
         $user = $this->authUser();
         if ($user === null) {
-            return $this->jsonError('Belum login', 401);
+            return $this->jsonError('Not signed in', 401);
         }
 
         $current = (string) $this->request->getJsonVar('current_password');
         $new     = (string) $this->request->getJsonVar('new_password');
 
         if ($user['password_hash'] === null || ! password_verify($current, $user['password_hash'])) {
-            return $this->jsonError('Password saat ini salah', 401);
+            return $this->jsonError('Current password is incorrect', 401);
         }
         if (strlen($new) < 6) {
-            return $this->jsonError('Password baru minimal 6 karakter', 422);
+            return $this->jsonError('New password must be at least 6 characters', 422);
         }
 
         (new UserModel())->update($user['id'], ['password_hash' => password_hash($new, PASSWORD_DEFAULT)]);
@@ -89,15 +89,15 @@ class Auth extends BaseController
     {
         $user = $this->authUser();
         if ($user === null) {
-            return $this->jsonError('Belum login', 401);
+            return $this->jsonError('Not signed in', 401);
         }
 
         $file = $this->request->getFile('avatar');
         if ($file === null || ! $file->isValid() || ! $file->getClientMimeType() || ! str_starts_with($file->getClientMimeType(), 'image/')) {
-            return $this->jsonError('File harus berupa gambar', 422);
+            return $this->jsonError('The file must be an image', 422);
         }
         if ($file->getSize() > 1_500_000) {
-            return $this->jsonError('Ukuran maksimal 1.5 MB', 422);
+            return $this->jsonError('Maximum size is 1.5 MB', 422);
         }
 
         $dir = WRITEPATH . 'uploads/avatars';
@@ -116,7 +116,7 @@ class Auth extends BaseController
     {
         $user = $this->authUser();
         if ($user === null) {
-            return $this->jsonError('Belum login', 401);
+            return $this->jsonError('Not signed in', 401);
         }
         (new UserModel())->update($user['id'], ['avatar_path' => null]);
 
@@ -134,11 +134,11 @@ class Auth extends BaseController
     {
         $user = (new UserModel())->find($id);
         if ($user === null || ! $user['avatar_path']) {
-            return $this->jsonError('Avatar tidak ditemukan', 404);
+            return $this->jsonError('Avatar not found', 404);
         }
         $path = WRITEPATH . 'uploads/' . $user['avatar_path'];
         if (! is_file($path)) {
-            return $this->jsonError('Avatar tidak ditemukan', 404);
+            return $this->jsonError('Avatar not found', 404);
         }
 
         return $this->response
@@ -151,14 +151,14 @@ class Auth extends BaseController
     {
         $userId = session()->get('user_id');
         if (! Id::isValid($userId)) {
-            return $this->jsonError('Belum login', 401);
+            return $this->jsonError('Not signed in', 401);
         }
 
         $payload = $this->currentUserPayload($userId);
         if ($payload === null) {
             session()->destroy();
 
-            return $this->jsonError('Belum login', 401);
+            return $this->jsonError('Not signed in', 401);
         }
 
         return $this->jsonOk($payload);

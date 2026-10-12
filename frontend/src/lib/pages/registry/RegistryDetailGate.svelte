@@ -1,4 +1,4 @@
-﻿<script>
+<script>
   import { goto } from '$app/navigation'
   import GlassPanel from '$lib/GlassPanel.svelte'
   import SubmenuHeader from '$lib/SubmenuHeader.svelte'
@@ -23,15 +23,15 @@
 <section class="page">
   <GlassPanel>
     <SubmenuHeader
-      eyebrow="Dashboard Registry"
+      eyebrow="Workspaces"
       title="Dashboard Detail"
-      sub="Pilih dashboard dari daftar untuk melihat requirements dan activity log"
+      sub="Select a dashboard from the list to view requirements and the activity log"
     />
 
     {#if !target}
       <div class="empty">
-        <p>Belum ada dashboard yang dibuka. Buka salah satu dari Daftar Dashboard terlebih dahulu.</p>
-        <a class="btn" href="/registry/list">Ke Daftar Dashboard</a>
+        <p>No dashboard is open. Open one from the dashboard list first.</p>
+        <a class="btn" href="/registry/list">Go to dashboard list</a>
       </div>
     {/if}
   </GlassPanel>

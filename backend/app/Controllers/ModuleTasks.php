@@ -21,7 +21,7 @@ class ModuleTasks extends BaseController
     {
         $user = $this->authUser();
         if ($user === null) {
-            return $this->jsonError('Belum login', 401);
+            return $this->jsonError('Not signed in', 401);
         }
 
         $filters = [
@@ -48,15 +48,15 @@ class ModuleTasks extends BaseController
     {
         $user = $this->authUser();
         if ($user === null) {
-            return $this->jsonError('Belum login', 401);
+            return $this->jsonError('Not signed in', 401);
         }
 
         $row = (new TaskModel())->findRichById($id);
         if ($row === null) {
-            return $this->jsonError('Task tidak ditemukan', 404);
+            return $this->jsonError('Task not found', 404);
         }
         if (! TaskPolicy::canViewTask($user, $row)) {
-            return $this->jsonError('Anda tidak berhak melihat task ini', 403);
+            return $this->jsonError('You are not allowed to view this task', 403);
         }
 
         return $this->jsonOk($this->shapeDetailRow($row));
@@ -66,7 +66,7 @@ class ModuleTasks extends BaseController
     {
         $user = $this->authUser();
         if (! TaskPolicy::canCreateTask($user)) {
-            return $this->jsonError('Anda tidak punya izin Tambah Task', 403);
+            return $this->jsonError('You do not have permission to add a task', 403);
         }
 
         $title         = trim((string) $this->request->getJsonVar('title'));
@@ -78,20 +78,20 @@ class ModuleTasks extends BaseController
         $status        = (string) ($this->request->getJsonVar('status') ?: 'backlog');
 
         if ($title === '' || $requirementId === null) {
-            return $this->jsonError('Judul dan requirement wajib diisi', 422);
+            return $this->jsonError('Title and requirement are required', 422);
         }
 
         $dashboardModel = new DashboardModel();
         $dashboard      = $dashboardModel->where('name', $dashboardName)->first();
         if ($dashboard === null) {
-            return $this->jsonError('Dashboard tidak ditemukan', 422);
+            return $this->jsonError('Dashboard not found', 422);
         }
         $assignee   = $assigneeName !== '' ? (new UserModel())->where('name', $assigneeName)->first() : null;
         $assigneeId = $assignee['id'] ?? null;
 
         $requirement = (new RequirementModel())->find($requirementId);
         if ($requirement === null) {
-            return $this->jsonError('Requirement tidak ditemukan', 422);
+            return $this->jsonError('Requirement not found', 422);
         }
         // Owner requirement = task langsung approved. Selain owner (misal assignee) = menunggu approval owner dulu.
         $isOwner       = TaskPolicy::isRequirementOwner($user, $requirement);
@@ -162,14 +162,14 @@ class ModuleTasks extends BaseController
         $taskModel = new TaskModel();
         $task      = $taskModel->find($taskId);
         if ($task === null) {
-            return $this->jsonError('Task tidak ditemukan', 404);
+            return $this->jsonError('Task not found', 404);
         }
         $requirement = $task['requirement_id'] ? (new RequirementModel())->find($task['requirement_id']) : null;
         if ($requirement === null || ! TaskPolicy::isRequirementOwner($user, $requirement)) {
-            return $this->jsonError('Hanya owner requirement yang dapat menyetujui task ini', 403);
+            return $this->jsonError('Only the requirement owner can approve this task', 403);
         }
         if ($task['approval_state'] !== 'pending') {
-            return $this->jsonError('Task tidak sedang menunggu approval', 422);
+            return $this->jsonError('This task is not waiting for approval', 422);
         }
 
         $note       = trim((string) ($this->request->getJsonVar('note') ?? ''));
@@ -203,14 +203,14 @@ class ModuleTasks extends BaseController
         $taskModel = new TaskModel();
         $task      = $taskModel->find($taskId);
         if ($task === null) {
-            return $this->jsonError('Task tidak ditemukan', 404);
+            return $this->jsonError('Task not found', 404);
         }
         $requirement = $task['requirement_id'] ? (new RequirementModel())->find($task['requirement_id']) : null;
         if ($requirement === null || ! TaskPolicy::isRequirementOwner($user, $requirement)) {
-            return $this->jsonError('Hanya owner requirement yang dapat meminta revisi task ini', 403);
+            return $this->jsonError('Only the requirement owner can request a revision', 403);
         }
         if ($task['approval_state'] !== 'pending') {
-            return $this->jsonError('Task tidak sedang menunggu approval', 422);
+            return $this->jsonError('This task is not waiting for approval', 422);
         }
 
         $note       = trim((string) ($this->request->getJsonVar('note') ?? '')) ?: 'Perlu revisi.';
@@ -228,7 +228,7 @@ class ModuleTasks extends BaseController
         ]);
         if ($task['created_by'] && $task['created_by'] !== $user['id']) {
             (new NotificationModel())->notify(
-                'revision', 'Task perlu revisi', "\"{$task['title']}\": {$note}",
+                'revision', 'Task needs revision', "\"{$task['title']}\": {$note}",
                 $task['created_by'], $taskId, $task['dashboard_id'],
             );
         }
@@ -244,16 +244,16 @@ class ModuleTasks extends BaseController
         $taskModel = new TaskModel();
         $task      = $taskModel->find($taskId);
         if ($task === null) {
-            return $this->jsonError('Task tidak ditemukan', 404);
+            return $this->jsonError('Task not found', 404);
         }
         $requirement = $task['requirement_id'] ? (new RequirementModel())->find($task['requirement_id']) : null;
         $isCreator   = (string) ($task['created_by'] ?? '') === (string) $user['id'];
         $isOwner     = $requirement !== null && TaskPolicy::isRequirementOwner($user, $requirement);
         if (! $isCreator && ! $isOwner) {
-            return $this->jsonError('Hanya pembuat atau owner requirement yang dapat mengajukan ulang task ini', 403);
+            return $this->jsonError('Only the creator or the requirement owner can resubmit this task', 403);
         }
         if ($task['approval_state'] !== 'revision') {
-            return $this->jsonError('Task tidak sedang dalam status revisi', 422);
+            return $this->jsonError('This task is not in revision', 422);
         }
 
         $taskModel->update($taskId, ['approval_state' => 'pending']);
@@ -279,13 +279,13 @@ class ModuleTasks extends BaseController
         $user   = $this->authUser();
         $role   = TaskPolicy::functionalRole($user['role_name'] ?? null);
         if ($role !== 'pm') {
-            return $this->jsonError('Hanya PM yang dapat mengubah detail task', 403);
+            return $this->jsonError('Only a PM can edit task details', 403);
         }
 
         $taskModel = new TaskModel();
         $task      = $taskModel->find($taskId);
         if ($task === null) {
-            return $this->jsonError('Task tidak ditemukan', 404);
+            return $this->jsonError('Task not found', 404);
         }
 
         $before = $this->baseShape($taskModel->findRichById($taskId));
@@ -345,11 +345,11 @@ class ModuleTasks extends BaseController
         $taskModel = new TaskModel();
         $task      = $taskModel->find($taskId);
         if ($task === null) {
-            return $this->jsonError('Task tidak ditemukan', 404);
+            return $this->jsonError('Task not found', 404);
         }
         $dashboard = $task['dashboard_id'] ? (new DashboardModel())->find($task['dashboard_id']) : null;
         if ($dashboard === null || ! TaskPolicy::canDeleteTask($user, $dashboard)) {
-            return $this->jsonError('Hanya PM dashboard ini yang dapat menghapus task', 403);
+            return $this->jsonError('Only this dashboard's PM can delete the task', 403);
         }
 
         $taskModel->delete($taskId);
@@ -380,13 +380,13 @@ class ModuleTasks extends BaseController
         $taskModel   = new TaskModel();
         $task        = $taskModel->find($taskId);
         if ($task === null) {
-            return $this->jsonError('Task tidak ditemukan', 404);
+            return $this->jsonError('Task not found', 404);
         }
         $requirement = $task['requirement_id'] ? (new RequirementModel())->find($task['requirement_id']) : null;
         // Owner requirement boleh geser langsung, apa pun role-nya (termasuk Admin) — sama seperti PM.
         $isOwner = $requirement !== null && TaskPolicy::isRequirementOwner($user, $requirement);
         if (! TaskPolicy::canUpdateBoard($user) && ! $isOwner) {
-            return $this->jsonError('Tidak berhak mengubah status task', 403);
+            return $this->jsonError('You are not allowed to change this task's status', 403);
         }
         if ($task['status'] === $status) {
             return $this->jsonOk(['result' => 'moved', 'task' => $this->shapeDetailRow($taskModel->findRichById($taskId))]);
@@ -394,7 +394,7 @@ class ModuleTasks extends BaseController
 
         $moveModel = new TaskStatusMoveModel();
         if ($moveModel->pendingForTask($taskId) !== null) {
-            return $this->jsonError('Masih ada request pindah yang menunggu', 422);
+            return $this->jsonError('A move request is still waiting', 422);
         }
 
         $dashboard = $task['dashboard_id'] ? (new DashboardModel())->find($task['dashboard_id']) : null;
@@ -441,7 +441,7 @@ class ModuleTasks extends BaseController
             return $this->jsonOk(['result' => 'requested', 'move_id' => $moveId, 'task' => $this->shapeDetailRow($taskModel->findRichById($taskId))]);
         }
 
-        return $this->jsonError('Tidak berhak memindahkan task ini', 403);
+        return $this->jsonError('You are not allowed to move this task', 403);
     }
 
     public function approveMove(string $id = '0'): ResponseInterface
@@ -464,20 +464,20 @@ class ModuleTasks extends BaseController
         $taskModel = new TaskModel();
         $task      = $taskModel->find($taskId);
         if ($task === null) {
-            return $this->jsonError('Task tidak ditemukan', 404);
+            return $this->jsonError('Task not found', 404);
         }
         $dashboard   = $task['dashboard_id'] ? (new DashboardModel())->find($task['dashboard_id']) : null;
         $requirement = $task['requirement_id'] ? (new RequirementModel())->find($task['requirement_id']) : null;
         $isPm        = $dashboard !== null && TaskPolicy::isPmOfDashboard($user, $dashboard);
         $isOwner     = $requirement !== null && TaskPolicy::isRequirementOwner($user, $requirement);
         if (! $isPm && ! $isOwner) {
-            return $this->jsonError('Hanya PM dashboard ini atau owner requirement yang dapat memutuskan', 403);
+            return $this->jsonError('Only this dashboard's PM or the requirement owner can decide', 403);
         }
 
         $moveModel = new TaskStatusMoveModel();
         $move      = $moveModel->pendingForTask($taskId);
         if ($move === null) {
-            return $this->jsonError('Tidak ada request yang menunggu', 422);
+            return $this->jsonError('There is no waiting request', 422);
         }
 
         $moveModel->update($move['id'], ['status' => $approve ? 'approved' : 'rejected']);
@@ -520,16 +520,16 @@ class ModuleTasks extends BaseController
 
         $user = $this->authUser();
         if (! TaskPolicy::canCommentOnTask($user)) {
-            return $this->jsonError('Tidak berhak berkomentar', 403);
+            return $this->jsonError('You are not allowed to comment', 403);
         }
         if ($body === '' && ! $evidenceId) {
-            return $this->jsonError('Komentar atau lampiran wajib diisi', 422);
+            return $this->jsonError('A comment or attachment is required', 422);
         }
 
         $taskModel = new TaskModel();
         $task      = $taskModel->find($taskId);
         if ($task === null) {
-            return $this->jsonError('Task tidak ditemukan', 404);
+            return $this->jsonError('Task not found', 404);
         }
 
         (new CommentModel())->insert([

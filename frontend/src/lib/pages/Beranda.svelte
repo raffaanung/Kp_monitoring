@@ -74,10 +74,10 @@
   ]
   const feedOptions = [
     { id: 'tasks', label: 'Task' },
-    { id: 'activity', label: 'Aktivitas' },
+    { id: 'activity', label: 'Activity' },
   ]
   const deadlineOptions = [
-    { id: 'upcoming', label: 'Mendatang' },
+    { id: 'upcoming', label: 'Upcoming' },
     { id: 'overdue', label: 'Overdue' },
   ]
   const boardOptions = [
@@ -182,7 +182,7 @@
         const whenDate = new Date(t.updatedAt)
         const when =
           toISODate(whenDate) === todayISO
-            ? whenDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+            ? whenDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
             : relativeWhen(t.updatedAt, now)
         return { who: t.pic, action, target: t.title, when }
       }),
@@ -215,7 +215,7 @@
       {
         label: 'Total Dashboard',
         value: String(dashboards),
-        note: `${dashboards} sumber · ${periodNote}`,
+        note: `${dashboards} sources · ${periodNote}`,
         icon: 'dash',
         tone: 'mint',
         go: () => pushTaskFilters({}, 'board'),
@@ -223,7 +223,7 @@
       {
         label: 'Total Task',
         value: String(total),
-        note: `semua status · ${periodNote}`,
+        note: `all statuses · ${periodNote}`,
         icon: 'task',
         tone: 'peach',
         go: () => pushTaskFilters({}),
@@ -231,7 +231,7 @@
       {
         label: 'Task Aktif',
         value: String(aktif),
-        note: 'belum selesai · pipeline Kanban',
+        note: 'not done · Kanban pipeline',
         icon: 'aktif',
         tone: 'sky',
         go: () => pushTaskFilters({ aktif: 'yes' }),
@@ -239,15 +239,15 @@
       {
         label: 'Task Overdue',
         value: String(overdue),
-        note: overdue ? `melewati deadline` : 'aman',
+        note: overdue ? `past the deadline` : 'on track',
         icon: 'alert',
         tone: 'rose',
         go: () => pushTaskFilters({ overdue: 'yes' }),
       },
       {
-        label: 'Task Selesai',
+        label: 'Tasks Done',
         value: String(done),
-        note: total ? `${Math.round((100 * done) / total)}% dari total` : 'dari total task',
+        note: total ? `${Math.round((100 * done) / total)}% of total` : 'of all tasks',
         icon: 'done',
         tone: 'sand',
         go: () => pushTaskFilters({ status: 'selesai' }),
@@ -255,7 +255,7 @@
     ]
   })
 
-  const requirementLabels = ['Open', 'In progress', 'Selesai']
+  const requirementLabels = ['Open', 'In progress', 'Done']
   const requirementColors = ['#94a3b8', '#065fc6', '#2f7a52']
 
   let chartDashboard = $state('')
@@ -328,13 +328,13 @@
 
   const boardTitle = $derived.by(() => {
     if (period === 'today') {
-      return now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' })
+      return now.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' })
     }
     if (period === 'week') {
       const start = boardBuckets[0]?.start
       const end = boardBuckets[boardBuckets.length - 1]?.end
       if (!start || !end) return 'This week'
-      return `${start.getDate()}–${end.getDate()} ${end.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}`
+      return `${start.getDate()}–${end.getDate()} ${end.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`
     }
     return monthLabel(now.getFullYear(), now.getMonth())
   })
@@ -360,7 +360,7 @@
   })
 
   const todayChip = $derived(
-    now.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' }),
+    now.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' }),
   )
 
   const axisWeeks = $derived(
@@ -368,7 +368,7 @@
       if (period === 'today') {
         return {
           ...w,
-          range: now.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }),
+          range: now.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }),
           isCurrent: true,
         }
       }
@@ -379,8 +379,8 @@
           isCurrent: i === currentWeekIdx,
         }
       }
-      const startMo = w.start.toLocaleDateString('id-ID', { month: 'short' })
-      const endMo = w.end.toLocaleDateString('id-ID', { month: 'short' })
+      const startMo = w.start.toLocaleDateString('en-US', { month: 'short' })
+      const endMo = w.end.toLocaleDateString('en-US', { month: 'short' })
       const rangeLabel =
         startMo === endMo
           ? `${w.start.getDate()}–${w.end.getDate()} ${startMo}`
@@ -470,7 +470,7 @@
   /** @param {string} status */
   function statusLabel(status) {
     if (boardView !== 'requirement') return workflowLabel(status)
-    if (status === 'done') return 'Selesai'
+    if (status === 'done') return 'Done'
     if (status === 'in_progress') return 'In progress'
     return 'Open'
   }
@@ -483,7 +483,7 @@
 
   /** @param {string} date */
   function formatDate(date) {
-    return new Date(date + 'T00:00:00').toLocaleDateString('id-ID', {
+    return new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
       day: 'numeric',
       month: 'short',
       year: 'numeric',
@@ -552,7 +552,7 @@
       <div class="headline-meta">
         <div class="hero-stats">
           <div class="stat">
-            <span>Deadline hari ini</span>
+            <span>Due today</span>
             <div><strong>{heroStats.deadlineToday}</strong></div>
           </div>
           <div class="stat">
@@ -572,10 +572,10 @@
     <div class="metrics">
       {#key period}
         {#each metrics as m, i (m.label)}
+          <div class="metric-shell" in:fly={{ y: 8, duration: 240, delay: i * 40 }}>
           <button
             type="button"
             class="metric-card liquidGlass-wrapper {m.tone} clickable"
-            in:fly={{ y: 8, duration: 240, delay: i * 40 }}
             onclick={() => m.go()}
           >
           <div class="liquidGlass-effect"></div>
@@ -605,6 +605,7 @@
 
           <small class="metric-note">{m.note}</small>
         </button>
+          </div>
         {/each}
       {/key}
     </div>
@@ -621,7 +622,7 @@
                 {#if chartView === 'dashboard'}
                   Jumlah task per dashboard
                 {:else}
-                  Open · In progress · Selesai{chartDashboard ? ` · ${chartDashboard}` : ''}
+                  Open · In progress · Done{chartDashboard ? ` · ${chartDashboard}` : ''}
                 {/if}
               </p>
             </div>
@@ -637,7 +638,7 @@
             <label class="chart-dash">
               <span>Dashboard</span>
               <select bind:value={chartDashboard}>
-                <option value="">Semua</option>
+                <option value="">All</option>
                 {#each chartDashboards as name}
                   <option value={name}>{name}</option>
                 {/each}
@@ -658,7 +659,7 @@
                   colors={dashboardBar.colors}
                 />
               {:else}
-                <p class="sub">Belum ada task pada periode ini.</p>
+                <p class="sub">No tasks in this period yet.</p>
               {/if}
             </div>
           </div>
@@ -746,7 +747,7 @@
                 <div class="track-set" in:fade={{ duration: 160 }}>
                   {#if weekItems.length === 0}
                     <div class="week-empty">
-                      <p>Belum ada {boardUnit} di {boardTitle}</p>
+                      <p>No {boardUnit} in {boardTitle} yet</p>
                     </div>
                   {:else}
                     {#each weekItems as item (boardView + '-' + item.task.id)}
@@ -772,11 +773,8 @@
                           <div class="event-solid" style="flex:{barProgress(item.task.status)}">
                             <div class="event-copy">
                               <strong>{item.task.title}</strong>
-                              <small>{item.task.meta} · {statusLabel(item.task.status)}</small>
                             </div>
-                            <div class="event-people">
-                              <span class="face-mini">{initials(item.task.pic)}</span>
-                            </div>
+                            <span class="face-mini">{initials(item.task.pic)}</span>
                           </div>
                           {#if barProgress(item.task.status) < 1}
                             <div class="event-ghost" style="flex:{1 - barProgress(item.task.status)}"></div>
@@ -820,7 +818,7 @@
       <article class="panel feed-panel">
         <div class="panel-head compact">
           <div class="head-copy">
-            <h2>Update Terbaru</h2>
+            <h2>Latest Updates</h2>
             <p class="sub">
               {#if feedTab === 'tasks'}Baru dibuat / di-update{:else}Log operasional{/if}
             </p>
@@ -866,7 +864,7 @@
                 <thead>
                   <tr>
                     <th>PIC</th>
-                    <th>Aktivitas</th>
+                    <th>Activity</th>
                     <th class="col-when">Waktu</th>
                   </tr>
                 </thead>
@@ -912,7 +910,7 @@
                   : pushTaskFilters({ aktif: 'yes' })
               }
             >
-              Lihat list
+              View list
             </button>
             <GlassSwitch
               class="compact"
@@ -999,10 +997,11 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
-    flex: 1;
-    min-height: 0;
+    flex: 1 0 auto;
     height: auto;
-    padding-bottom: 32px;
+    min-height: 100%;
+    overflow: visible;
+    padding-bottom: 2px;
     color: #1a1a1a;
   }
 
@@ -1053,16 +1052,16 @@
   .page-header {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 12px;
     margin: 0;
-    padding: 2px 0 0;
+    padding: 2px 0 2px;
   }
 
   /* Switch sits in the free space between logo and tools, so both gaps match */
   .topbar {
     display: flex;
     align-items: center;
-    gap: 20px;
+    gap: 24px;
     min-height: 48px;
     overflow: visible;
   }
@@ -1094,7 +1093,7 @@
     display: flex;
     align-items: center;
     flex-shrink: 0;
-    gap: 8px;
+    gap: 12px;
     min-width: 0;
   }
 
@@ -1146,7 +1145,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 24px;
+    gap: 28px;
     min-height: 0;
   }
 
@@ -1155,7 +1154,7 @@
   }
 
   .hero-sub {
-    margin: 0 0 5px;
+    margin: 0 0 6px;
     color: #8e8e93;
     font-size: 0.68rem;
     line-height: 1.3;
@@ -1181,7 +1180,7 @@
     display: grid;
     grid-auto-flow: column;
     grid-auto-columns: minmax(7.2rem, max-content);
-    column-gap: 28px;
+    column-gap: 32px;
     align-items: start;
   }
 
@@ -1294,9 +1293,10 @@
     display: flex;
     flex-direction: column;
     margin-top: 0;
+    flex-shrink: 0;
     padding: 14px;
-    border-radius: 28px;
-    overflow: hidden;
+    border-radius: 24px;
+    overflow: visible;
     isolation: isolate;
     background:
       radial-gradient(90% 120% at 100% 0%, rgba(51, 158, 245, 0.45), transparent 55%),
@@ -1332,25 +1332,40 @@
     margin: 0;
   }
 
+  .metric-shell {
+    min-width: 0;
+    padding: 4px;
+    border-radius: 22px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(255, 255, 255, 0.72) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.95);
+    box-shadow: 0 4px 12px rgba(4, 42, 92, 0.12);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .metric-shell:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 14px rgba(4, 42, 92, 0.16);
+  }
+
   .metric-card {
     position: relative;
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
-    gap: 10px;
-    border-radius: 18px;
-    padding: 14px 14px 12px;
+    justify-content: center;
+    gap: 3px;
+    border-radius: 16px;
+    padding: 10px 12px;
     min-width: 0;
-    min-height: 108px;
-    overflow: hidden;
+    height: auto;
+    min-height: 0;
+    flex-shrink: 0;
+    overflow: visible;
     isolation: isolate;
     color: #0f1b2e;
-    background: linear-gradient(160deg, #f7fbff 0%, #eef5fc 100%);
-    border: 1.5px solid rgba(120, 170, 220, 0.35);
-    box-shadow:
-      0 3px 10px rgba(0, 0, 0, 0.06),
-      inset 1px 1px 0 rgba(255, 255, 255, 0.95);
-    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    background: #fff;
+    border: 1px solid rgba(120, 170, 220, 0.28);
+    box-shadow: 0 1px 2px rgba(15, 27, 46, 0.04);
+    transition: border-color 0.2s ease;
     font: inherit;
     text-align: left;
     width: 100%;
@@ -1358,10 +1373,7 @@
   }
 
   .metric-card.clickable:hover {
-    transform: translateY(-2px);
-    box-shadow:
-      0 6px 16px rgba(0, 0, 0, 0.09),
-      inset 1px 1px 0 rgba(255, 255, 255, 1);
+    box-shadow: 0 1px 2px rgba(15, 27, 46, 0.04);
   }
 
   .metric-card.clickable:focus-visible {
@@ -1372,7 +1384,10 @@
   .metric-card .liquidGlass-effect,
   .metric-card .liquidGlass-tint,
   .metric-card .liquidGlass-shine {
-    border-radius: 18px;
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: inherit;
   }
 
   .metric-card :global(.liquidGlass-effect) {
@@ -1391,9 +1406,6 @@
   /* Family biru — beda lewat outline soft (+ tint sangat tipis) */
   .metric-card.mint {
     border-color: rgba(70, 170, 190, 0.55);
-    box-shadow:
-      0 3px 10px rgba(0, 0, 0, 0.05),
-      inset 1px 1px 0 rgba(255, 255, 255, 0.95);
   }
   .metric-card.mint :global(.liquidGlass-tint) {
     background: linear-gradient(155deg, rgba(90, 190, 200, 0.1) 0%, transparent 60%);
@@ -1401,9 +1413,6 @@
 
   .metric-card.lavender {
     border-color: rgba(120, 140, 210, 0.55);
-    box-shadow:
-      0 3px 10px rgba(0, 0, 0, 0.05),
-      inset 1px 1px 0 rgba(255, 255, 255, 0.95);
   }
   .metric-card.lavender :global(.liquidGlass-tint) {
     background: linear-gradient(155deg, rgba(130, 150, 220, 0.1) 0%, transparent 60%);
@@ -1411,9 +1420,6 @@
 
   .metric-card.peach {
     border-color: rgba(100, 160, 220, 0.55);
-    box-shadow:
-      0 3px 10px rgba(0, 0, 0, 0.05),
-      inset 1px 1px 0 rgba(255, 255, 255, 0.95);
   }
   .metric-card.peach :global(.liquidGlass-tint) {
     background: linear-gradient(155deg, rgba(110, 170, 230, 0.1) 0%, transparent 60%);
@@ -1421,9 +1427,6 @@
 
   .metric-card.sky {
     border-color: rgba(50, 140, 230, 0.58);
-    box-shadow:
-      0 3px 10px rgba(0, 0, 0, 0.05),
-      inset 1px 1px 0 rgba(255, 255, 255, 0.95);
   }
   .metric-card.sky :global(.liquidGlass-tint) {
     background: linear-gradient(155deg, rgba(60, 150, 240, 0.12) 0%, transparent 60%);
@@ -1432,14 +1435,6 @@
   /* Overdue — aksen merah jelas, tetap glass (bukan fill penuh) */
   .metric-card.rose {
     border-color: rgba(220, 80, 95, 0.55);
-    box-shadow:
-      0 3px 10px rgba(0, 0, 0, 0.05),
-      inset 1px 1px 0 rgba(255, 255, 255, 0.95);
-  }
-  .metric-card.rose:hover {
-    box-shadow:
-      0 6px 16px rgba(0, 0, 0, 0.08),
-      inset 1px 1px 0 rgba(255, 255, 255, 0.98);
   }
   .metric-card.rose :global(.liquidGlass-tint) {
     background: linear-gradient(155deg, rgba(235, 90, 105, 0.22) 0%, rgba(255, 200, 205, 0.12) 45%, transparent 70%);
@@ -1462,9 +1457,6 @@
 
   .metric-card.sand {
     border-color: rgba(80, 150, 210, 0.52);
-    box-shadow:
-      0 3px 10px rgba(0, 0, 0, 0.05),
-      inset 1px 1px 0 rgba(255, 255, 255, 0.95);
   }
   .metric-card.sand :global(.liquidGlass-tint) {
     background: linear-gradient(155deg, rgba(90, 160, 220, 0.1) 0%, transparent 60%);
@@ -1485,7 +1477,7 @@
 
   .metric-label {
     font-size: 0.65rem;
-    line-height: 1.25;
+    line-height: 1.2;
     font-weight: 600;
     letter-spacing: -0.01em;
     color: rgba(18, 28, 44, 0.78);
@@ -1493,24 +1485,24 @@
 
   .metric-mid {
     display: flex;
-    align-items: flex-end;
+    align-items: center;
     justify-content: space-between;
-    gap: 10px;
-    margin-top: auto;
+    gap: 8px;
+    min-height: 28px;
   }
 
   .metric-value {
-    font-size: 1.65rem;
+    font-size: 1.45rem;
     font-weight: 750;
     letter-spacing: -0.04em;
-    line-height: 0.95;
+    line-height: 1;
     color: #0b1524;
   }
 
   .metric-icon {
-    width: 34px;
-    height: 34px;
-    border-radius: 11px;
+    width: 30px;
+    height: 30px;
+    border-radius: 10px;
     display: grid;
     place-items: center;
     background: rgba(230, 240, 250, 0.9);
@@ -1556,18 +1548,23 @@
 
   .metric-note {
     display: block;
+    margin: 0;
+    padding: 0;
     font-size: 0.58rem;
-    line-height: 1.3;
+    line-height: 1.25;
     font-weight: 500;
     color: rgba(30, 42, 60, 0.72);
     letter-spacing: -0.01em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .main-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.85fr);
-    grid-template-rows: minmax(280px, auto) minmax(260px, auto);
-    gap: 14px;
+    grid-template-columns: minmax(260px, 0.86fr) minmax(0, 1.7fr);
+    grid-template-rows: minmax(200px, 1fr) minmax(200px, 1fr);
+    gap: 12px;
     min-height: 0;
     flex: 1;
   }
@@ -1576,6 +1573,13 @@
     min-width: 0;
     min-height: 0;
     display: flex;
+    padding: 6px;
+    border-radius: 26px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.78) 0%, rgba(255, 255, 255, 0.46) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.92);
+    box-shadow:
+      0 10px 28px rgba(15, 27, 46, 0.06),
+      inset 0 1px 0 rgba(255, 255, 255, 0.9);
   }
 
   .panel {
@@ -1585,23 +1589,17 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    padding: 18px 20px;
-    border-radius: 22px;
-    background: rgba(255, 255, 255, 0.78);
-    border: 1px solid rgba(255, 255, 255, 0.85);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    box-shadow:
-      0 4px 18px rgba(0, 0, 0, 0.04),
-      0 1px 3px rgba(0, 0, 0, 0.03);
+    padding: 14px 16px;
+    border-radius: 20px;
+    background: #fff;
+    border: 1px solid rgba(15, 27, 46, 0.04);
+    box-shadow: 0 1px 2px rgba(15, 27, 46, 0.04);
     color: #1a1a1a;
     transition: box-shadow 0.25s ease, transform 0.25s ease;
   }
 
   .panel:hover {
-    box-shadow:
-      0 6px 22px rgba(0, 0, 0, 0.06),
-      0 1px 4px rgba(0, 0, 0, 0.03);
+    box-shadow: 0 2px 8px rgba(15, 27, 46, 0.06);
   }
 
   .feed-panel,
@@ -1665,6 +1663,10 @@
   .sub.alert {
     color: #c44a4a;
     font-weight: 600;
+  }
+
+  .chart-panel {
+    overflow: hidden;
   }
 
   .chart-panel .panel-head.compact {
@@ -1754,6 +1756,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    overflow: hidden;
   }
 
   .chart-box.split .chart-plot {
@@ -2137,8 +2140,8 @@
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
-    gap: 3px;
-    padding: 14px 0 2px;
+    gap: 6px;
+    padding: 10px 0 2px;
     overflow-x: hidden;
     overflow-y: auto;
     scrollbar-width: thin;
@@ -2146,7 +2149,7 @@
 
   .day-row {
     position: relative;
-    height: 30px;
+    height: 28px;
     flex: 0 0 auto;
     min-width: 0;
   }
@@ -2255,12 +2258,12 @@
     justify-content: space-between;
     gap: 6px;
     min-width: 0;
-    padding: 0 8px 0 10px;
-    background: color-mix(in srgb, var(--ev, #94a3b8) 46%, #ffffff);
+    padding: 0 6px 0 10px;
+    background: color-mix(in srgb, var(--ev, #94a3b8) 42%, #ffffff);
   }
 
   .event-ghost {
-    min-width: 12px;
+    min-width: 10px;
     background: color-mix(in srgb, var(--ev, #94a3b8) 16%, #ffffff);
   }
 
@@ -2270,33 +2273,24 @@
     display: block;
     font-size: 0.62rem;
     font-weight: 700;
+    color: #1a1a1a;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     line-height: 1.15;
   }
 
-  .event-copy small {
-    display: none;
-  }
-
-  .event-people {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    flex-shrink: 0;
-  }
-
   .face-mini {
     width: 18px;
     height: 18px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.75);
+    background: rgba(255, 255, 255, 0.82);
     color: #3a3a3a;
     display: grid;
     place-items: center;
     font-size: 0.48rem;
     font-weight: 700;
+    flex-shrink: 0;
   }
 
   .more {
@@ -2327,6 +2321,10 @@
     flex: 1;
     min-height: 0;
     overflow: auto;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
   }
 
   .modern-table {
@@ -2517,11 +2515,11 @@
       gap: 10px;
     }
     .metric-card {
-      padding: 12px 12px 10px;
-      min-height: 96px;
+      padding: 9px 12px;
+      min-height: 0;
     }
     .metric-value {
-      font-size: 1.45rem;
+      font-size: 1.35rem;
     }
   }
 

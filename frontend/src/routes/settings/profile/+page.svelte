@@ -109,11 +109,11 @@
     const file = input.files?.[0]
     if (!file) return
     if (!file.type.startsWith('image/')) {
-      photoError = 'Pilih file gambar'
+      photoError = 'Choose an image file'
       return
     }
     if (file.size > 1.5 * 1024 * 1024) {
-      photoError = 'Ukuran maksimal 1.5 MB'
+      photoError = 'Maximum size is 1.5 MB'
       return
     }
     photoFile = file
@@ -125,7 +125,7 @@
     e.preventDefault()
     photoError = ''
     if (!photoFile) {
-      photoError = 'Pilih foto terlebih dahulu'
+      photoError = 'Choose a photo first'
       return
     }
     busy = true
@@ -157,7 +157,7 @@
       infoError = res.error
       return
     }
-    infoOk = 'Profil disimpan'
+    infoOk = 'Profile saved'
     infoOpen = false
   }
 
@@ -166,11 +166,11 @@
     e.preventDefault()
     passwordError = ''
     if (newPassword.length < 6) {
-      passwordError = 'Password baru minimal 6 karakter'
+      passwordError = 'New password must be at least 6 characters'
       return
     }
     if (newPassword !== confirmPassword) {
-      passwordError = 'Konfirmasi password tidak cocok'
+      passwordError = 'Password confirmation does not match'
       return
     }
     busy = true
@@ -195,7 +195,7 @@
     <SubmenuHeader
       eyebrow="User Access"
       title="Profile"
-      sub="Kelola foto dan info akun"
+      sub="Manage your photo and account details"
       meta={shownName}
     />
   </GlassPanel>
@@ -208,7 +208,7 @@
             <h3>Edit Foto</h3>
             <p>Foto profil yang tampil di header aplikasi</p>
           </div>
-          <button type="button" class="btn" onclick={openPhoto}>Ubah foto</button>
+          <button type="button" class="btn" onclick={openPhoto}>Change photo</button>
         </div>
         <div class="photo-row">
           {#if avatarSrc}
@@ -227,13 +227,13 @@
         <div class="card-top">
           <div>
             <h3>Edit Info</h3>
-            <p>Nama tampilan dan username akun</p>
+            <p>Display name and account username</p>
           </div>
           <button type="button" class="btn" onclick={openInfo}>Edit info</button>
         </div>
         <dl class="info-list">
           <div>
-            <dt>Nama tampilan</dt>
+            <dt>Display name</dt>
             <dd>{shownName}</dd>
           </div>
           <div>
@@ -280,9 +280,9 @@
         <div class="modal-head">
           <div>
             <h2 id="edit-photo-title">Edit Foto</h2>
-            <p>Unggah JPG, PNG, atau WebP (maks. 1.5 MB)</p>
+            <p>Upload JPG, PNG, or WebP (max 1.5 MB)</p>
           </div>
-          <button type="button" class="close" aria-label="Tutup" onclick={closePhoto}>×</button>
+          <button type="button" class="close" aria-label="Close" onclick={closePhoto}>×</button>
         </div>
 
         <div class="preview-wrap">
@@ -294,7 +294,7 @@
         </div>
 
         <label class="file-label">
-          <span>Pilih file</span>
+          <span>Choose file</span>
           <input type="file" accept="image/*" onchange={onFileChange} />
         </label>
 
@@ -302,10 +302,10 @@
 
         <div class="actions">
           {#if session?.avatar_url}
-            <button type="button" class="ghost danger" onclick={onClearPhoto} disabled={busy}>Hapus foto</button>
+            <button type="button" class="ghost danger" onclick={onClearPhoto} disabled={busy}>Remove photo</button>
           {/if}
-          <button type="button" class="ghost" onclick={closePhoto}>Batal</button>
-          <button type="submit" class="primary" disabled={busy}>{busy ? 'Menyimpan…' : 'Simpan foto'}</button>
+          <button type="button" class="ghost" onclick={closePhoto}>Cancel</button>
+          <button type="submit" class="primary" disabled={busy}>{busy ? 'Saving…' : 'Save photo'}</button>
         </div>
       </form>
     </div>
@@ -332,12 +332,12 @@
             <h2 id="edit-info-title">Edit Info</h2>
             <p>Perbarui nama dan username akun</p>
           </div>
-          <button type="button" class="close" aria-label="Tutup" onclick={closeInfo}>×</button>
+          <button type="button" class="close" aria-label="Close" onclick={closeInfo}>×</button>
         </div>
 
         <label>
-          <span>Nama tampilan</span>
-          <input bind:value={displayName} placeholder="Nama yang tampil di header" />
+          <span>Display name</span>
+          <input bind:value={displayName} placeholder="Name shown in the header" />
         </label>
 
         <label>
@@ -348,8 +348,8 @@
         {#if infoError}<p class="error">{infoError}</p>{/if}
 
         <div class="actions">
-          <button type="button" class="ghost" onclick={closeInfo}>Batal</button>
-          <button type="submit" class="primary" disabled={busy}>{busy ? 'Menyimpan…' : 'Simpan info'}</button>
+          <button type="button" class="ghost" onclick={closeInfo}>Cancel</button>
+          <button type="submit" class="primary" disabled={busy}>{busy ? 'Saving…' : 'Save info'}</button>
         </div>
       </form>
     </div>
@@ -374,9 +374,9 @@
         <div class="modal-head">
           <div>
             <h2 id="change-password-title">Ganti Password</h2>
-            <p>Masukkan password saat ini, lalu password baru</p>
+            <p>Enter your current password, then a new one</p>
           </div>
-          <button type="button" class="close" aria-label="Tutup" onclick={closePassword}>×</button>
+          <button type="button" class="close" aria-label="Close" onclick={closePassword}>×</button>
         </div>
 
         <label>
@@ -397,8 +397,8 @@
         {#if passwordError}<p class="error">{passwordError}</p>{/if}
 
         <div class="actions">
-          <button type="button" class="ghost" onclick={closePassword}>Batal</button>
-          <button type="submit" class="primary" disabled={busy}>{busy ? 'Menyimpan…' : 'Simpan password'}</button>
+          <button type="button" class="ghost" onclick={closePassword}>Cancel</button>
+          <button type="submit" class="primary" disabled={busy}>{busy ? 'Saving…' : 'Save password'}</button>
         </div>
       </form>
     </div>

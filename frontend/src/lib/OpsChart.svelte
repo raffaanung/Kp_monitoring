@@ -52,8 +52,8 @@
           },
         },
         parentHeightOffset: 0,
-        redrawOnParentResize: true,
-        redrawOnWindowResize: true,
+        redrawOnParentResize: chartType !== 'donut',
+        redrawOnWindowResize: chartType !== 'donut',
       },
       colors: [...colors],
       dataLabels: { enabled: false },
@@ -214,22 +214,11 @@
     if (Math.abs(next - donutSize) >= 2) donutSize = next
   }
 
-  function safeResize() {
-    measureDonut()
+  function resizeBar() {
     const instance = chart
-    if (!instance) return
+    if (!instance || type === 'donut') return
     try {
-      if (type === 'donut' && donutSize > 0) {
-        instance.updateOptions(
-          {
-            chart: { width: donutSize, height: donutSize },
-          },
-          false,
-          false,
-        )
-      } else {
-        instance.resize()
-      }
+      instance.resize()
     } catch {
       /* ignore mid-destroy */
     }
@@ -238,15 +227,18 @@
   $effect(() => {
     const node = el
     const key = chartKey
+    const size = donutSize
     if (!node) return
+    if (type === 'donut' && size <= 0) return
     void key
 
-    measureDonut()
     const instance = new ApexCharts(node, buildOptions(type))
     chart = instance
     instance.render().then(() => {
-      requestAnimationFrame(safeResize)
-      setTimeout(safeResize, 420)
+      const canvases = node.querySelectorAll('.apexcharts-canvas')
+      canvases.forEach((canvas, index) => {
+        if (index < canvases.length - 1) canvas.remove()
+      })
     })
 
     return () => {
@@ -260,24 +252,21 @@
     const host = wrap
     if (!host || typeof ResizeObserver === 'undefined') return
 
+    measureDonut()
+
     let raf = 0
-    let settleTimer = 0
     const ro = new ResizeObserver(() => {
       cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(safeResize)
-      clearTimeout(settleTimer)
-      settleTimer = window.setTimeout(safeResize, 420)
+      raf = requestAnimationFrame(() => {
+        if (type === 'donut') measureDonut()
+        else resizeBar()
+      })
     })
     ro.observe(host)
-
-    const onWin = () => safeResize()
-    window.addEventListener('resize', onWin)
 
     return () => {
       ro.disconnect()
       cancelAnimationFrame(raf)
-      clearTimeout(settleTimer)
-      window.removeEventListener('resize', onWin)
     }
   })
 </script>
@@ -289,7 +278,6 @@
       class:square={type === 'donut'}
       style={type === 'donut' && donutSize ? `width:${donutSize}px;height:${donutSize}px` : undefined}
       bind:this={el}
-      onanimationend={safeResize}
     ></div>
   {/key}
   {#if type === 'donut'}
@@ -326,6 +314,10 @@
 
   .ops-chart.square {
     flex-shrink: 0;
+  }
+
+  .ops-chart-wrap.donut {
+    overflow: hidden;
   }
 
   .ops-chart-wrap.donut .ops-chart {
@@ -386,5 +378,6 @@
   .ops-chart :global(.apexcharts-canvas),
   .ops-chart :global(svg) {
     max-width: 100% !important;
+    max-height: 100% !important;
   }
 </style>

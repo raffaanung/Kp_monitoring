@@ -300,7 +300,7 @@ export function canCommentOnTask() {
 
 /** @param {string} id */
 export function getModuleTask(id) {
-  return taskModuleStore.items.find((t) => t.id === id) || null
+  return taskModuleStore.items.find((t) => String(t.id) === String(id)) || null
 }
 
 /**
@@ -441,7 +441,7 @@ const EVIDENCE_MAX_BYTES = 10 * 1024 * 1024
 export function readEvidenceFile(file) {
   return new Promise((resolve, reject) => {
     if (!file) {
-      reject(new Error('File tidak ada'))
+      reject(new Error('File is missing'))
       return
     }
     if (file.size > EVIDENCE_MAX_BYTES) {
@@ -704,7 +704,7 @@ export const workflowColumns = [
   { key: /** @type {TaskWorkflow} */ ('testing'), label: 'Testing' },
   { key: /** @type {TaskWorkflow} */ ('uat'), label: 'UAT' },
   { key: /** @type {TaskWorkflow} */ ('to_production'), label: 'to Production' },
-  { key: /** @type {TaskWorkflow} */ ('selesai'), label: 'Selesai' },
+  { key: /** @type {TaskWorkflow} */ ('selesai'), label: 'Done' },
 ]
 
 export const workflowStatusColors = {
@@ -733,7 +733,7 @@ export function approvalLabel(state) {
     case 'pending':
       return 'Menunggu approval'
     case 'revision':
-      return 'Perlu revisi'
+      return 'Needs revision'
     case 'approved':
       return 'Approved'
     default:

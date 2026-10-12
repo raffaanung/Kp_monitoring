@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE ?? '/edm-monitor/backend'
+const API_BASE = import.meta.env.VITE_API_BASE ?? '/edm_task/backend'
 
 /** @param {string} path @param {{ method?: string, body?: unknown }} [opts] */
 async function request(path, opts = {}) {

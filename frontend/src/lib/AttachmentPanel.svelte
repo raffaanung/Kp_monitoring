@@ -20,7 +20,7 @@
    *   canManage?: boolean,
    * }}
    */
-  let { ownerType, ownerId, canManage = true } = $props()
+  let { ownerType, ownerId, canManage = true, triggerLabel = 'File Panduan' } = $props()
 
   let open = $state(false)
   let error = $state('')
@@ -70,7 +70,7 @@
         error = result.rejected.map((item) => `${item.name}: ${item.reason}`).join('. ')
       }
     } catch {
-      error = 'File gagal disimpan.'
+      error = 'Could not save the file.'
     } finally {
       busy = false
       input.value = ''
@@ -89,7 +89,7 @@
 </script>
 
 <button type="button" class="pill attach-trigger" onclick={openModal}>
-  File Panduan{files.length ? ` · ${files.length}` : ''}
+  {triggerLabel}{files.length ? ` · ${files.length}` : ''}
 </button>
 
 {#if open}
@@ -107,10 +107,10 @@
     <header class="head">
       <div>
         <p class="eyebrow">File Panduan</p>
-        <h2 id="attach-title">File panduan</h2>
+        <h2 id="attach-title">Guide files</h2>
         <p class="hint">Maksimal 20 MB.</p>
       </div>
-      <button type="button" class="close" aria-label="Tutup" onclick={closeModal}>
+      <button type="button" class="close" aria-label="Close" onclick={closeModal}>
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M7 7l10 10M17 7 7 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
         </svg>
@@ -120,7 +120,7 @@
     <div class="body">
       {#if error}<p class="error">{error}</p>{/if}
       {#if files.length === 0}
-        <p class="empty">Belum ada file panduan.</p>
+        <p class="empty">No guide files yet.</p>
       {:else}
         <ul>
           {#each files as file (file.id)}
@@ -132,9 +132,9 @@
               </div>
               <div class="row-actions">
                 <button type="button" onclick={() => useAttachment(file.id, 'open')}>Buka</button>
-                <button type="button" onclick={() => useAttachment(file.id, 'download')}>Unduh</button>
+                <button type="button" onclick={() => useAttachment(file.id, 'download')}>Download</button>
                 {#if canManage}
-                  <button type="button" class="danger" onclick={() => onRemove(file.id)}>Hapus</button>
+                  <button type="button" class="danger" onclick={() => onRemove(file.id)}>Delete</button>
                 {/if}
               </div>
             </li>
@@ -144,10 +144,10 @@
     </div>
 
     <footer class="foot">
-      <button type="button" class="ghost" onclick={closeModal}>Tutup</button>
+      <button type="button" class="ghost" onclick={closeModal}>Close</button>
       {#if canManage}
         <button type="button" class="primary" onclick={openPicker} disabled={busy}>
-          {busy ? 'Menyimpan…' : 'Unggah'}
+          {busy ? 'Saving…' : 'Upload'}
         </button>
         <input bind:this={picker} type="file" multiple onchange={onPick} />
       {/if}

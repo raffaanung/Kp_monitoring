@@ -6,7 +6,7 @@
   let {
     selesai = [12, 18, 15, 22, 28, 24, 30, 26, 34, 31, 36, 40],
     masuk = [16, 14, 20, 18, 22, 19, 25, 23, 28, 27, 30, 32],
-    months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'],
+    months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
   } = $props()
 
   /** @type {HTMLDivElement | undefined} */
@@ -31,8 +31,8 @@
         },
       },
       series: [
-        { name: 'Selesai', data: selesai },
-        { name: 'Masuk', data: masuk },
+        { name: 'Done', data: selesai },
+        { name: 'Incoming', data: masuk },
       ],
       colors: ['#1a1a1a', '#9a9aa0'],
       stroke: {

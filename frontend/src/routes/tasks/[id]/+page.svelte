@@ -29,6 +29,10 @@
 
   import { page } from '$app/state'
 
+  let { taskId = '', embedded = false, inApproval = false, showBack = false, onBack = () => {} } = $props()
+
+  const activeId = $derived(String(taskId || page.params.id || ''))
+
   let nextStatus = $state(/** @type {'backlog' | 'development' | 'testing' | 'uat' | 'to_production' | 'selesai'} */ ('backlog'))
   let commentBody = $state('')
   let commentEvidence = $state(/** @type {import('../lib/taskModuleStore.svelte.js').EvidenceFile | null} */ (null))
@@ -40,7 +44,7 @@
 
   const task = $derived.by(() => {
     void taskModuleStore.items
-    return page.params.id ? getModuleTask(page.params.id) : null
+    return activeId ? getModuleTask(activeId) : null
   })
 
   const canEdit = $derived.by(() => {
@@ -166,7 +170,7 @@
   let viewing = $state(null)
 
   $effect(() => {
-    const id = page.params.id || null
+    const id = activeId || null
     if (!id || lastLoadedId === id) return
     const item = getModuleTask(id)
     if (!item) return
@@ -210,19 +214,20 @@
       msg = `Pengajuan pindah ke ${workflowLabel(nextStatus)} tercatat`
       clearReply()
     } else if (result === 'moved') {
-      msg = `Status diubah ke ${workflowLabel(nextStatus)}`
+      msg = `Status changed ke ${workflowLabel(nextStatus)}`
       clearReply()
     } else {
-      msg = 'Gagal mengubah status'
+      msg = 'Could not change the status'
     }
     await loadModuleTaskDetail(taskId)
   }
 
   async function onDelete() {
     if (!task || !canEdit) return
-    if (!confirm(`Hapus task "${task.title}"?`)) return
+    if (!confirm(`Delete task "${task.title}"?`)) return
     await deleteModuleTask(task.id)
-    goto('/tasks/list')
+    if (embedded) onBack()
+    else goto('/tasks/list')
   }
 
   async function onApproveMove() {
@@ -230,7 +235,7 @@
     const taskId = task.id
     await approveStatusMove(taskId, commentBody, commentEvidence)
     clearReply()
-    msg = 'Pindah status disetujui dan tercatat di riwayat'
+    msg = 'Status move approved and recorded in the history'
     await loadModuleTaskDetail(taskId)
   }
 
@@ -239,7 +244,7 @@
     const taskId = task.id
     await rejectStatusMove(taskId, commentBody || 'Perlu revisi sebelum pindah status.', commentEvidence)
     clearReply()
-    msg = 'Permintaan revisi tercatat di riwayat'
+    msg = 'Revision request recorded in the history'
     await loadModuleTaskDetail(taskId)
   }
 
@@ -257,7 +262,7 @@
       commentFileLabel = file.name
       msg = ''
     } catch (err) {
-      msg = err instanceof Error ? err.message : 'Gagal membaca file'
+      msg = err instanceof Error ? err.message : 'Could not read the file'
     }
   }
 
@@ -292,18 +297,27 @@
   }
 </script>
 
-<section class="page">
+<section class="page" class:embedded class:in-approval={inApproval}>
   {#if !task}
     <GlassPanel>
-      <p class="state error">Task tidak ditemukan.</p>
-      <a class="pill on back-link" href="/tasks/board">← Kembali ke Board</a>
+      <p class="state error">Task not found.</p>
+      {#if embedded}
+        <button type="button" class="pill on back-link" onclick={onBack}>← Back</button>
+      {:else}
+        <a class="pill on back-link" href="/tasks/board">← Back to Board</a>
+      {/if}
     </GlassPanel>
   {:else}
     <div class="layout">
+      {#if !inApproval}
       <GlassPanel class="span-2">
         <div class="hero">
           <div class="strip">
-            <a class="back" href="/tasks/board" aria-label="Kembali ke board">←</a>
+            {#if embedded}
+              <button type="button" class="back" aria-label="Back" onclick={onBack}>←</button>
+            {:else}
+              <a class="back" href="/tasks/board" aria-label="Back to board">←</a>
+            {/if}
             <div class="strip-copy">
               <div class="meta">
                 <span class="mono-id">{task.code}</span>
@@ -323,13 +337,20 @@
           </div>
         </div>
       </GlassPanel>
+      {/if}
 
       <div class="flow-rail span-2">
         <div class="panel-title">
           <div>
             <p class="eyebrow">Workflow</p>
             <h3>Status</h3>
+            {#if inApproval}
+              <p class="approval-task">{task.code} · {task.title}</p>
+            {/if}
           </div>
+          {#if inApproval && showBack}
+            <button type="button" class="ghost-btn" onclick={onBack}>Daftar approval</button>
+          {/if}
         </div>
         <div class="flow">
           {#each workflowColumns as col, i}
@@ -356,14 +377,14 @@
           <div class="range-pills" role="group" aria-label="Filter waktu">
             <button type="button" class:on={journeyRange === 'today'} onclick={() => (journeyRange = 'today')}>Hari ini</button>
             <button type="button" class:on={journeyRange === 'week'} onclick={() => (journeyRange = 'week')}>Minggu ini</button>
-            <button type="button" class:on={journeyRange === 'all'} onclick={() => (journeyRange = 'all')}>Semua</button>
+            <button type="button" class:on={journeyRange === 'all'} onclick={() => (journeyRange = 'all')}>All</button>
           </div>
         </div>
 
         {#if journey.length === 0}
-          <p class="empty">Belum ada catatan. Teknis dan PM bisa menulis di sini, termasuk lampiran gambar.</p>
+          <p class="empty">No notes yet. Engineers and PMs can write here, including image attachments.</p>
         {:else if visibleJourney.length === 0}
-          <p class="empty">{journeyRange === 'today' ? 'Tidak ada catatan hari ini.' : 'Tidak ada catatan minggu ini.'}</p>
+          <p class="empty">{journeyRange === 'today' ? 'No notes today.' : 'No notes this week.'}</p>
         {:else}
           <ol class="journey">
             {#each visibleJourney as row (row.key)}
@@ -407,7 +428,7 @@
                   Pengajuan {workflowLabel(task.status_move.from)} → {workflowLabel(task.status_move.to)} menunggu PM.
                 </p>
               {:else}
-                <p class="reply-context">Catatan dan gambar akan masuk ke riwayat task.</p>
+                <p class="reply-context">Notes and images are added to the task history.</p>
               {/if}
             </div>
             <div class="reply-field">
@@ -428,13 +449,13 @@
             <div class="decision">
               {#if (asPm || asRequirementOwner) && task.status_move}
                 <button type="button" class="primary" onclick={onApproveMove}>Setujui ke {workflowLabel(task.status_move.to)}</button>
-                <button type="button" class="ghost-btn" onclick={onRejectMove}>Minta revisi</button>
+                <button type="button" class="ghost-btn" onclick={onRejectMove}>Request revision</button>
                 {#if canComment}
                   <button type="submit" class="text-btn">Catat saja</button>
                 {/if}
               {:else if asRequirementOwner && task.approval_state === 'pending'}
                 <button type="button" class="primary" onclick={onApproveTask}>Setujui ke Backlog</button>
-                <button type="button" class="ghost-btn" onclick={onRequestRevisionTask}>Minta revisi</button>
+                <button type="button" class="ghost-btn" onclick={onRequestRevisionTask}>Request revision</button>
               {:else if task.approval_state === 'revision' && (task.created_by === currentUserName() || asRequirementOwner) && canBoard}
                 <button type="button" class="ghost-btn" onclick={onResubmitTask}>Ajukan ulang</button>
                 {#if canComment}
@@ -448,7 +469,7 @@
                     {/each}
                   </select>
                   <button type="button" class="ghost-btn" onclick={onMove}>
-                    {role === 'teknis' ? 'Ajukan pindah' : 'Ubah status'}
+                    {role === 'teknis' ? 'Request move' : 'Change status'}
                   </button>
                 {/if}
                 {#if canComment}
@@ -458,10 +479,10 @@
             </div>
           </form>
         {:else}
-          <p class="empty">Mode view — tanggapan tidak tersedia.</p>
+          <p class="empty">View mode — responses are not available.</p>
         {/if}
         {#if canEdit}
-          <button type="button" class="danger-btn" onclick={onDelete}>Hapus task</button>
+          <button type="button" class="danger-btn" onclick={onDelete}>Delete task</button>
         {/if}
         {#if msg}<p class="msg">{msg}</p>{/if}
       </GlassPanel>
@@ -469,16 +490,16 @@
 
     {#if viewing}
       <div class="viewer" role="dialog" aria-modal="true" aria-label={viewing.name}>
-        <button type="button" class="viewer-backdrop" aria-label="Tutup" onclick={() => (viewing = null)}></button>
+        <button type="button" class="viewer-backdrop" aria-label="Close" onclick={() => (viewing = null)}></button>
         <div class="viewer-card">
           <div class="viewer-top">
             <strong>{viewing.name}</strong>
-            <button type="button" class="ghost-btn" onclick={() => (viewing = null)}>Tutup</button>
+            <button type="button" class="ghost-btn" onclick={() => (viewing = null)}>Close</button>
           </div>
           {#if viewing.mime.startsWith('image/')}
             <img src={viewing.file_url} alt={viewing.name} />
           {:else}
-            <a class="file-link" href={viewing.file_url} download={viewing.name}>Unduh {viewing.name}</a>
+            <a class="file-link" href={viewing.file_url} download={viewing.name}>Download {viewing.name}</a>
           {/if}
         </div>
       </div>
@@ -497,6 +518,26 @@
     font-size: 0.76rem;
     line-height: 1.45;
     color: #1a1a1a;
+  }
+
+  .page.embedded {
+    height: 68vh;
+  }
+
+  .page.embedded.in-approval {
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0;
+    flex: none !important;
+    overflow: visible !important;
+    padding-bottom: 0;
+  }
+
+  .approval-task {
+    margin: 0.15rem 0 0;
+    font-size: 0.68rem;
+    font-weight: 650;
+    color: #334155;
   }
 
   .layout {
@@ -534,11 +575,14 @@
     width: 32px;
     height: 32px;
     flex: 0 0 auto;
+    border: 0;
     border-radius: 999px;
     background: #1a1a1a;
     color: #fff;
     text-decoration: none;
+    font: inherit;
     font-size: 0.85rem;
+    cursor: pointer;
   }
 
   .meta-line {

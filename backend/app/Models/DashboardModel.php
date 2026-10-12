@@ -140,10 +140,35 @@ class DashboardModel extends Model
             ->update();
     }
 
+    /** Metadata yang boleh disimpan. Nama field di luar daftar ini ditolak. */
+    public const STANDARD_META = [
+        'source_system',
+        'deploy',
+        'pm',
+        'refresh_cadence',
+        'development_link',
+        'production_link',
+        'development_db',
+        'development_ip',
+        'development_db_name',
+        'development_db_user',
+        'development_db_pass',
+        'production_db',
+        'production_ip',
+        'production_db_name',
+        'production_db_user',
+        'production_db_pass',
+        'framework',
+        'framework_version',
+        'backend',
+        'backend_version',
+        'frontend',
+    ];
+
     public function setField(string $dashboardId, string $key, string $value): bool
     {
         $key = trim($key);
-        if ($key === '') {
+        if (! in_array($key, self::STANDARD_META, true)) {
             return false;
         }
         $db  = db_connect();
@@ -160,26 +185,11 @@ class DashboardModel extends Model
 
     public function renameField(string $dashboardId, string $oldKey, string $newKey, string $value): bool
     {
-        $newKey = trim($newKey);
-        if ($newKey === '') {
-            return false;
-        }
-        $db  = db_connect();
-        $row = $db->table('dashboard_fields')->where('dashboard_id', $dashboardId)->where('field_key', $oldKey)->get()->getRowArray();
-        if ($row === null) {
-            return $this->setField($dashboardId, $newKey, $value);
-        }
-        $db->table('dashboard_fields')->where('id', $row['id'])->update(['field_key' => $newKey, 'field_value' => $value]);
-        $this->touch($dashboardId);
-
-        return true;
+        return false;
     }
 
     public function removeField(string $dashboardId, string $key): bool
     {
-        db_connect()->table('dashboard_fields')->where('dashboard_id', $dashboardId)->where('field_key', $key)->delete();
-        $this->touch($dashboardId);
-
-        return true;
+        return false;
     }
 }

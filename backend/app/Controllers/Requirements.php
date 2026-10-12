@@ -19,7 +19,7 @@ class Requirements extends BaseController
     {
         $user = $this->authUser();
         if (! TaskPolicy::canCreateRequirement($user)) {
-            return $this->jsonError('Anda tidak punya izin Tambah Requirement', 403);
+            return $this->jsonError('You do not have permission to add a requirement', 403);
         }
 
         $dashboardName = trim((string) $this->request->getJsonVar('dashboard'));
@@ -30,13 +30,13 @@ class Requirements extends BaseController
         $createdByName = trim((string) ($this->request->getJsonVar('created_by') ?? ''));
 
         if ($title === '' || $dashboardName === '') {
-            return $this->jsonError('Judul dan dashboard wajib diisi', 422);
+            return $this->jsonError('Title and dashboard are required', 422);
         }
 
         $model       = new RequirementModel();
         $dashboardId = $model->dashboardIdForName($dashboardName);
         if ($dashboardId === null) {
-            return $this->jsonError('Dashboard tidak ditemukan', 422);
+            return $this->jsonError('Dashboard not found', 422);
         }
 
         $creator     = $createdByName !== '' ? (new UserModel())->where('name', $createdByName)->first() : null;
@@ -71,7 +71,7 @@ class Requirements extends BaseController
         $reqId = $id;
         $model = new RequirementModel();
         if ($model->find($reqId) === null) {
-            return $this->jsonError('Requirement tidak ditemukan', 404);
+            return $this->jsonError('Requirement not found', 404);
         }
 
         $patch = [];
@@ -92,7 +92,7 @@ class Requirements extends BaseController
         $team = $this->request->getJsonVar('team');
         if (is_array($team)) {
             if (! TaskPolicy::canAddAssignee($user)) {
-                return $this->jsonError('Anda tidak punya izin Tambah Assignee', 403);
+                return $this->jsonError('You do not have permission to add an assignee', 403);
             }
             $model->syncTeam($reqId, $this->userIdsForNames($team));
         }
@@ -104,13 +104,13 @@ class Requirements extends BaseController
     {
         $user = $this->authUser();
         if (! TaskPolicy::canCreateRequirement($user)) {
-            return $this->jsonError('Anda tidak punya izin menghapus versi', 403);
+            return $this->jsonError('You do not have permission to delete this version', 403);
         }
 
         $reqId = $id;
         $model = new RequirementModel();
         if ($model->find($reqId) === null) {
-            return $this->jsonError('Requirement tidak ditemukan', 404);
+            return $this->jsonError('Requirement not found', 404);
         }
 
         $model->delete($reqId);
@@ -129,12 +129,12 @@ class Requirements extends BaseController
         $model    = new RequirementModel();
         $source   = $model->find($sourceId);
         if ($source === null) {
-            return $this->jsonError('Requirement tidak ditemukan', 404);
+            return $this->jsonError('Requirement not found', 404);
         }
 
         $user = $this->authUser();
         if (! TaskPolicy::canCreateRequirement($user)) {
-            return $this->jsonError('Anda tidak punya izin Tambah Requirement', 403);
+            return $this->jsonError('You do not have permission to add a requirement', 403);
         }
 
         $rootId  = $source['version_root_id'] ?: $source['id'];

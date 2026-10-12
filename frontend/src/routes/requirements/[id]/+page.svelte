@@ -1,8 +1,10 @@
 <script>
   import { goto } from '$app/navigation'
   import GlassPanel from '$lib/GlassPanel.svelte'
-  import AttachmentPanel from '$lib/AttachmentPanel.svelte'
   import PmCreateTaskModal from '$lib/PmCreateTaskModal.svelte'
+  import { attachmentStore, listAttachments, loadAttachmentsFromApi, useAttachment } from '$lib/attachmentStore.svelte.js'
+  import TaskBoard from '../../tasks/board/+page.svelte'
+  import TaskList from '../../tasks/list/+page.svelte'
   import {
     getRequirement,
     updateRequirement,
@@ -37,7 +39,20 @@
 
   import { page } from '$app/state'
 
+  let {
+    requirementId = '',
+    embedded = false,
+    onBack = () => {},
+    onOpen = () => {},
+    onOpenTask = () => {},
+    onOpenBoard = () => {},
+  } = $props()
+
+  const activeId = $derived(String(requirementId || page.params.id || ''))
+
   let taskOpen = $state(false)
+  /** @type {'detail' | 'kanban' | 'tasks'} */
+  let reqView = $state(page.url.searchParams.get('view') === 'kanban' ? 'kanban' : 'detail')
   let msg = $state('')
   let versionMsg = $state('')
   let versionOpen = $state(false)
@@ -51,10 +66,17 @@
   let addingAssignee = $state(false)
   let newAssigneeName = $state('')
   let assigneeMsg = $state('')
+  let downloading = $state(false)
+
+  const attachments = $derived.by(() => {
+    void attachmentStore.items
+    if (!item) return []
+    return listAttachments('requirement', item.id)
+  })
 
   const item = $derived.by(() => {
     void requirementStore.items
-    return page.params.id ? getRequirement(page.params.id) : null
+    return activeId ? getRequirement(activeId) : null
   })
 
   /** Semua versi (V1, V2, ...) dari requirement ini, termasuk yang sedang dibuka. */
@@ -139,7 +161,7 @@
 
   /** @param {number} taskId */
   async function quickReviseTask(taskId) {
-    await requestRevisionModuleTask(taskId, 'Perlu revisi.')
+    await requestRevisionModuleTask(taskId, 'Needs revision.')
   }
 
   /** Teknis yang belum jadi assignee requirement ini, untuk dropdown Tambah Assignee. */
@@ -153,7 +175,7 @@
   const versionAssigneePool = $derived.by(() => requirementTeamRoster().map((m) => m.name))
 
   $effect(() => {
-    const id = page.params.id || null
+    const id = activeId || null
     if (!id) return
     rememberDetailId(id)
     taskOpen = false
@@ -162,12 +184,26 @@
     versionOpen = false
     addingAssignee = false
     assigneeMsg = ''
+    loadAttachmentsFromApi('requirement', id)
   })
+
+  async function downloadAttachments() {
+    if (!attachments.length || downloading) return
+    downloading = true
+    try {
+      for (const file of attachments) {
+        await useAttachment(file.id, 'download')
+      }
+    } finally {
+      downloading = false
+    }
+  }
 
   /** @param {number} id */
   function goToVersion(id) {
     rememberDetailId(id)
-    goto(`/requirements/${id}`)
+    if (embedded) onOpen(id)
+    else goto(`/requirements/${id}`)
   }
 
   function openVersionModal() {
@@ -195,11 +231,11 @@
     if (!item || !canAddVersion || savingVersion) return
     versionError = ''
     if (!versionTitle.trim()) {
-      versionError = 'Judul wajib diisi'
+      versionError = 'Title is required'
       return
     }
     if (!versionDescription.trim()) {
-      versionError = 'Deskripsi wajib diisi'
+      versionError = 'Description is required'
       return
     }
     savingVersion = true
@@ -210,7 +246,7 @@
     })
     savingVersion = false
     if (!created) {
-      versionError = 'Gagal membuat versi baru'
+      versionError = 'Could not create the new version'
       return
     }
     versionOpen = false
@@ -221,7 +257,7 @@
   async function onDeleteVersion() {
     if (!item || !canAddVersion || deletingVersion) return
     const label = `${reqCode(versionRootId(item))}${item.version_no > 1 ? ' · V' + item.version_no : ''}`
-    const ok = confirm(`Hapus versi ${label} - "${item.title}"?\n\nTask yang pernah terhubung tidak ikut terhapus, hanya tautannya ke versi ini yang dilepas. Tindakan ini tidak bisa dibatalkan.`)
+    const ok = confirm(`Delete version ${label} - "${item.title}"?\n\nTasks that were linked are not deleted. Only the link to this version is removed. This cannot be undone.`)
     if (!ok) return
 
     const currentId = item.id
@@ -234,11 +270,12 @@
     const deleted = await deleteRequirementVersion(currentId)
     deletingVersion = false
     if (!deleted) {
-      versionMsg = 'Gagal menghapus versi'
+      versionMsg = 'Could not delete the version'
       return
     }
     if (fallback) goToVersion(fallback.id)
-    else goto('/requirements/list')
+    else if (embedded) onBack()
+    else goto('/registry/list')
   }
 
   /** @param {'open' | 'in_progress' | 'done'} status */
@@ -264,15 +301,15 @@
     if (!item || !newAssigneeName) return
     const ok = await updateRequirement(item.id, { team: [...(item.team || []), newAssigneeName] })
     if (ok) addingAssignee = false
-    else assigneeMsg = 'Gagal menambah assignee'
+    else assigneeMsg = 'Could not add the assignee'
   }
 
   /** @param {string} name */
   async function removeAssignee(name) {
     if (!item || !canEdit) return
-    if (!confirm(`Hapus ${name} dari assignees?`)) return
+    if (!confirm(`Remove ${name} from assignees?`)) return
     const ok = await updateRequirement(item.id, { team: (item.team || []).filter((n) => n !== name) })
-    if (!ok) assigneeMsg = 'Gagal menghapus assignee'
+    if (!ok) assigneeMsg = 'Could not remove the assignee'
   }
 
   function openTaskModal() {
@@ -285,13 +322,19 @@
 
   /** @param {{ id: number }} created */
   function onTaskCreated(created) {
-    msg = `Task #${created.id} masuk Backlog · sudah di-assign`
+    msg = `Task #${created.id} is in Backlog · assigned`
   }
 
   function openKanban() {
     if (!item) return
     setBoardDashboard(item.dashboard)
-    goto('/tasks/board')
+    reqView = 'kanban'
+  }
+
+  /** @param {number} id */
+  function openChildTask(id) {
+    if (embedded) onOpenTask(id)
+    else goto(`/tasks/${id}`)
   }
 
   /** @param {string} name */
@@ -305,276 +348,234 @@
   }
 </script>
 
-<section class="page">
+<section class="page" class:embedded>
   {#if !item}
     <GlassPanel>
-      <p class="state error">Requirement tidak ditemukan.</p>
-      <a class="ghost-btn" href="/requirements/list">← Kembali ke Daftar</a>
+      <p class="state error">Requirement not found.</p>
+      {#if embedded}
+        <button type="button" class="ghost-btn" onclick={onBack}>← Back to list</button>
+      {:else}
+        <a class="ghost-btn" href="/registry/list">← Back</a>
+      {/if}
     </GlassPanel>
   {:else}
     <div class="layout">
       <GlassPanel class="span-2">
-        <div class="hero">
-          <div class="hero-nav">
-            <div class="action-pills" aria-label="Navigasi">
-              <a class="pill on" href="/requirements/list" aria-label="Kembali ke daftar" title="Kembali ke daftar">←</a>
-            </div>
-            <div class="hero-side">
-              <div class="action-pills" aria-label="File Panduan">
-                <AttachmentPanel ownerType="requirement" ownerId={item.id} canManage={canEdit} />
-              </div>
-              {#if canEdit}
-                <div class="action-pills" aria-label="Aksi">
-                  <button type="button" class="pill" onclick={openKanban}>Buka Kanban</button>
-                  <button type="button" class="pill on" onclick={openTaskModal}>+ Tambah Task</button>
+        <div class="hero req-header">
+          <div class="req-header-top">
+            <div class="req-header-left">
+              {#if embedded}
+                <button type="button" class="req-back" aria-label="Back" title="Back" onclick={onBack}>
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M19 12H5M12 19l-7-7 7-7" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                </button>
+              {:else}
+                <a class="req-back" href="/registry/list" aria-label="Back" title="Back">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M19 12H5M12 19l-7-7 7-7" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                </a>
+              {/if}
+              <div class="req-title-block">
+                <span class="req-eyebrow">Requirements</span>
+                <div class="req-id-row">
+                  <span class="mono-id">{reqCode(versionRootId(item))}</span>
+                  <span class={`chip health-${item.health}`}>{requirementHealthLabel(item.health)}</span>
                 </div>
+                <div class="title-row">
+                  <h2>{item.title}</h2>
+                  <div class="version-switch" aria-label="Requirement versions">
+                    {#if versions.length > 1}
+                      {#each versions as v (v.id)}
+                        <button type="button" class="version-pill" class:on={v.id === item.id} onclick={() => goToVersion(v.id)}>V{v.version_no}</button>
+                      {/each}
+                    {/if}
+                    {#if canAddVersion}
+                      <button type="button" class="version-add" onclick={openVersionModal} title="Create a new version of this requirement">+ Add Version</button>
+                      <button type="button" class="version-delete" onclick={onDeleteVersion} disabled={deletingVersion} title="Delete this version">{deletingVersion ? 'Deleting…' : 'Delete Version'}</button>
+                    {/if}
+                  </div>
+                </div>
+                <p class="req-subtitle">{item.description || 'No description.'}</p>
+                {#if msg}<p class="msg ok">{msg}</p>{/if}
+                {#if versionMsg}<p class="msg error">{versionMsg}</p>{/if}
+              </div>
+            </div>
+            <div class="req-actions">
+              <button
+                type="button"
+                class="req-download"
+                onclick={downloadAttachments}
+                disabled={!attachments.length || downloading}
+                title={attachments.length ? 'Download requirement attachments' : 'No attachments yet'}
+              >
+                {downloading ? 'Mengunduh…' : 'Download Attachment'}
+              </button>
+              {#if canEdit}
+                <button type="button" class="req-add" onclick={openTaskModal}>+ Add Task</button>
               {/if}
             </div>
           </div>
-
-          <div class="hero-top">
-            <div class="hero-main">
-              <p class="eyebrow">Info Requirement</p>
-              <div class="meta">
-                <span class="mono-id">{reqCode(versionRootId(item))}</span>
-                <span class={`chip health-${item.health}`}>{requirementHealthLabel(item.health)}</span>
-              </div>
-              <div class="title-row">
-                <h2>{item.title}</h2>
-                <div class="version-switch" aria-label="Versi requirement">
-                  {#if versions.length > 1}
-                    {#each versions as v (v.id)}
-                      <button
-                        type="button"
-                        class="version-pill"
-                        class:on={v.id === item.id}
-                        onclick={() => goToVersion(v.id)}
-                      >
-                        V{v.version_no}
-                      </button>
-                    {/each}
-                  {/if}
-                  {#if canAddVersion}
-                    <button
-                      type="button"
-                      class="version-add"
-                      onclick={openVersionModal}
-                      title="Buat versi baru dari requirement ini"
-                    >
-                      + Tambah Versi
-                    </button>
-                    <button
-                      type="button"
-                      class="version-delete"
-                      onclick={onDeleteVersion}
-                      disabled={deletingVersion}
-                      title="Hapus versi ini"
-                    >
-                      {deletingVersion ? 'Menghapus…' : 'Hapus Versi'}
-                    </button>
-                  {/if}
-                </div>
-              </div>
-              <p class="lead">{item.description || 'Tidak ada deskripsi.'}</p>
-              {#if msg}<p class="msg ok">{msg}</p>{/if}
-              {#if versionMsg}<p class="msg error">{versionMsg}</p>{/if}
-            </div>
+          <div class="view-switch" role="tablist" aria-label="Requirement view">
+            <button type="button" class="view-tab" class:on={reqView === 'detail'} onclick={() => (reqView = 'detail')}>Detail Information</button>
+            <button type="button" class="view-tab" class:on={reqView !== 'detail'} onclick={openKanban}>Kanban</button>
           </div>
 
-          <div class="hero-body">
-            <div class="identity">
-              <div class="owner-card">
+          {#if reqView === 'detail'}
+          <div class="info-grid">
+            <div class="info-cell">
+              <span class="k">Owner</span>
+              <div class="owner-line">
                 <i class="face">{initials(item.created_by)}</i>
-                <div>
-                  <span class="k">Owner</span>
-                  <strong>{item.created_by}</strong>
-                </div>
-              </div>
-              <div class="assignees">
-                <div class="assignees-head">
-                  <span class="k">Assignees</span>
-                  {#if canAddAssigneePerm}
-                    <button type="button" class="assignee-add-btn" onclick={openAddAssignee}>+ Tambah Assignee</button>
-                  {/if}
-                </div>
-
-                {#if addingAssignee}
-                  <form class="assignee-add-form" onsubmit={confirmAddAssignee}>
-                    <select bind:value={newAssigneeName}>
-                      {#if availableAssignees.length === 0}
-                        <option value="">Semua Teknis sudah jadi assignee</option>
-                      {/if}
-                      {#each availableAssignees as m (m.name)}
-                        <option value={m.name}>{m.name}</option>
-                      {/each}
-                    </select>
-                    <button type="submit" class="assignee-save" disabled={!newAssigneeName}>Tambah</button>
-                    <button type="button" class="assignee-cancel" onclick={cancelAddAssignee}>Batal</button>
-                  </form>
-                {/if}
-
-                {#if assigneeMsg}<small class="assignee-error">{assigneeMsg}</small>{/if}
-
-                {#if item.team?.length}
-                  <div class="avatar-stack">
-                    {#each item.team as name}
-                      <span class="avatar" title={name}>
-                        <i class="face sm">{initials(name)}</i>
-                        <em>{name}</em>
-                        {#if canEdit}
-                          <button type="button" class="avatar-remove" aria-label={`Hapus ${name}`} onclick={() => removeAssignee(name)}>×</button>
-                        {/if}
-                      </span>
-                    {/each}
-                  </div>
-                {:else}
-                  <p class="assignees-empty">Belum ada assignee.</p>
-                {/if}
+                <strong>{item.created_by || '—'}</strong>
               </div>
             </div>
-
-            <div class="facts">
-              <div class="fact">
-                <span class="k">Dashboard</span>
-                <strong>{item.dashboard}</strong>
-              </div>
-              <div class="fact">
-                <span class="k">Due Date</span>
-                <strong>{formatDate(item.due_date)}</strong>
-              </div>
-              <div class="fact">
-                <span class="k">Created</span>
-                <strong>{formatDate(item.created_at)}</strong>
-              </div>
-              <div class="fact">
-                <span class="k">Updated</span>
-                <strong>{formatDate(item.updated_at)}</strong>
-              </div>
+            <div class="info-cell">
+              <span class="k">Dashboard</span>
+              <strong>{item.dashboard || '—'}</strong>
+            </div>
+            <div class="info-cell">
+              <span class="k">Due Date</span>
+              <strong>{formatDate(item.due_date)}</strong>
+            </div>
+            <div class="info-cell">
+              <span class="k">Status</span>
               {#if canEdit}
-                <label class="fact status-field">
-                  <span class="k">Status</span>
-                  <select value={item.status} onchange={(e) => onStatus(/** @type {any} */ (e.currentTarget.value))}>
-                    {#each requirementStatusOptions as opt}
-                      <option value={opt.value}>{opt.label}</option>
+                <select class="status-select" value={item.status} onchange={(e) => onStatus(/** @type {any} */ (e.currentTarget.value))}>
+                  {#each requirementStatusOptions as opt}
+                    <option value={opt.value}>{opt.label}</option>
+                  {/each}
+                </select>
+              {:else}
+                <strong>{item.status}</strong>
+              {/if}
+            </div>
+            <div class="info-cell">
+              <div class="assignees-head">
+                <span class="k">Assignees</span>
+                {#if canAddAssigneePerm}
+                  <button type="button" class="assignee-add-btn" onclick={openAddAssignee}>+ Assignee</button>
+                {/if}
+              </div>
+              {#if addingAssignee}
+                <form class="assignee-add-form" onsubmit={confirmAddAssignee}>
+                  <select bind:value={newAssigneeName}>
+                    {#if availableAssignees.length === 0}
+                      <option value="">Every engineer is already an assignee</option>
+                    {/if}
+                    {#each availableAssignees as m (m.name)}
+                      <option value={m.name}>{m.name}</option>
                     {/each}
                   </select>
-                </label>
+                  <button type="submit" class="assignee-save" disabled={!newAssigneeName}>Add</button>
+                  <button type="button" class="assignee-cancel" onclick={cancelAddAssignee}>Cancel</button>
+                </form>
+              {/if}
+              {#if assigneeMsg}<small class="assignee-error">{assigneeMsg}</small>{/if}
+              {#if item.team?.length}
+                <div class="avatar-stack">
+                  {#each item.team as name}
+                    <span class="avatar" title={name}>
+                      <i class="face sm">{initials(name)}</i>
+                      <em>{name}</em>
+                      {#if canEdit}
+                        <button type="button" class="avatar-remove" aria-label={`Remove ${name}`} onclick={() => removeAssignee(name)}>×</button>
+                      {/if}
+                    </span>
+                  {/each}
+                </div>
+              {:else if !addingAssignee}
+                <p class="assignees-empty">No assignees yet.</p>
               {/if}
             </div>
-          </div>
-
-          <div class="stats" role="group" aria-label="Ringkasan task">
-            <div class="stat">
-              <span>Progress</span>
-              <strong>{stats.pct}%</strong>
-              <div class="stat-bar" aria-hidden="true">
-                <span style={`width: ${Math.max(stats.pct, 0)}%`}></span>
-              </div>
+            <div class="info-cell">
+              <span class="k">Created</span>
+              <strong>{formatDate(item.created_at)}</strong>
             </div>
-            <div class="stat">
-              <span>Total</span>
-              <strong>{stats.total}</strong>
+            <div class="info-cell">
+              <span class="k">Updated</span>
+              <strong>{formatDate(item.updated_at)}</strong>
             </div>
-            <div class="stat">
-              <span>Aktif</span>
-              <strong>{stats.aktif}</strong>
-            </div>
-            <div class="stat warn">
-              <span>Overdue</span>
-              <strong>{stats.overdue}</strong>
+            <div class="info-cell">
+              <span class="k">Health</span>
+              <strong>{requirementHealthLabel(item.health)}</strong>
             </div>
           </div>
-        </div>
-      </GlassPanel>
-
-      <div class="flow-rail span-2">
-        <div class="panel-title flow-head">
-          <div>
-            <p class="eyebrow">Workflow</p>
-            <h3>Task Flow</h3>
-          </div>
-          <button type="button" class="flow-btn" onclick={openKanban}>Buka Kanban</button>
-        </div>
-        <div class="flow">
-          {#each flowCols as col}
-            <div
-              class="flow-col"
-              class:has={col.count > 0}
-              style={`--status-color: ${workflowStatusColor(col.key)}`}
-            >
-              <span class="status-mark" aria-hidden="true"></span>
-              <span class="flow-label">{col.label}</span>
-              <strong>{col.count}</strong>
-            </div>
-          {/each}
-        </div>
-      </div>
-
-      <GlassPanel>
-        <div class="panel-title">
-          <div>
-            <p class="eyebrow">Tasks</p>
-            <h3>Task Breakdown</h3>
-          </div>
-          {#if canEdit}
-            <button type="button" class="linkish" onclick={openTaskModal}>+ Task</button>
           {/if}
         </div>
-        {#if childTasks.length === 0}
-          <p class="empty">Belum ada task dari requirement ini.</p>
-        {:else}
-          <ul class="task-list">
-            {#each childTasks as t (t.id)}
-              <li>
-                <div class="task-main">
-                  <strong>{t.title}</strong>
-                  <small>
-                    {t.assignee || t.pic} · {formatDate(t.deadline)}
-                    {#if isOverdue(t)} <em>Overdue</em>{/if}
-                  </small>
-                  {#if t.approval_state === 'pending'}
-                    <small class="approval-note">Menunggu approval owner, belum masuk Kanban.</small>
-                  {:else if t.approval_state === 'revision'}
-                    <small class="approval-note rev">Diminta revisi oleh owner.</small>
-                  {/if}
-                </div>
-                {#if isRequirementOwner && t.approval_state === 'pending'}
-                  <div class="task-approve-acts">
-                    <button type="button" class="task-approve" onclick={() => quickApproveTask(t.id)}>Setujui</button>
-                    <button type="button" class="task-revise" onclick={() => quickReviseTask(t.id)}>Minta revisi</button>
-                  </div>
-                {:else}
-                  <span class={`chip st-${t.status}`}>{workflowLabel(t.status)}</span>
-                {/if}
-              </li>
-            {/each}
-          </ul>
-        {/if}
       </GlassPanel>
 
-      <GlassPanel>
-        <div class="panel-title">
-          <div>
-            <p class="eyebrow">Log</p>
-            <h3>Activity</h3>
-          </div>
+      {#if reqView === 'kanban'}
+        <div class="kanban-embed span-2">
+          <TaskBoard
+            lockedDashboard={item.dashboard}
+            initialRequirement={String(item.id)}
+            embedded
+            onOpenTask={openChildTask}
+            onOpenList={() => (reqView = 'tasks')}
+          />
         </div>
-        {#if activity.length === 0}
-          <p class="empty">Belum ada aktivitas.</p>
-        {:else}
-          <ol class="timeline">
-            {#each activity as ev}
-              <li>
-                <time class="when">{ev.at}</time>
-                <div class="what">
-                  <strong>{ev.title}</strong>
-                  <span>{ev.sub}</span>
-                </div>
-              </li>
-            {/each}
-          </ol>
-        {/if}
-      </GlassPanel>
+      {:else if reqView === 'tasks'}
+        <div class="kanban-embed span-2">
+          <TaskList
+            lockedDashboard={item.dashboard}
+            embedded
+            onOpenTask={openChildTask}
+            onOpenBoard={openKanban}
+          />
+        </div>
+      {:else}
+      <section class="task-section span-2">
+        <header class="section-head">
+          <div>
+            <h3>Task</h3>
+            <p>{childTasks.length} task</p>
+          </div>
+          {#if canEdit}
+            <button type="button" class="req-add" onclick={openTaskModal}>+ Add Task</button>
+          {/if}
+        </header>
+        <div class="task-scroll">
+          {#if childTasks.length === 0}
+            <p class="empty">No tasks yet.</p>
+          {:else}
+            <table class="task-table">
+              <thead>
+                <tr>
+                  <th>Task</th>
+                  <th>Status</th>
+                  <th>PIC</th>
+                  <th>Deadline</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each childTasks as t (t.id)}
+                  <tr>
+                    <td>
+                      <button type="button" class="task-open" onclick={() => openChildTask(t.id)}>{t.title}</button>
+                      {#if t.approval_state === 'pending'}
+                        <small class="approval-note">Menunggu approval owner.</small>
+                      {:else if t.approval_state === 'revision'}
+                        <small class="approval-note rev">Revision requested.</small>
+                      {/if}
+                    </td>
+                    <td>
+                      {#if isRequirementOwner && t.approval_state === 'pending'}
+                        <div class="task-approve-acts">
+                          <button type="button" class="task-approve" onclick={() => quickApproveTask(t.id)}>Setujui</button>
+                          <button type="button" class="task-revise" onclick={() => quickReviseTask(t.id)}>Request revision</button>
+                        </div>
+                      {:else}
+                        <span class={`chip st-${t.status}`}>{workflowLabel(t.status)}</span>
+                      {/if}
+                    </td>
+                    <td>{t.assignee || t.pic || '—'}</td>
+                    <td class:late={isOverdue(t)}>{formatDate(t.deadline)}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          {/if}
+        </div>
+      </section>
+      {/if}
     </div>
   {/if}
 </section>
@@ -605,10 +606,10 @@
     <header class="modal-head">
       <div class="modal-head-copy">
         <p class="eyebrow">PM · Requirements</p>
-        <h2 id="create-version-title">Tambah Versi</h2>
-        <p class="hint">Versi baru dari {reqCode(versionRootId(item))} · task lama tidak ikut, mulai kosong.</p>
+        <h2 id="create-version-title">Add Version</h2>
+        <p class="hint">New version of {reqCode(versionRootId(item))}. Existing tasks are not copied.</p>
       </div>
-      <button type="button" class="modal-close" aria-label="Tutup" onclick={closeVersionModal}>
+      <button type="button" class="modal-close" aria-label="Close" onclick={closeVersionModal}>
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M7 7l10 10M17 7 7 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
         </svg>
@@ -617,19 +618,19 @@
 
     <div class="modal-body">
       <label class="field">
-        <span>Judul <em>*</em></span>
-        <input bind:value={versionTitle} maxlength="100" placeholder="Judul versi baru" />
+        <span>Title <em>*</em></span>
+        <input bind:value={versionTitle} maxlength="100" placeholder="New version title" />
       </label>
 
       <label class="field">
-        <span>Deskripsi <em>*</em></span>
-        <textarea rows="3" maxlength="600" bind:value={versionDescription} placeholder="Ruang lingkup & tujuan versi ini"></textarea>
+        <span>Description <em>*</em></span>
+        <textarea rows="3" maxlength="600" bind:value={versionDescription} placeholder="Scope and goal of this version"></textarea>
       </label>
 
       <div class="field">
         <span>Assignees</span>
         {#if versionAssigneePool.length === 0}
-          <p class="assignees-empty">Belum ada Teknis aktif.</p>
+          <p class="assignees-empty">No active engineers.</p>
         {:else}
           <div class="team-picker">
             {#each versionAssigneePool as name}
@@ -646,13 +647,318 @@
     </div>
 
     <div class="modal-actions">
-      <button type="button" class="ghost-btn" onclick={closeVersionModal}>Batal</button>
-      <button type="submit" class="primary" disabled={savingVersion}>{savingVersion ? 'Menyimpan…' : 'Buat Versi'}</button>
+      <button type="button" class="ghost-btn" onclick={closeVersionModal}>Cancel</button>
+      <button type="submit" class="primary" disabled={savingVersion}>{savingVersion ? 'Saving…' : 'Create Version'}</button>
     </div>
   </form>
 {/if}
 
 <style>
+  .view-switch {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-top: 0.85rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #e8edf3;
+  }
+
+  .view-tab {
+    height: auto;
+    min-height: 0;
+    padding: 0.32rem 0.7rem;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: #fff;
+    color: #64748b;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.3;
+    cursor: pointer;
+  }
+
+  .view-tab.on {
+    border-color: #065fc6;
+    color: #065fc6;
+  }
+
+  .req-header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .req-header-left {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    min-width: 0;
+  }
+
+  .req-back {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    padding: 0;
+    border-radius: 50%;
+    background: #1a1a1a;
+    border: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    cursor: pointer;
+    flex-shrink: 0;
+    margin-top: 1px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
+    text-decoration: none;
+  }
+
+  .req-back:hover {
+    background: #1f2937;
+    color: #fff;
+  }
+
+  .req-title-block {
+    display: grid;
+    gap: 0.28rem;
+    min-width: 0;
+  }
+
+  .req-eyebrow {
+    margin: 0;
+    font-size: 0.56rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #8a8a90;
+  }
+
+  .req-id-row {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .req-id-row .mono-id {
+    font-size: 0.58rem;
+    font-weight: 750;
+    color: #6b6b6b;
+  }
+
+  .req-title-block h2 {
+    margin: 0;
+    font-size: 0.96rem;
+    font-weight: 760;
+    letter-spacing: -0.02em;
+    color: #111827;
+  }
+
+  .req-subtitle {
+    margin: 0;
+    font-size: 0.68rem;
+    font-weight: 500;
+    line-height: 1.45;
+    color: #6b6b6b;
+  }
+
+  .req-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-shrink: 0;
+  }
+
+  .req-download {
+    height: 34px;
+    padding: 0 16px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #fff;
+    color: #334155;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .req-download:hover:not(:disabled) {
+    background: #f8fafc;
+    border-color: #94a3b8;
+    color: #0f172a;
+  }
+
+  .req-download:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+
+  .req-add {
+    height: 32px;
+    padding: 0 0.75rem;
+    border: 0;
+    border-radius: 999px;
+    background: #0f1b2e;
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .kanban-embed {
+    min-width: 0;
+  }
+
+  .layout > .span-2 {
+    grid-column: 1 / -1;
+  }
+
+  .info-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1px;
+    margin-top: 0.85rem;
+    border: 1px solid #e6ebf2;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #e8edf3;
+  }
+
+  .info-cell {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.12rem;
+    min-width: 0;
+    padding: 0.4rem 0.65rem;
+    background: #fff;
+  }
+
+  .info-cell .k {
+    font-size: 0.52rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #94a3b8;
+  }
+
+  .info-cell strong {
+    font-size: 0.68rem;
+    font-weight: 750;
+    color: #111827;
+  }
+
+  .owner-line {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+
+  .status-select {
+    height: 28px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #fff;
+    font-size: 0.68rem;
+    font-weight: 650;
+    color: #111827;
+  }
+
+  .task-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    padding: 1rem 1.1rem;
+    background: #fff;
+    border: 1px solid rgba(15, 27, 46, 0.06);
+    border-radius: 16px;
+  }
+
+  .section-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .section-head h3 {
+    margin: 0;
+    font-size: 0.72rem;
+    font-weight: 750;
+    color: #0f172a;
+  }
+
+  .section-head p {
+    margin: 0.15rem 0 0;
+    font-size: 0.68rem;
+    color: #64748b;
+  }
+
+  .task-scroll {
+    max-height: 280px;
+    overflow: auto;
+    border: 1px solid #e8edf3;
+    border-radius: 10px;
+  }
+
+  .task-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+
+  .task-table th:nth-child(1) { width: 40%; }
+  .task-table th:nth-child(2) { width: 22%; }
+  .task-table th:nth-child(3) { width: 22%; }
+  .task-table th:nth-child(4) { width: 16%; }
+
+  .task-table th {
+    position: sticky;
+    top: 0;
+    background: #f8fafc;
+    text-align: left;
+    padding: 0.4rem 0.55rem;
+    font-size: 0.52rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #94a3b8;
+  }
+
+  .task-table td {
+    padding: 0.4rem 0.55rem;
+    border-top: 1px solid #eef2f6;
+    font-size: 0.65rem;
+    color: #111827;
+    vertical-align: middle;
+  }
+
+  .task-table td.late {
+    color: #be123c;
+  }
+
+  .task-open {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: #0f172a;
+    cursor: pointer;
+  }
+
+  @media (max-width: 900px) {
+    .info-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
   .page {
     flex: 1;
     min-height: 0;
@@ -667,6 +973,10 @@
     line-height: 1.45;
     color: #1a1a1a;
     align-items: stretch;
+  }
+
+  .page.embedded {
+    height: 68vh;
   }
 
   .layout {
@@ -1484,10 +1794,26 @@
     min-width: 0;
   }
 
-  .task-main strong {
+  .task-main strong,
+  .task-open {
     font-size: 0.68rem;
     font-weight: 700;
     color: #1a1a1a;
+  }
+
+  .task-open {
+    border: 0;
+    background: none;
+    padding: 0;
+    font: inherit;
+    font-weight: 700;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .task-open:hover {
+    color: #065fc6;
+    text-decoration: underline;
   }
 
   .task-main small {

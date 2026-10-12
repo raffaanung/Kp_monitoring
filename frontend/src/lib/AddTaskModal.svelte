@@ -27,11 +27,11 @@
   function submit(e) {
     e.preventDefault()
     if (!title.trim()) {
-      error = 'Judul task wajib diisi'
+      error = 'Task title is required'
       return
     }
     if (deadline < startDate) {
-      error = 'Deadline tidak boleh sebelum start date'
+      error = 'Deadline cannot be before the start date'
       return
     }
     addTask({ title, meta, pic, status, startDate, deadline })
@@ -62,9 +62,9 @@
         <div class="modal-head">
           <div>
             <h2 id="add-task-title">Add task</h2>
-            <p>Task baru akan muncul di tracking minggu ini</p>
+            <p>The new task will show up in this week's tracking</p>
           </div>
-          <button type="button" class="close" aria-label="Tutup" onclick={onClose}>
+          <button type="button" class="close" aria-label="Close" onclick={onClose}>
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path d="M7 7l10 10M17 7 7 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
             </svg>
@@ -72,7 +72,7 @@
         </div>
 
         <label>
-          <span>Judul</span>
+          <span>Title</span>
           <input bind:value={title} placeholder="Contoh: Review EDM batch" />
         </label>
 
@@ -83,7 +83,7 @@
           </label>
           <label>
             <span>PIC</span>
-            <input bind:value={pic} placeholder="Nama PIC" />
+            <input bind:value={pic} placeholder="PIC name" />
           </label>
         </div>
 
@@ -112,8 +112,8 @@
         {/if}
 
         <div class="actions">
-          <button type="button" class="ghost" onclick={onClose}>Batal</button>
-          <button type="submit" class="primary">Simpan task</button>
+          <button type="button" class="ghost" onclick={onClose}>Cancel</button>
+          <button type="submit" class="primary">Save task</button>
         </div>
       </form>
     </div>

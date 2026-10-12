@@ -51,10 +51,10 @@
 <section class="page">
   {#if !log}
     <GlassPanel>
-      <SubmenuHeader title="Tidak ditemukan" />
+      <SubmenuHeader title="Not found" />
       <div class="empty">
-        <p>Entri dengan ID tersebut tidak ada.</p>
-        <a class="btn" href="/activity-log">← Kembali</a>
+        <p>No entry with that ID.</p>
+        <a class="btn" href="/activity-log">← Back</a>
       </div>
     </GlassPanel>
   {:else}
@@ -93,7 +93,7 @@
       </div>
 
       {#if log.changes.length === 0}
-        <p class="state">Tidak ada perubahan data.</p>
+        <p class="state">No data changes.</p>
       {:else}
         <div class="compare-wrap">
           <table class="compare-table">
@@ -124,7 +124,7 @@
       {/if}
 
       <div class="foot">
-        <a class="back" href="/activity-log">← Kembali</a>
+        <a class="back" href="/activity-log">← Back</a>
       </div>
     </GlassPanel>
   {/if}

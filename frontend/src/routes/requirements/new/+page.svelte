@@ -1,14 +1,14 @@
-﻿<script>
+<script>
   import { goto } from '$app/navigation'
   import { onMount } from 'svelte'
 
   onMount(() => {
-    goto('/requirements/list')
+    goto('/registry/list')
   })
 </script>
 
 <section class="page">
-  <p>Mengalihkan ke Daftar Requirementâ€¦</p>
+  <p>Mengalihkan…</p>
 </section>
 
 <style>

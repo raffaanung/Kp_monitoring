@@ -35,7 +35,9 @@
 
   let title = $state('')
   let description = $state('')
-  let assignee = $state('')
+  /** @type {string[]} */
+  let assignees = $state([])
+  let saving = $state(false)
   let deadline = $state('')
   let selectedReqId = $state(/** @type {string} */ (''))
   let error = $state('')
@@ -72,66 +74,114 @@
     return base.length ? base : teknisAssignees()
   })
 
+  const availableAssignees = $derived(assigneeList.filter((name) => !assignees.includes(name)))
+
+  /** @param {string} name */
+  function initials(name) {
+    return name
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0])
+      .join('')
+      .toUpperCase()
+  }
+
+  function defaultAssignees() {
+    const team = (Array.isArray(activeReq?.team) ? activeReq.team : []).filter(
+      (name) => name && assigneeList.includes(name),
+    )
+    if (team.length) return team
+    const first = assigneeList[0] || teknisAssignees()[0] || ''
+    return first ? [first] : []
+  }
+
+  /** @param {string} name */
+  function toggleAssignee(name) {
+    assignees = assignees.includes(name)
+      ? assignees.filter((item) => item !== name)
+      : [...assignees, name]
+  }
+
   $effect(() => {
     if (!open) return
     title = ''
     description = ''
     deadline = today()
     error = ''
+    saving = false
     selectedReqId = requirementId || (reqChoices[0]?.id ?? '')
-    const preferred = activeReq?.team?.[0] || assigneeList[0] || teknisAssignees()[0] || ''
-    assignee = preferred
+    assignees = defaultAssignees()
   })
 
   $effect(() => {
     if (!open) return
-    // Saat ganti requirement, default assignee ke anggota tim requirement
-    const next = activeReq?.team?.[0] || assigneeList[0] || ''
-    if (next && (!assignee || !assigneeList.includes(assignee))) assignee = next
+    const valid = assignees.filter((name) => assigneeList.includes(name))
+    if (valid.length === 0) {
+      const next = defaultAssignees()
+      if (next.join('\0') !== assignees.join('\0')) assignees = next
+    } else if (valid.length !== assignees.length) {
+      assignees = valid
+    }
   })
 
   async function submit(event) {
     event.preventDefault()
     error = ''
+    if (saving) return
 
     const req = activeReq
     if (!req) {
-      error = 'Pilih requirement terlebih dahulu'
+      error = 'Select a requirement first'
       return
     }
     if (!canCreateTask()) {
-      error = 'Anda tidak punya izin Tambah Task'
+      error = 'You do not have permission to add a task'
       return
     }
     if (!title.trim()) {
-      error = 'Judul task wajib diisi'
+      error = 'Task title is required'
       return
     }
-    if (!assignee.trim()) {
-      error = 'Assignee teknis wajib dipilih'
+    if (assignees.length === 0) {
+      error = 'Select at least one engineer'
       return
     }
     if (!deadline) {
-      error = 'Deadline wajib diisi'
+      error = 'Deadline is required'
       return
     }
 
-    const created = await createModuleTask({
-      title: title.trim(),
-      description: description.trim(),
-      dashboard: req.dashboard,
-      requirement_id: req.id,
-      assignee: assignee.trim(),
-      deadline,
-      status: 'backlog',
-    })
+    saving = true
+    const pending = [...assignees]
+    /** @type {string[]} */
+    const failed = []
+    /** @type {{ id: number } | null} */
+    let created = null
+    for (const name of pending) {
+      const row = await createModuleTask({
+        title: title.trim(),
+        description: description.trim(),
+        dashboard: req.dashboard,
+        requirement_id: req.id,
+        assignee: name,
+        deadline,
+        status: 'backlog',
+      })
+      if (row) created = row
+      else failed.push(name)
+    }
+    saving = false
 
-    if (!created) {
-      error = 'Gagal membuat task'
+    if (failed.length) {
+      assignees = failed
+      error = failed.length === pending.length
+        ? 'Could not create the task'
+        : `Could not create a task for ${failed.join(', ')}`
       return
     }
 
-    onCreated(created)
+    if (created) onCreated(created)
     onClose()
   }
 
@@ -157,11 +207,11 @@
   >
       <header class="head">
         <div>
-          <p class="eyebrow">PM · Pecah ke Backlog</p>
-          <h2 id="pm-task-title">Tambah Task</h2>
-          <p class="hint">Task langsung approved → kolom Backlog · assign ke teknis.</p>
+          <p class="eyebrow">PM · Split to Backlog</p>
+          <h2 id="pm-task-title">Add Task</h2>
+          <p class="hint">The task is approved immediately and lands in Backlog, assigned to an engineer.</p>
         </div>
-        <button type="button" class="close" aria-label="Tutup" onclick={onClose}>
+        <button type="button" class="close" aria-label="Close" onclick={onClose}>
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M7 7l10 10M17 7 7 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
           </svg>
@@ -173,7 +223,7 @@
           <span>Requirement <em>*</em></span>
           <select bind:value={selectedReqId}>
             {#if reqChoices.length === 0}
-              <option value="">Tidak ada requirement aktif</option>
+              <option value="">No active requirement</option>
             {:else}
               {#each reqChoices as r}
                 <option value={r.id}>{reqCode(versionRootId(r))}{reqVersionSuffix(r)} · {r.title}</option>
@@ -186,29 +236,45 @@
         {/if}
 
         <label class="field">
-          <span>Judul task <em>*</em></span>
+          <span>Task title <em>*</em></span>
           <input bind:value={title} maxlength="120" placeholder="Contoh: Implement SLA heatmap widget" />
         </label>
 
         <label class="field">
-          <span>Deskripsi</span>
-          <textarea rows="3" maxlength="600" bind:value={description} placeholder="Ruang lingkup pekerjaan untuk teknis…"></textarea>
+          <span>Description</span>
+          <textarea rows="3" maxlength="600" bind:value={description} placeholder="Scope of work for the engineer…"></textarea>
         </label>
 
-        <div class="row2">
-          <label class="field">
-            <span>Assign ke Teknis <em>*</em></span>
-            <select bind:value={assignee}>
-              {#each assigneeList as name}
-                <option value={name}>{name}</option>
+        <div class="field">
+          <span>Assign ke Teknis <em>*</em></span>
+          {#if assignees.length}
+            <div class="avatar-stack">
+              {#each assignees as name (name)}
+                <span class="avatar">
+                  <i class="face">{initials(name)}</i>
+                  <em>{name}</em>
+                  <button type="button" class="avatar-remove" aria-label={`Remove ${name}`} onclick={() => toggleAssignee(name)}>×</button>
+                </span>
               {/each}
-            </select>
-          </label>
-          <label class="field">
-            <span>Deadline <em>*</em></span>
-            <input type="date" bind:value={deadline} />
-          </label>
+            </div>
+          {:else}
+            <p class="assign-empty">No engineer selected yet.</p>
+          {/if}
+          {#if availableAssignees.length}
+            <div class="team-picker">
+              {#each availableAssignees as name (name)}
+                <button type="button" class="team-add" onclick={() => toggleAssignee(name)}>+ {name}</button>
+              {/each}
+            </div>
+          {:else if assigneeList.length === 0}
+            <p class="assign-empty">No engineer users yet.</p>
+          {/if}
         </div>
+
+        <label class="field deadline-field">
+          <span>Deadline <em>*</em></span>
+          <input type="date" bind:value={deadline} />
+        </label>
 
         {#if error}
           <p class="err">{error}</p>
@@ -216,8 +282,8 @@
       </div>
 
       <footer class="actions">
-        <button type="button" class="ghost" onclick={onClose}>Batal</button>
-        <button type="submit" class="primary" disabled={!activeReq}>Buat &amp; Assign</button>
+        <button type="button" class="ghost" onclick={onClose}>Cancel</button>
+        <button type="submit" class="primary" disabled={!activeReq || saving}>{saving ? 'Saving…' : 'Create & Assign'}</button>
       </footer>
   </form>
 {/if}
@@ -351,10 +417,105 @@
     color: #5c5c62;
   }
 
-  .row2 {
+  .deadline-field input {
+    max-width: 180px;
+  }
+
+  .assign-empty {
+    margin: 0;
+    font-size: 0.72rem;
+    color: #8a8a90;
+  }
+
+  .avatar-stack {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .avatar {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.45rem 0.2rem 0.2rem;
+    border-radius: 999px;
+    background: #fff;
+    border: 1px solid rgba(6, 95, 198, 0.14);
+    box-shadow: 0 1px 4px rgba(4, 40, 90, 0.06);
+  }
+
+  .face {
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
     display: grid;
-    grid-template-columns: 1.2fr 0.8fr;
-    gap: 0.65rem;
+    place-items: center;
+    font-size: 0.48rem;
+    font-style: normal;
+    font-weight: 750;
+    background: linear-gradient(145deg, #e8f1fb 0%, #d7e6f7 100%);
+    color: #065fc6;
+    flex-shrink: 0;
+  }
+
+  .avatar em {
+    font-style: normal;
+    font-size: 0.72rem;
+    font-weight: 650;
+    color: #1a1a1a;
+  }
+
+  .avatar-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.06);
+    color: #6b6b6b;
+    font-size: 0.7rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .avatar-remove:hover {
+    background: rgba(190, 18, 60, 0.12);
+    color: #be123c;
+  }
+
+  .team-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    max-height: 108px;
+    overflow: auto;
+  }
+
+  .team-add {
+    height: auto;
+    min-height: 0;
+    padding: 0.28rem 0.6rem;
+    border-radius: 999px;
+    border: 1px dashed rgba(6, 95, 198, 0.28);
+    background: rgba(6, 95, 198, 0.04);
+    color: #065fc6;
+    font: inherit;
+    font-size: 0.7rem;
+    font-weight: 650;
+    cursor: pointer;
+  }
+
+  .team-add:hover {
+    background: rgba(6, 95, 198, 0.1);
+  }
+
+  @media (max-width: 560px) {
+    .deadline-field input {
+      max-width: none;
+    }
   }
 
   .meta {
@@ -411,11 +572,5 @@
   .primary:disabled {
     opacity: 0.45;
     cursor: not-allowed;
-  }
-
-  @media (max-width: 560px) {
-    .row2 {
-      grid-template-columns: 1fr;
-    }
   }
 </style>

@@ -28,7 +28,7 @@ class ActivityLogs extends BaseController
             ->where('activity_logs.id', $id)
             ->first();
         if ($row === null) {
-            return $this->jsonError('Log tidak ditemukan', 404);
+            return $this->jsonError('Log not found', 404);
         }
         $changes = db_connect()->table('activity_log_changes')->where('activity_log_id', $id)->get()->getResultArray();
         $shaped  = $this->shape($row);

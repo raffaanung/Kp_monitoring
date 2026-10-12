@@ -108,7 +108,7 @@
       status: taskStatus,
     })
     if (!created) {
-      taskError = 'Judul task wajib diisi'
+      taskError = 'Task title is required'
       return
     }
     taskTitle = ''
@@ -139,8 +139,8 @@
         refresh_cadence: editRefresh.trim(),
       },
     })
-    if (ok) editMsg = 'Dashboard berhasil diubah'
-    else editError = 'Gagal menyimpan perubahan. Pastikan nama Owner dan PIC benar.'
+    if (ok) editMsg = 'Dashboard updated'
+    else editError = 'Could not save. Check that the owner and PIC names are correct.'
   }
 
   async function onChangeStatus(event) {
@@ -148,16 +148,16 @@
     if (!item) return
     const ok = await changeDashboardStatus(item.id, nextStatus)
     statusOk = ok
-    statusMsg = ok ? `Status diubah ke ${registryStatusLabel(nextStatus)}` : 'Gagal mengubah status'
+    statusMsg = ok ? `Status changed to ${registryStatusLabel(nextStatus)}` : 'Could not change the status'
   }
 
   async function onDelete() {
     if (!item) return
-    if (!confirm(`Hapus dashboard "${item.name}" dari registry?`)) return
+    if (!confirm(`Delete dashboard "${item.name}" from the registry?`)) return
     const id = item.id
     const ok = await deleteDashboard(id)
     if (!ok) {
-      deleteMsg = 'Gagal menghapus dashboard'
+      deleteMsg = 'Could not delete the dashboard'
       return
     }
     goto('/registry/list')
@@ -176,9 +176,9 @@
 <section class="page">
   <GlassPanel>
     <SubmenuHeader
-      eyebrow="Dashboard Registry"
+      eyebrow="Workspaces"
       title="Dashboard Detail"
-      sub={item ? item.description : 'Detail dashboard tidak ditemukan'}
+      sub={item ? item.description : 'Detail dashboard not found'}
       meta={item ? item.name : '—'}
     >
       {#snippet actions()}
@@ -187,7 +187,7 @@
     </SubmenuHeader>
 
   {#if !item}
-    <p class="state error">Dashboard tidak ditemukan.</p>
+    <p class="state error">Dashboard not found.</p>
   {:else}
     <header>
       <div class="meta">
@@ -258,7 +258,7 @@
             <section>
               <h2>List Task</h2>
               {#if item.tasks.length === 0}
-                <p class="empty">Belum ada task.</p>
+                <p class="empty">No tasks yet.</p>
               {:else}
                 <ul class="list">
                   {#each item.tasks as task (task.id)}
@@ -280,15 +280,15 @@
             </section>
 
             <section class="add-box">
-              <h2>Tambah Task</h2>
+              <h2>Add Task</h2>
               <form class="stack" onsubmit={onAddTask}>
                 <label>
-                  <span>Judul</span>
+                  <span>Title</span>
                   <input bind:value={taskTitle} placeholder="Contoh: Filter periode fiscal" />
                 </label>
                 <label>
                   <span>PIC</span>
-                  <input bind:value={taskPic} placeholder="Nama PIC (opsional)" />
+                  <input bind:value={taskPic} placeholder="PIC name (optional)" />
                 </label>
                 <div class="row2">
                   <label>
@@ -310,7 +310,7 @@
                 </div>
                 {#if taskError}<p class="msg error">{taskError}</p>{/if}
                 {#if taskOk}<p class="msg ok">{taskOk}</p>{/if}
-                <button type="submit">Tambah</button>
+                <button type="submit">Add</button>
               </form>
             </section>
           </div>
@@ -318,7 +318,7 @@
           <section>
             <h2>Activity Log per Dashboard</h2>
             {#if item.history.length === 0}
-              <p class="empty">Belum ada riwayat aktivitas.</p>
+              <p class="empty">No activity yet.</p>
             {:else}
               <ol class="timeline">
                 {#each item.history as entry (entry.id)}
@@ -350,13 +350,13 @@
                   </label>
                 </div>
                 <label>
-                  <span>Deskripsi</span>
+                  <span>Description</span>
                   <textarea rows="3" bind:value={editDescription}></textarea>
                 </label>
                 <label>
                   <span>PM (Project Manager)</span>
                   <select bind:value={editPm}>
-                    <option value="">Pilih PIC...</option>
+                    <option value="">Select a PIC...</option>
                     {#each pmOptions as user (user.id)}
                       <option value={user.name}>{user.name}</option>
                     {/each}
@@ -388,7 +388,7 @@
                     <input bind:value={editUrl} />
                   </label>
                   <label>
-                    <span>Kritikalitas</span>
+                    <span>Priority</span>
                     <select bind:value={editCriticality}>
                       {#each criticalityOptions as opt}
                         <option value={opt.value}>{opt.label}</option>
@@ -408,7 +408,7 @@
                 </div>
                 {#if editMsg}<p class="msg ok">{editMsg}</p>{/if}
                 {#if editError}<p class="msg error">{editError}</p>{/if}
-                <button type="submit">Simpan perubahan</button>
+                <button type="submit">Save changes</button>
               </form>
             </section>
 
@@ -430,9 +430,9 @@
 
             <section class="danger-zone">
               <h2>Delete Dashboard</h2>
-              <p>Hapus dashboard ini dari registry. Datanya ditandai terhapus, tidak hilang dari database.</p>
+              <p>Delete this dashboard from the registry. It is marked deleted and stays in the database.</p>
               {#if deleteMsg}<p class="msg error">{deleteMsg}</p>{/if}
-              <button type="button" class="danger" onclick={onDelete}>Hapus dashboard</button>
+              <button type="button" class="danger" onclick={onDelete}>Delete dashboard</button>
             </section>
           </div>
           {/if}

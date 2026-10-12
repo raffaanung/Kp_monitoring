@@ -23,15 +23,6 @@
             <p><strong>Kategori:</strong> ${selectedSopItem.category}</p>
             <p><strong>Owner (PIC):</strong> ${selectedSopItem.owner}</p>
           </div>
-          <h4>Prosedur Operasional Standar (SOP)</h4>
-          <p>Deskripsi sistem: <em>${selectedSopItem.description}</em></p>
-          <ol>
-            <li>Akses dashboard melalui platform <strong>${selectedSopItem.platform}</strong> menggunakan kredensial yang berwenang.</li>
-            <li>Lakukan verifikasi data harian/berkala sesuai jadwal sistem.</li>
-            <li>Jika terdapat masalah atau anomali data, segera eskalasikan kepada <strong>${selectedSopItem.owner}</strong>.</li>
-            <li>Pastikan untuk mereview dashboard ini kembali jika ada perubahan dari status <strong>${selectedSopItem.status}</strong>.</li>
-            <li>Dokumentasikan setiap perubahan konfigurasi pada log aktivitas.</li>
-          </ol>
           <script>
             window.onload = () => { window.print(); window.close(); }
           <\/script>
@@ -53,23 +44,13 @@
         <p><strong>Platform:</strong> {selectedSopItem.platform}</p>
         <p><strong>Kategori:</strong> {selectedSopItem.category}</p>
         <p><strong>Owner (PIC):</strong> {selectedSopItem.owner}</p>
-        <hr class="sop-divider" />
-        <h4>Prosedur Operasional Standar (SOP)</h4>
-        <p>Deskripsi sistem: <em>{selectedSopItem.description}</em></p>
-        <ol class="sop-list">
-          <li>Akses dashboard melalui platform <strong>{selectedSopItem.platform}</strong> menggunakan kredensial yang berwenang.</li>
-          <li>Lakukan verifikasi data harian/berkala sesuai jadwal sistem.</li>
-          <li>Jika terdapat masalah atau anomali data, segera eskalasikan kepada <strong>{selectedSopItem.owner}</strong>.</li>
-          <li>Pastikan untuk mereview dashboard ini kembali jika ada perubahan dari status <strong>{selectedSopItem.status}</strong>.</li>
-          <li>Dokumentasikan setiap perubahan konfigurasi pada log aktivitas.</li>
-        </ol>
       </div>
       <div class="sop-modal-footer" style="gap: 10px;">
         <button class="sop-btn download-btn" onclick={downloadSopPdf}>
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
           Download PDF
         </button>
-        <button class="sop-btn" onclick={() => (selectedSopItem = null)}>Tutup SOP</button>
+        <button class="sop-btn" onclick={() => (selectedSopItem = null)}>Close SOP</button>
       </div>
     </div>
   </div>

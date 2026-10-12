@@ -124,7 +124,7 @@ export function rememberDetailId(id) {
 
 /** @param {string} id */
 export function getRequirement(id) {
-  return requirementStore.items.find((r) => r.id === id) || null
+  return requirementStore.items.find((r) => String(r.id) === String(id)) || null
 }
 
 /**
@@ -177,11 +177,11 @@ export function requirementDashboardOptions() {
 }
 
 export const requirementSortOptions = [
-  { value: 'updated_desc', label: 'Updated terbaru' },
-  { value: 'updated_asc', label: 'Updated terlama' },
-  { value: 'due_asc', label: 'Due date terdekat' },
-  { value: 'title_asc', label: 'Judul A–Z' },
-  { value: 'title_desc', label: 'Judul Z–A' },
+  { value: 'updated_desc', label: 'Recently updated' },
+  { value: 'updated_asc', label: 'Least recently updated' },
+  { value: 'due_asc', label: 'Soonest due date' },
+  { value: 'title_asc', label: 'Title A–Z' },
+  { value: 'title_desc', label: 'Title Z–A' },
   { value: 'dashboard_asc', label: 'Dashboard A–Z' },
   { value: 'status_asc', label: 'Status' },
 ]
@@ -289,17 +289,17 @@ export const requirementStatusCatalog = [
   {
     value: 'open',
     label: 'Open',
-    summary: 'Requirement baru / belum dikerjakan. Belum ada progress task yang aktif.',
+    summary: 'New requirement. No active task progress yet.',
   },
   {
     value: 'in_progress',
     label: 'In Progress',
-    summary: 'Sedang dikerjakan. Ada task yang sudah dipecah dan berjalan di backlog/board.',
+    summary: 'In progress. Tasks have been broken out and are moving on the board.',
   },
   {
     value: 'done',
     label: 'Done',
-    summary: 'Requirement selesai. Seluruh scope dianggap complete / diterima.',
+    summary: 'Requirement done. The full scope is accepted.',
   },
 ]
 
@@ -319,12 +319,12 @@ export const requirementHealthCatalog = [
   {
     value: 'at_risk',
     label: 'At Risk',
-    summary: 'Berisiko telat / scope bergeser. Perlu perhatian PM.',
+    summary: 'At risk of slipping or a scope change. Needs PM attention.',
   },
   {
     value: 'blocked',
     label: 'Blocked',
-    summary: 'Terhambat dependency / approval. Tidak bisa lanjut tanpa keputusan.',
+    summary: 'Blocked by a dependency or approval. Cannot continue without a decision.',
   },
 ]
 

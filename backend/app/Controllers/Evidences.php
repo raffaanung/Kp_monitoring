@@ -17,10 +17,10 @@ class Evidences extends BaseController
         $file   = $this->request->getFile('file');
 
         if ($taskId === null || $file === null || ! $file->isValid()) {
-            return $this->jsonError('File dan task_id wajib diisi', 422);
+            return $this->jsonError('File and task_id are required', 422);
         }
         if ($file->getSize() > self::MAX_BYTES) {
-            return $this->jsonError('Ukuran file maksimal 10MB', 422);
+            return $this->jsonError('Maximum file size is 10 MB', 422);
         }
 
         $user = $this->authUser();
@@ -53,11 +53,11 @@ class Evidences extends BaseController
     {
         $row = (new TaskEvidenceModel())->find($id);
         if ($row === null) {
-            return $this->jsonError('Evidence tidak ditemukan', 404);
+            return $this->jsonError('Evidence not found', 404);
         }
         $path = WRITEPATH . 'uploads/' . $row['file_path'];
         if (! is_file($path)) {
-            return $this->jsonError('File tidak ditemukan', 404);
+            return $this->jsonError('File not found', 404);
         }
 
         $isImage     = str_starts_with((string) $row['file_mime'], 'image/');

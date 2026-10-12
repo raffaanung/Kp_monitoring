@@ -18,7 +18,7 @@ class Dashboards extends BaseController
     {
         $user = $this->authUser();
         if (! TaskPolicy::canManageRegistry($user)) {
-            return $this->jsonError('Anda tidak punya izin Kelola Dashboard Registry', 403);
+            return $this->jsonError('You do not have permission to manage the dashboard registry', 403);
         }
 
         $name        = trim((string) $this->request->getJsonVar('name'));
@@ -27,14 +27,17 @@ class Dashboards extends BaseController
         $ownerName   = trim((string) ($this->request->getJsonVar('owner') ?? ''));
         $url         = trim((string) ($this->request->getJsonVar('url') ?? ''));
         $platform    = trim((string) ($this->request->getJsonVar('platform') ?? '')) ?: 'Custom';
+        $category    = trim((string) ($this->request->getJsonVar('category') ?? '')) ?: 'General';
+        $metadata    = $this->request->getJsonVar('metadata', true);
+        $metadata    = is_array($metadata) ? $metadata : [];
 
         if ($name === '') {
-            return $this->jsonError('Nama dashboard wajib diisi', 422);
+            return $this->jsonError('Dashboard name is required', 422);
         }
 
         $model = new DashboardModel();
         if ($model->where('name', $name)->first() !== null) {
-            return $this->jsonError('Dashboard dengan nama itu sudah ada.', 422);
+            return $this->jsonError('A dashboard with that name already exists.', 422);
         }
 
         $id = $model->createDashboard([
@@ -46,13 +49,20 @@ class Dashboards extends BaseController
             'owner_id'    => $model->findUserIdByName($ownerName),
             'pm_id'       => $model->findUserIdByName($pmName),
             'platform'    => $platform,
-            'category'    => 'General',
+            'category'    => $category,
             'url'         => $url,
             'version'     => '1.0',
         ]);
+        foreach ($metadata as $key => $value) {
+            $value = trim((string) $value);
+            if ($value === '' || ! in_array((string) $key, DashboardModel::STANDARD_META, true)) {
+                continue;
+            }
+            $model->setField($id, (string) $key, $value);
+        }
 
         $row = $this->shapeRow($model->findWithDetails($id));
-        $this->logActivity($user, $id, $name, 'create', 'Dashboard dibuat', $this->diffDashboard([], $row));
+        $this->logActivity($user, $id, $name, 'create', 'Dashboard created', $this->diffDashboard([], $row));
 
         return $this->jsonOk($row);
     }
@@ -61,13 +71,13 @@ class Dashboards extends BaseController
     {
         $user        = $this->authUser();
         if (! TaskPolicy::canManageRegistry($user)) {
-            return $this->jsonError('Anda tidak punya izin Kelola Dashboard Registry', 403);
+            return $this->jsonError('You do not have permission to manage the dashboard registry', 403);
         }
 
         $dashboardId = $id;
         $model       = new DashboardModel();
         if ($model->find($dashboardId) === null) {
-            return $this->jsonError('Dashboard tidak ditemukan', 404);
+            return $this->jsonError('Dashboard not found', 404);
         }
         $before    = $this->shapeRow($model->findWithDetails($dashboardId));
         $beforeMeta = $before['metadata'] ?? [];
@@ -84,10 +94,10 @@ class Dashboards extends BaseController
             }
         }
         if (($patch['name'] ?? null) === '') {
-            return $this->jsonError('Nama tidak boleh kosong', 422);
+            return $this->jsonError('Name cannot be empty', 422);
         }
         if (($patch['code'] ?? null) === '') {
-            return $this->jsonError('Code tidak boleh kosong', 422);
+            return $this->jsonError('Code cannot be empty', 422);
         }
 
         // Owner dan PIC disimpan sebagai id user, bukan nama. Nama yang tidak ada ditolak sebelum ada yang diubah.
@@ -100,7 +110,7 @@ class Dashboards extends BaseController
             $name   = trim((string) $name);
             $userId = $model->findUserIdByName($name);
             if ($name !== '' && $userId === null) {
-                return $this->jsonError("{$label} tidak ditemukan", 422);
+                return $this->jsonError("{$label} not found", 422);
             }
             $userColumns[$column] = $userId;
             $requested[$input]    = [(string) ($before[$input] ?? ''), $name];
@@ -109,6 +119,9 @@ class Dashboards extends BaseController
         $metadata = $this->request->getJsonVar('metadata', true);
         $metadata = is_array($metadata) ? $metadata : [];
         foreach ($metadata as $key => $value) {
+            if (! in_array((string) $key, DashboardModel::STANDARD_META, true)) {
+                continue;
+            }
             $requested['meta_' . $key] = [(string) ($beforeMeta[$key] ?? ''), trim((string) $value)];
         }
 
@@ -127,10 +140,10 @@ class Dashboards extends BaseController
             }
         }
         if ($edits && ! TaskPolicy::canEditField($user)) {
-            return $this->jsonError('Anda tidak punya izin Edit Field', 403);
+            return $this->jsonError('You do not have permission to edit a field', 403);
         }
         if ($clears && ! TaskPolicy::canDeleteField($user)) {
-            return $this->jsonError('Anda tidak punya izin Hapus Field', 403);
+            return $this->jsonError('You do not have permission to delete a field', 403);
         }
 
         // Hapus Code = kembali ke kode otomatis dari nama. Kode lama dikosongkan dulu (sementara unik)
@@ -148,6 +161,9 @@ class Dashboards extends BaseController
             $model->update($dashboardId, $userColumns);
         }
         foreach ($metadata as $key => $value) {
+            if (! in_array((string) $key, DashboardModel::STANDARD_META, true)) {
+                continue;
+            }
             $model->setField($dashboardId, (string) $key, (string) $value);
         }
         $model->touch($dashboardId);
@@ -155,7 +171,7 @@ class Dashboards extends BaseController
         $after   = $this->shapeRow($model->findWithDetails($dashboardId));
         $changes = $this->diffDashboard($before, $after);
         if ($changes !== []) {
-            $this->logActivity($user, $dashboardId, $after['name'], 'update', 'Dashboard diubah', $changes);
+            $this->logActivity($user, $dashboardId, $after['name'], 'update', 'Dashboard updated', $changes);
         }
 
         return $this->jsonOk($after);
@@ -165,18 +181,18 @@ class Dashboards extends BaseController
     {
         $user = $this->authUser();
         if (! TaskPolicy::canManageRegistry($user)) {
-            return $this->jsonError('Anda tidak punya izin Kelola Dashboard Registry', 403);
+            return $this->jsonError('You do not have permission to manage the dashboard registry', 403);
         }
 
         $dashboardId = $id;
         $model       = new DashboardModel();
         $dashboard   = $model->find($dashboardId);
         if ($dashboard === null) {
-            return $this->jsonError('Dashboard tidak ditemukan', 404);
+            return $this->jsonError('Dashboard not found', 404);
         }
 
         $model->delete($dashboardId);
-        $this->logActivity($user, $dashboardId, $dashboard['name'], 'delete', 'Dashboard dihapus');
+        $this->logActivity($user, $dashboardId, $dashboard['name'], 'delete', 'Dashboard deleted');
 
         return $this->jsonOk(['deleted' => true]);
     }
@@ -185,18 +201,18 @@ class Dashboards extends BaseController
     {
         $user = $this->authUser();
         if (! TaskPolicy::canManageRegistry($user)) {
-            return $this->jsonError('Anda tidak punya izin Kelola Dashboard Registry', 403);
+            return $this->jsonError('You do not have permission to manage the dashboard registry', 403);
         }
 
         $dashboardId = $id;
         $status      = (string) $this->request->getJsonVar('status');
         if (! in_array($status, ['active', 'idle'], true)) {
-            return $this->jsonError('Status tidak valid', 422);
+            return $this->jsonError('That status is not valid', 422);
         }
 
         $model = new DashboardModel();
         if ($model->find($dashboardId) === null) {
-            return $this->jsonError('Dashboard tidak ditemukan', 404);
+            return $this->jsonError('Dashboard not found', 404);
         }
         $before = $this->shapeRow($model->findWithDetails($dashboardId));
 
@@ -205,7 +221,7 @@ class Dashboards extends BaseController
         $after   = $this->shapeRow($model->findWithDetails($dashboardId));
         $changes = $this->diffDashboard($before, $after);
         if ($changes !== []) {
-            $this->logActivity($user, $dashboardId, $after['name'], 'status_change', 'Status diubah', $changes);
+            $this->logActivity($user, $dashboardId, $after['name'], 'status_change', 'Status changed', $changes);
         }
 
         return $this->jsonOk($after);
@@ -214,8 +230,8 @@ class Dashboards extends BaseController
     public function setField(string $id = '0'): ResponseInterface
     {
         $user = $this->authUser();
-        if (! TaskPolicy::canAddField($user)) {
-            return $this->jsonError('Anda tidak punya izin Tambah Field', 403);
+        if (! TaskPolicy::canEditField($user)) {
+            return $this->jsonError('You do not have permission to edit a field', 403);
         }
 
         $dashboardId = $id;
@@ -224,12 +240,12 @@ class Dashboards extends BaseController
 
         $model = new DashboardModel();
         if ($model->find($dashboardId) === null) {
-            return $this->jsonError('Dashboard tidak ditemukan', 404);
+            return $this->jsonError('Dashboard not found', 404);
         }
         $before = $this->shapeRow($model->findWithDetails($dashboardId));
 
         if (! $model->setField($dashboardId, $key, $value)) {
-            return $this->jsonError('Nama field wajib diisi', 422);
+            return $this->jsonError('This field is not part of the standard format', 422);
         }
 
         return $this->jsonOk($this->logFieldChange($user, $model, $dashboardId, $before));
@@ -239,7 +255,7 @@ class Dashboards extends BaseController
     {
         $user = $this->authUser();
         if (! TaskPolicy::canEditField($user)) {
-            return $this->jsonError('Anda tidak punya izin Edit Field', 403);
+            return $this->jsonError('You do not have permission to edit a field', 403);
         }
 
         $dashboardId = $id;
@@ -249,12 +265,12 @@ class Dashboards extends BaseController
 
         $model = new DashboardModel();
         if ($model->find($dashboardId) === null) {
-            return $this->jsonError('Dashboard tidak ditemukan', 404);
+            return $this->jsonError('Dashboard not found', 404);
         }
         $before = $this->shapeRow($model->findWithDetails($dashboardId));
 
         if (! $model->renameField($dashboardId, $oldKey, $newKey, $value)) {
-            return $this->jsonError('Nama field wajib diisi', 422);
+            return $this->jsonError('Standard field names cannot be changed', 422);
         }
 
         return $this->jsonOk($this->logFieldChange($user, $model, $dashboardId, $before));
@@ -264,7 +280,7 @@ class Dashboards extends BaseController
     {
         $user = $this->authUser();
         if (! TaskPolicy::canDeleteField($user)) {
-            return $this->jsonError('Anda tidak punya izin Hapus Field', 403);
+            return $this->jsonError('You do not have permission to delete a field', 403);
         }
 
         $dashboardId = $id;
@@ -272,13 +288,9 @@ class Dashboards extends BaseController
 
         $model = new DashboardModel();
         if ($model->find($dashboardId) === null) {
-            return $this->jsonError('Dashboard tidak ditemukan', 404);
+            return $this->jsonError('Dashboard not found', 404);
         }
-        $before = $this->shapeRow($model->findWithDetails($dashboardId));
-
-        $model->removeField($dashboardId, $key);
-
-        return $this->jsonOk($this->logFieldChange($user, $model, $dashboardId, $before));
+        return $this->jsonError('Standard fields cannot be deleted', 422);
     }
 
     /**
@@ -293,7 +305,7 @@ class Dashboards extends BaseController
         $after   = $this->shapeRow($model->findWithDetails($dashboardId));
         $changes = $this->diffDashboard($before, $after);
         if ($changes !== []) {
-            $this->logActivity($user, $dashboardId, $after['name'], 'update', 'Field custom diubah', $changes);
+            $this->logActivity($user, $dashboardId, $after['name'], 'update', 'Custom field updated', $changes);
         }
 
         return $after;
@@ -325,17 +337,39 @@ class Dashboards extends BaseController
 
         $beforeMeta = $before['metadata'] ?? [];
         $afterMeta  = $after['metadata'] ?? [];
+        $metaLabels = [
+            'development_db'       => 'Development Database Engine',
+            'development_ip'       => 'Development IP Address',
+            'development_db_name'  => 'Development Database Name',
+            'development_db_user'  => 'Development Database Username',
+            'development_db_pass'  => 'Development Password',
+            'production_db'        => 'Production Database Engine',
+            'production_ip'        => 'Production IP Address',
+            'production_db_name'   => 'Production Database Name',
+            'production_db_user'   => 'Production Database Username',
+            'production_db_pass'   => 'Production Password',
+            'development_link'     => 'Development link',
+            'production_link'      => 'Production link',
+            'source_system'        => 'Source system',
+            'deploy'               => 'Deploy',
+            'framework'            => 'Framework',
+            'framework_version'    => 'Framework Version',
+            'backend'              => 'Backend',
+            'backend_version'      => 'Backend Version',
+            'frontend'             => 'Front End',
+        ];
         foreach (array_unique([...array_keys($beforeMeta), ...array_keys($afterMeta)]) as $key) {
             $b = $beforeMeta[$key] ?? null;
             $a = $afterMeta[$key] ?? null;
             if ((string) $b === (string) $a) {
                 continue;
             }
+            $secret = str_ends_with((string) $key, '_pass');
             $changes[] = [
                 'field'  => 'meta_' . $key,
-                'label'  => str_replace('_', ' ', (string) $key),
-                'before' => $b === null ? null : (string) $b,
-                'after'  => $a === null ? null : (string) $a,
+                'label'  => $metaLabels[$key] ?? str_replace('_', ' ', (string) $key),
+                'before' => $b === null || $b === '' ? null : ($secret ? '••••••' : (string) $b),
+                'after'  => $a === null || $a === '' ? null : ($secret ? '••••••' : (string) $a),
             ];
         }
 
