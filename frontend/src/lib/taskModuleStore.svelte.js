@@ -486,23 +486,21 @@ export async function createModuleTask(payload) {
   const title = (payload.title || '').trim()
   if (!title) return null
   const dashboard = (payload.dashboard || '').trim() || 'General'
-  if (!canCreateTask()) return null
-
-  try {
-    const created = await api.post('/api/module-tasks', {
-      title,
-      description: (payload.description || '').trim(),
-      dashboard,
-      requirement_id: payload.requirement_id,
-      assignee: (payload.assignee || payload.pic || '').trim(),
-      deadline: payload.deadline || '',
-      status: payload.status || 'backlog',
-    })
-    applyTaskUpdate(created)
-    return created
-  } catch {
-    return null
+  if (!canCreateTask()) {
+    throw new Error('Anda tidak memiliki permission untuk membuat task (create_task)')
   }
+
+  const created = await api.post('/api/module-tasks', {
+    title,
+    description: (payload.description || '').trim(),
+    dashboard,
+    requirement_id: payload.requirement_id,
+    assignee: (payload.assignee || payload.pic || '').trim(),
+    deadline: payload.deadline || '',
+    status: payload.status || 'backlog',
+  })
+  applyTaskUpdate(created)
+  return created
 }
 
 /**

@@ -27,7 +27,7 @@ export default defineConfig({
 		open: '/',
 		proxy: {
 			'/edm_task/backend/api': {
-				target: 'http://127.0.0.1:8088',
+				target: 'http://localhost:8088',
 				changeOrigin: true,
 				rewrite: (path) => path.replace(/^\/edm_task\/backend/, ''),
 			},

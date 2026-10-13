@@ -1,9 +1,11 @@
 <script>
+  import { untrack } from 'svelte'
   import {
     createModuleTask,
     teknisAssignees,
     assigneeOptions,
     canCreateTask,
+    taskModuleStore,
   } from './taskModuleStore.svelte.js'
   import {
     listRequirements,
@@ -103,15 +105,20 @@
       : [...assignees, name]
   }
 
+  // Reset form hanya saat modal dibuka. untrack() supaya effect ini tidak ikut
+  // jalan ulang ketika taskModuleStore.items berubah (mis. setelah task pertama
+  // dibuat), yang sebelumnya mengosongkan form di tengah loop multi-assignee.
   $effect(() => {
     if (!open) return
-    title = ''
-    description = ''
-    deadline = today()
-    error = ''
-    saving = false
-    selectedReqId = requirementId || (reqChoices[0]?.id ?? '')
-    assignees = defaultAssignees()
+    untrack(() => {
+      title = ''
+      description = ''
+      deadline = today()
+      error = ''
+      saving = false
+      selectedReqId = requirementId || (reqChoices[0]?.id ?? '')
+      assignees = defaultAssignees()
+    })
   })
 
   $effect(() => {
@@ -154,30 +161,43 @@
 
     saving = true
     const pending = [...assignees]
+    const form = {
+      title: title.trim(),
+      description: description.trim(),
+      dashboard: req.dashboard,
+      requirement_id: req.id,
+      deadline,
+    }
     /** @type {string[]} */
     const failed = []
+    /** @type {string[]} */
+    const errReasons = []
     /** @type {{ id: number } | null} */
     let created = null
     for (const name of pending) {
-      const row = await createModuleTask({
-        title: title.trim(),
-        description: description.trim(),
-        dashboard: req.dashboard,
-        requirement_id: req.id,
-        assignee: name,
-        deadline,
-        status: 'backlog',
-      })
-      if (row) created = row
-      else failed.push(name)
+      try {
+        const row = await createModuleTask({
+          ...form,
+          assignee: name,
+          status: 'backlog',
+        })
+        if (row) created = row
+        else failed.push(name)
+      } catch (err) {
+        failed.push(name)
+        const msg = err instanceof Error ? err.message : String(err)
+        errReasons.push(`${name}: ${msg}`)
+      }
     }
     saving = false
 
     if (failed.length) {
       assignees = failed
-      error = failed.length === pending.length
-        ? 'Could not create the task'
-        : `Could not create a task for ${failed.join(', ')}`
+      error = errReasons.length
+        ? errReasons.join('; ')
+        : (failed.length === pending.length
+            ? 'Could not create the task'
+            : `Could not create a task for ${failed.join(', ')}`)
       return
     }
 
@@ -207,7 +227,7 @@
   >
       <header class="head">
         <div>
-          <p class="eyebrow">PM · Split to Backlog</p>
+          <p class="eyebrow">{taskModuleStore.session.label || 'PM'} · Split to Backlog</p>
           <h2 id="pm-task-title">Add Task</h2>
           <p class="hint">The task is approved immediately and lands in Backlog, assigned to an engineer.</p>
         </div>
