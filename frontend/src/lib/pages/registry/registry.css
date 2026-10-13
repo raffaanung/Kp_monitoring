@@ -5109,17 +5109,19 @@
   }
 
   .sheet-tasks th:nth-child(1),
-  .sheet-tasks td:nth-child(1) { width: 28%; }
+  .sheet-tasks td:nth-child(1) { width: 25%; }
   .sheet-tasks th:nth-child(2),
-  .sheet-tasks td:nth-child(2) { width: 20%; }
+  .sheet-tasks td:nth-child(2) { width: 18%; }
   .sheet-tasks th:nth-child(3),
-  .sheet-tasks td:nth-child(3) { width: 8%; text-align: center; }
+  .sheet-tasks td:nth-child(3) { width: 7%; text-align: center; }
   .sheet-tasks th:nth-child(4),
-  .sheet-tasks td:nth-child(4) { width: 18%; }
+  .sheet-tasks td:nth-child(4) { width: 16%; }
   .sheet-tasks th:nth-child(5),
-  .sheet-tasks td:nth-child(5) { width: 14%; }
+  .sheet-tasks td:nth-child(5) { width: 12%; }
   .sheet-tasks th:nth-child(6),
-  .sheet-tasks td:nth-child(6) { width: 12%; }
+  .sheet-tasks td:nth-child(6) { width: 11%; }
+  .sheet-tasks th:nth-child(7),
+  .sheet-tasks td:nth-child(7) { width: 11%; }
 
   .sheet-tasks th,
   .sheet-tasks td {
@@ -5180,6 +5182,515 @@
     color: #be123c;
   }
 
+  .task-row-toggle {
+    cursor: pointer;
+    transition: background 0.12s ease;
+  }
+
+  .task-row-toggle:hover {
+    background: #f8fafc;
+  }
+
+  .task-row-toggle.open {
+    background: #f1f5f9;
+  }
+
+  .task-title-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .row-chevron {
+    display: inline-block;
+    font-style: normal;
+    font-size: 0.6rem;
+    color: #94a3b8;
+    transition: transform 0.15s ease;
+  }
+
+  .row-chevron.open {
+    transform: rotate(90deg);
+  }
+
+  .task-row-detail td {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    background: #fafbfc;
+    padding: 0;
+  }
+
+  .task-accordion {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding: 0.85rem 1.1rem 1rem 2.1rem;
+    border-left: 2px solid #cbd5e1;
+  }
+
+  .task-accordion-desc {
+    margin: 0;
+    font-size: 0.68rem;
+    color: #334155;
+    line-height: 1.5;
+  }
+
+  .task-accordion-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.25rem;
+  }
+
+  .task-accordion-grid > div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  .task-accordion-label {
+    font-size: 0.56rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #94a3b8;
+  }
+
+  .task-accordion-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .task-accordion-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: 0.66rem;
+    color: #334155;
+  }
+
+  .task-accordion-list a {
+    color: #2563eb;
+    text-decoration: none;
+  }
+
+  .task-accordion-list a:hover {
+    text-decoration: underline;
+  }
+
+  .task-accordion-empty {
+    margin: 0;
+    font-size: 0.64rem;
+    color: #94a3b8;
+    font-style: italic;
+  }
+
+  .task-accordion-open {
+    align-self: flex-start;
+    border: none;
+    background: transparent;
+    color: #2563eb;
+    font-size: 0.66rem;
+    font-weight: 700;
+    cursor: pointer;
+    padding: 0;
+    margin-top: 0.2rem;
+  }
+
+  .task-accordion-open:hover {
+    text-decoration: underline;
+  }
+
+  .task-actions-col {
+    width: 11%;
+    white-space: nowrap !important;
+    overflow: visible !important;
+  }
+
+  .task-row-actions {
+    display: flex;
+    gap: 0.35rem;
+  }
+
+  .task-action-btn {
+    width: 22px;
+    height: 22px;
+    border: 1px solid #e2e8f0;
+    border-radius: 7px;
+    background: #fff;
+    color: #475569;
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.12s ease;
+  }
+
+  .task-action-btn:hover {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+    color: #0f172a;
+  }
+
+  .approval-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  .approval-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.55rem 0.65rem;
+    border: 1px solid #e8edf3;
+    border-radius: 10px;
+    background: #f8fafc;
+  }
+
+  .approval-row-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    font-size: 0.68rem;
+  }
+
+  .approval-row-head strong {
+    color: #0f172a;
+  }
+
+  .approval-row-note {
+    margin: 0;
+    font-size: 0.64rem;
+    color: #64748b;
+  }
+
+  .approval-row-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.15rem;
+  }
+
+  .approval-accept,
+  .approval-reject {
+    flex: 1;
+    border: none;
+    border-radius: 8px;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.64rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .approval-accept {
+    background: #16a34a;
+    color: #fff;
+  }
+
+  .approval-accept:hover {
+    background: #15803d;
+  }
+
+  .approval-reject {
+    background: #f1f5f9;
+    color: #475569;
+  }
+
+  .approval-reject:hover {
+    background: #e2e8f0;
+  }
+
+  /* Accept/Return sekarang cuma "pilih keputusan" (staged), bukan langsung eksekusi -- ring biru nandain mana yang lagi dipilih sebelum Apply diklik. */
+  .approval-accept.selected,
+  .approval-reject.selected {
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.45);
+  }
+
+  .approval-accept:disabled,
+  .approval-reject:disabled {
+    opacity: 1;
+    cursor: not-allowed;
+    background: #e2e8f0 !important;
+    color: #94a3b8 !important;
+  }
+
+  .add-assignee-field {
+    display: grid;
+    gap: 0.3rem;
+    font-size: 0.68rem;
+    font-weight: 650;
+    color: #334155;
+    margin-bottom: 0.7rem;
+  }
+
+  .add-assignee-field select {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 0.5rem 0.6rem;
+    font: inherit;
+  }
+
+  .approval-note-field {
+    display: grid;
+    gap: 0.25rem;
+    margin-top: 0.4rem;
+    font-size: 0.62rem;
+    font-weight: 650;
+    color: #475569;
+  }
+
+  .approval-note-field textarea {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 0.4rem 0.5rem;
+    font: inherit;
+    font-size: 0.64rem;
+    resize: vertical;
+  }
+
+  .approval-note-field textarea:disabled {
+    background: #f1f5f9;
+    color: #94a3b8;
+  }
+
+  .task-accordion-cols {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 1.2rem;
+  }
+
+  .task-accordion-left {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding-right: 1rem;
+    border-right: 1px solid #e8edf3;
+  }
+
+  .task-accordion-right {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+  }
+
+  .task-approval-outcome,
+  .task-progress-edit {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .approval-state-badge {
+    align-self: flex-start;
+    font-size: 0.6rem;
+    font-weight: 700;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    background: #e2e8f0;
+    color: #475569;
+  }
+
+  .approval-state-badge[data-state='approved'] {
+    background: #dcfce7;
+    color: #15803d;
+  }
+
+  .approval-state-badge[data-state='pending'] {
+    background: #fef3c7;
+    color: #b45309;
+  }
+
+  .approval-state-badge[data-state='revision'] {
+    background: #fee2e2;
+    color: #b91c1c;
+  }
+
+  .task-decision-note {
+    margin: 0;
+    font-size: 0.64rem;
+    color: #334155;
+    line-height: 1.4;
+  }
+
+  .task-decision-note small {
+    color: #94a3b8;
+  }
+
+  .task-progress-edit input[type='range'] {
+    width: 100%;
+    accent-color: #2563eb;
+  }
+
+  .task-progress-readout {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.66rem;
+    color: #334155;
+  }
+
+  .task-progress-readout b {
+    font-size: 0.72rem;
+    color: #0f172a;
+  }
+
+  .task-accordion-desc-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .task-accordion-desc-wrap textarea {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 0.45rem 0.55rem;
+    font: inherit;
+    font-size: 0.66rem;
+    resize: vertical;
+  }
+
+  .task-accordion-edit-link {
+    align-self: flex-start;
+    border: none;
+    background: transparent;
+    color: #2563eb;
+    font-size: 0.6rem;
+    font-weight: 700;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .task-accordion-edit-link:hover {
+    text-decoration: underline;
+  }
+
+  .field-error {
+    margin: 0;
+    font-size: 0.6rem;
+    color: #dc2626;
+  }
+
+  .task-evidence-upload,
+  .task-issue-input {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.3rem;
+  }
+
+  .task-evidence-upload input[type='file'] {
+    font-size: 0.6rem;
+    max-width: 100%;
+  }
+
+  .task-evidence-picked {
+    flex-basis: 100%;
+    margin: 0;
+    font-size: 0.6rem;
+    color: #64748b;
+  }
+
+  .task-evidence-note,
+  .task-issue-input input[type='text'] {
+    flex: 1;
+    min-width: 140px;
+    box-sizing: border-box;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 0.35rem 0.5rem;
+    font: inherit;
+    font-size: 0.64rem;
+  }
+
+  .task-mini-kanban {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin-top: 0.3rem;
+    padding-top: 0.6rem;
+    border-top: 1px solid #e8edf3;
+  }
+
+  .task-mini-kanban-track {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+
+  .task-mini-kanban-col {
+    flex: 1;
+    min-width: 90px;
+    min-height: 58px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+    text-align: center;
+    padding: 0.4rem 0.35rem;
+    border: 1.5px dashed var(--col-color, #cbd5e1);
+    border-radius: 8px;
+    background: #f8fafc;
+  }
+
+  /* Solid border = posisi status task yang tersimpan sekarang; card di dalamnya bisa ada di kolom lain kalau sedang di-drag (draft, belum di-Apply). */
+  .task-mini-kanban-col.current {
+    border-style: solid;
+  }
+
+  .task-mini-kanban-col-label {
+    font-size: 0.56rem;
+    font-weight: 700;
+    color: var(--col-color, #475569);
+  }
+
+  .task-mini-kanban-card {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.3rem 0.4rem;
+    border-radius: 6px;
+    background: var(--col-color, #475569);
+    color: #fff;
+    font-size: 0.6rem;
+    font-weight: 650;
+    cursor: grab;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .task-mini-kanban-card:active {
+    cursor: grabbing;
+  }
+
+  .task-progress-apply {
+    align-self: flex-start;
+    width: auto;
+    height: auto;
+    padding: 0.35rem 0.9rem;
+    border-radius: 8px;
+    font-size: 0.64rem;
+  }
+
+  .task-progress-apply:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
   .sheet .kanban-cols {
     margin-top: 0;
   }
@@ -5204,5 +5715,16 @@
     .sheet-other,
     .req-sheet {
       grid-template-columns: 1fr;
+    }
+
+    .task-accordion-cols {
+      grid-template-columns: 1fr;
+    }
+
+    .task-accordion-left {
+      border-right: none;
+      border-bottom: 1px solid #e8edf3;
+      padding-right: 0;
+      padding-bottom: 0.7rem;
     }
   }

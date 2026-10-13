@@ -1,16 +1,21 @@
 <script>
   import { portal } from '$lib/portal.js';
   import { createDashboard } from '$lib/registryStore.svelte.js';
+  import { createRequirement, requirementTeamRoster } from '$lib/requirementStore.svelte.js';
+  import { addAttachments } from '$lib/attachmentStore.svelte.js';
 
-  let { 
-    createOpen = $bindable(), 
+  let {
+    createOpen = $bindable(),
     pmOptions = []
   } = $props();
+
+  const teknisRoster = $derived(requirementTeamRoster());
 
   const steps = [
     { title: 'Identitas', desc: 'Name, unit & PIC' },
     { title: 'Teknologi', desc: 'Framework, backend, front end' },
     { title: 'Infrastructure', desc: 'Development & production' },
+    { title: 'First Requirement', desc: 'Name, description & due date' },
   ];
   const profileSpec = [
     { key: 'framework', label: 'Framework', placeholder: 'Contoh: SvelteKit' },
@@ -42,6 +47,14 @@
   let formError = $state("");
   let saving = $state(false);
 
+  let reqTitle = $state("");
+  let reqDescription = $state("");
+  let reqDueDate = $state("");
+  /** @type {string[]} */
+  let reqAssignTo = $state([]);
+  /** @type {FileList | null} */
+  let reqFiles = $state(null);
+
   function closeCreate() {
     createOpen = false;
     currentStep = 1;
@@ -52,6 +65,18 @@
     formPriority = "medium";
     formMeta = {};
     formError = "";
+    reqTitle = "";
+    reqDescription = "";
+    reqDueDate = "";
+    reqAssignTo = [];
+    reqFiles = null;
+  }
+
+  /** @param {string} name */
+  function toggleReqAssignee(name) {
+    reqAssignTo = reqAssignTo.includes(name)
+      ? reqAssignTo.filter((n) => n !== name)
+      : [...reqAssignTo, name];
   }
 
   function nextStep() {
@@ -109,6 +134,21 @@
       formError = "Could not save. A dashboard with that name may already exist.";
       return;
     }
+
+    const reqTitleTrimmed = reqTitle.trim();
+    if (reqTitleTrimmed) {
+      const createdReq = await createRequirement({
+        dashboard: name,
+        title: reqTitleTrimmed,
+        description: reqDescription.trim(),
+        due_date: reqDueDate,
+        team: reqAssignTo,
+      });
+      if (createdReq && reqFiles && reqFiles.length) {
+        await addAttachments('requirement', createdReq.id, reqFiles);
+      }
+    }
+
     createOpen = false;
   }
 </script>
@@ -279,7 +319,7 @@
               {/each}
             </div>
           </div>
-        {:else}
+        {:else if currentStep === 3}
           <div class="wizard-pane">
             <div class="pane-title-wrap">
               <h4 class="pane-title">Infrastructure</h4>
@@ -315,6 +355,63 @@
                 </div>
               </div>
             {/each}
+          </div>
+        {:else}
+          <div class="wizard-pane">
+            <div class="pane-title-wrap">
+              <h4 class="pane-title">First Requirement</h4>
+              <p class="pane-sub">
+                Optional — add the first requirement for this application now, or skip and add it later.
+              </p>
+            </div>
+
+            <label>
+              Requirement Name
+              <input
+                bind:value={reqTitle}
+                maxlength="150"
+                placeholder="Contoh: Login page revamp"
+              />
+            </label>
+            <label>
+              Description
+              <textarea
+                rows="3"
+                maxlength="600"
+                bind:value={reqDescription}
+                placeholder="Describe this requirement..."
+              ></textarea>
+            </label>
+            <div class="grid-2">
+              <label>
+                Due Date
+                <input type="date" bind:value={reqDueDate} />
+              </label>
+              <label>
+                Attachment
+                <input type="file" multiple bind:files={reqFiles} />
+              </label>
+            </div>
+            <label>
+              Assign To <span class="input-hint">(optional — Tim Teknis)</span>
+              {#if teknisRoster.length === 0}
+                <span class="input-hint">No Tim Teknis members available yet.</span>
+              {:else}
+                <div class="grid-2">
+                  {#each teknisRoster as member (member.name)}
+                    <label style="flex-direction: row; align-items: center; gap: 0.5rem; font-weight: 500;">
+                      <input
+                        type="checkbox"
+                        style="width: auto;"
+                        checked={reqAssignTo.includes(member.name)}
+                        onchange={() => toggleReqAssignee(member.name)}
+                      />
+                      <span>{member.name}</span>
+                    </label>
+                  {/each}
+                </div>
+              {/if}
+            </label>
           </div>
         {/if}
       </div>

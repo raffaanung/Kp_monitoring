@@ -19,6 +19,12 @@ class TaskPolicy
         };
     }
 
+    /** Admin/Manager = override tertinggi, bisa approve/reject apa pun terlepas dari PM dashboard atau owner requirement-nya. @param array<string, mixed> $user */
+    public static function isAdmin(array $user): bool
+    {
+        return self::functionalRole($user['role_name'] ?? null) === 'manager';
+    }
+
     /** @param array<string, mixed> $user @param array<string, mixed> $dashboard */
     public static function isPmOfDashboard(array $user, array $dashboard): bool
     {
@@ -126,10 +132,10 @@ class TaskPolicy
 
     /**
      * Admin/Manager/PM melihat semua task. Role lain hanya task yang relevan
-     * untuknya: dia yang buat, dia assignee-nya, atau dia owner requirement-nya.
-     * @param array<string, mixed> $user @param array<string, mixed> $task
+     * untuknya: dia yang buat, dia salah satu assignee-nya, atau dia owner requirement-nya.
+     * @param array<string, mixed> $user @param array<string, mixed> $task @param list<string> $assigneeIds
      */
-    public static function canViewTask(array $user, array $task): bool
+    public static function canViewTask(array $user, array $task, array $assigneeIds = []): bool
     {
         if (self::seesAllTasks($user)) {
             return true;
@@ -138,6 +144,7 @@ class TaskPolicy
 
         return (string) ($task['created_by'] ?? '') === $uid
             || (string) ($task['assignee_id'] ?? '') === $uid
+            || in_array($uid, $assigneeIds, true)
             || (string) ($task['requirement_owner_id'] ?? '') === $uid;
     }
 }

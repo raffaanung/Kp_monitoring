@@ -471,6 +471,8 @@ async function uploadEvidenceIfPresent(taskId, evidence, note = '') {
 
 /**
  * PM creates task under a requirement → langsung Backlog (approved).
+ * Satu task sekarang bisa punya banyak assignee sekaligus (lewat `assignees`),
+ * bukan satu task terpisah per orang lagi.
  * @param {{
  *   title: string,
  *   description?: string,
@@ -479,6 +481,7 @@ async function uploadEvidenceIfPresent(taskId, evidence, note = '') {
  *   status?: TaskWorkflow,
  *   pic?: string,
  *   assignee?: string,
+ *   assignees?: string[],
  *   deadline: string,
  * }} payload
  */
@@ -490,12 +493,16 @@ export async function createModuleTask(payload) {
     throw new Error('Anda tidak memiliki permission untuk membuat task (create_task)')
   }
 
+  const assignees = Array.isArray(payload.assignees) && payload.assignees.length
+    ? payload.assignees.filter(Boolean)
+    : [(payload.assignee || payload.pic || '').trim()].filter(Boolean)
+
   const created = await api.post('/api/module-tasks', {
     title,
     description: (payload.description || '').trim(),
     dashboard,
     requirement_id: payload.requirement_id,
-    assignee: (payload.assignee || payload.pic || '').trim(),
+    assignees,
     deadline: payload.deadline || '',
     status: payload.status || 'backlog',
   })
@@ -623,6 +630,24 @@ export async function addTaskComment(id, body, evidence) {
   }
 }
 
+/**
+ * Upload beberapa evidence/screenshot sekaligus (bukan cuma 1 file per aksi).
+ * Tiap file dikirim lewat addTaskComment() satu-satu (backend hanya punya 1 slot evidence per komentar);
+ * catatan hanya ditempel di file pertama supaya tidak ada baris komentar duplikat di panel Comments.
+ * @param {number} id @param {EvidenceFile[]} files @param {string} [note]
+ */
+export async function addTaskEvidenceFiles(id, files, note = '') {
+  if (!files?.length) return false
+  let ok = true
+  let first = true
+  for (const file of files) {
+    const result = await addTaskComment(id, first ? note : '', file)
+    if (!result) ok = false
+    first = false
+  }
+  return ok
+}
+
 /** @param {ModuleTask} task */
 export function latestComment(task) {
   if (!task?.comments?.length) return null
@@ -723,6 +748,20 @@ export function workflowStatusColor(status) {
 export function workflowLabel(status) {
   const found = workflowColumns.find((c) => c.key === status)
   return found ? found.label : status
+}
+
+/** Posisi status di alur kanban, 0-100% — cermin dari percentForStatus() di backend. @param {TaskWorkflow | string} status */
+export function progressForStatus(status) {
+  const idx = workflowColumns.findIndex((c) => c.key === status)
+  if (idx < 0 || workflowColumns.length < 2) return 0
+  return Math.round((idx / (workflowColumns.length - 1)) * 100)
+}
+
+/** Kebalikan progressForStatus(): persentase slider → kolom kanban terdekat. @param {number} pct */
+export function statusForProgress(pct) {
+  const n = workflowColumns.length
+  const idx = Math.round((pct / 100) * (n - 1))
+  return workflowColumns[Math.max(0, Math.min(n - 1, idx))].key
 }
 
 /** @param {ApprovalState | string} state */

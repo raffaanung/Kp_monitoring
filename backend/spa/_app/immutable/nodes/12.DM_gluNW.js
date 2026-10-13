@@ -1,1 +1,0 @@
-import{A as e,O as t,Q as n,S as r,Z as i,n as a}from"../chunks/qdlpLLRr.js";import{t as o}from"../chunks/r-2TFENN.js";import"../chunks/CG4uzruC.js";var s=e(`<section class="page svelte-zz9nza"><p>Mengalihkan ke Daftar Requirementâ€¦</p></section>`);function c(e,c){n(c,!1),r(()=>{o(`/requirements/list`)}),a();var l=s();t(e,l),i()}export{c as component};

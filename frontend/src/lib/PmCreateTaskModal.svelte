@@ -160,48 +160,31 @@
     }
 
     saving = true
-    const pending = [...assignees]
-    const form = {
-      title: title.trim(),
-      description: description.trim(),
-      dashboard: req.dashboard,
-      requirement_id: req.id,
-      deadline,
-    }
-    /** @type {string[]} */
-    const failed = []
-    /** @type {string[]} */
-    const errReasons = []
-    /** @type {{ id: number } | null} */
+    // Satu task, banyak assignee sekaligus — bukan 1 task terpisah per orang lagi.
     let created = null
-    for (const name of pending) {
-      try {
-        const row = await createModuleTask({
-          ...form,
-          assignee: name,
-          status: 'backlog',
-        })
-        if (row) created = row
-        else failed.push(name)
-      } catch (err) {
-        failed.push(name)
-        const msg = err instanceof Error ? err.message : String(err)
-        errReasons.push(`${name}: ${msg}`)
-      }
+    try {
+      created = await createModuleTask({
+        title: title.trim(),
+        description: description.trim(),
+        dashboard: req.dashboard,
+        requirement_id: req.id,
+        deadline,
+        assignees: [...assignees],
+        status: 'backlog',
+      })
+    } catch (err) {
+      saving = false
+      error = err instanceof Error ? err.message : String(err)
+      return
     }
     saving = false
 
-    if (failed.length) {
-      assignees = failed
-      error = errReasons.length
-        ? errReasons.join('; ')
-        : (failed.length === pending.length
-            ? 'Could not create the task'
-            : `Could not create a task for ${failed.join(', ')}`)
+    if (!created) {
+      error = 'Could not create the task'
       return
     }
 
-    if (created) onCreated(created)
+    onCreated(created)
     onClose()
   }
 

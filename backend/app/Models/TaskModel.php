@@ -76,10 +76,12 @@ class TaskModel extends Model
         }
         if (! empty($filters['visible_to'])) {
             $uid = $filters['visible_to'];
+            $escaped = db_connect()->escape($uid);
             $builder->groupStart()
                 ->where('tasks.created_by', $uid)
                 ->orWhere('tasks.assignee_id', $uid)
                 ->orWhere('requirements.created_by', $uid)
+                ->orWhere("tasks.id IN (SELECT task_id FROM task_assignees WHERE user_id = {$escaped})", null, false)
                 ->groupEnd();
         }
         if (! empty($filters['q'])) {
@@ -96,6 +98,59 @@ class TaskModel extends Model
     public function findRichById(string $id): ?array
     {
         return $this->richSelect()->where('tasks.id', $id)->first();
+    }
+
+    /**
+     * Ganti seluruh assignee sebuah task (hapus yang lama, insert yang baru).
+     * @param list<string> $userIds
+     */
+    public function syncAssignees(string $taskId, array $userIds): void
+    {
+        $db = db_connect();
+        $db->table('task_assignees')->where('task_id', $taskId)->delete();
+        $insert = [];
+        foreach (array_unique(array_filter($userIds)) as $userId) {
+            $insert[] = ['task_id' => $taskId, 'user_id' => $userId];
+        }
+        if ($insert !== []) {
+            $db->table('task_assignees')->insertBatch($insert);
+        }
+    }
+
+    /** @return list<string> */
+    public function assigneeIdsFor(string $taskId): array
+    {
+        $rows = db_connect()->table('task_assignees')
+            ->select('user_id')
+            ->where('task_id', $taskId)
+            ->get()->getResultArray();
+
+        return array_column($rows, 'user_id');
+    }
+
+    /**
+     * Semua assignee buat banyak task sekaligus, 1 query (hindari N+1 di list).
+     * @param list<string> $taskIds
+     * @return array<string, list<array{id: string, name: string}>>
+     */
+    public function assigneesForTasks(array $taskIds): array
+    {
+        if ($taskIds === []) {
+            return [];
+        }
+        $rows = db_connect()->table('task_assignees ta')
+            ->select('ta.task_id, u.id AS user_id, u.name')
+            ->join('users u', 'u.id = ta.user_id')
+            ->whereIn('ta.task_id', $taskIds)
+            ->orderBy('u.name', 'ASC')
+            ->get()->getResultArray();
+
+        $map = [];
+        foreach ($rows as $row) {
+            $map[$row['task_id']][] = ['id' => $row['user_id'], 'name' => $row['name']];
+        }
+
+        return $map;
     }
 
     /** Kode task berikutnya (TSK-001, TSK-002, ...). */

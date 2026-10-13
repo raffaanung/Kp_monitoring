@@ -36,12 +36,18 @@ class ModuleTasks extends BaseController
         if (! TaskPolicy::seesAllTasks($user)) {
             $filters['visible_to'] = $user['id'];
         }
-        $rows = (new TaskModel())->listRich(array_filter($filters));
+        $taskModel = new TaskModel();
+        $rows      = $taskModel->listRich(array_filter($filters));
+        $taskIds   = array_column($rows, 'id');
 
-        // 1 query buat semua pending move, bukan 1 query per task (hindari N+1).
-        $moveMap = (new TaskStatusMoveModel())->pendingForTasks(array_column($rows, 'id'));
+        // 1 query buat semua pending move + 1 query buat semua assignee, bukan per task (hindari N+1).
+        $moveMap      = (new TaskStatusMoveModel())->pendingForTasks($taskIds);
+        $assigneesMap = $taskModel->assigneesForTasks($taskIds);
 
-        return $this->jsonOk(array_map(fn ($r) => $this->shapeListRow($r, $moveMap[$r['id']] ?? null), $rows));
+        return $this->jsonOk(array_map(
+            fn ($r) => $this->shapeListRow($r, $moveMap[$r['id']] ?? null, $assigneesMap[$r['id']] ?? []),
+            $rows,
+        ));
     }
 
     public function show(string $id = '0'): ResponseInterface
@@ -51,11 +57,12 @@ class ModuleTasks extends BaseController
             return $this->jsonError('Not signed in', 401);
         }
 
-        $row = (new TaskModel())->findRichById($id);
+        $taskModel = new TaskModel();
+        $row       = $taskModel->findRichById($id);
         if ($row === null) {
             return $this->jsonError('Task not found', 404);
         }
-        if (! TaskPolicy::canViewTask($user, $row)) {
+        if (! TaskPolicy::canViewTask($user, $row, $taskModel->assigneeIdsFor($id))) {
             return $this->jsonError('You are not allowed to view this task', 403);
         }
 
@@ -73,9 +80,16 @@ class ModuleTasks extends BaseController
         $description   = trim((string) ($this->request->getJsonVar('description') ?? ''));
         $dashboardName = trim((string) $this->request->getJsonVar('dashboard'));
         $requirementId = $this->uuidOrNull($this->request->getJsonVar('requirement_id'));
-        $assigneeName  = trim((string) $this->request->getJsonVar('assignee'));
         $deadline      = (string) $this->request->getJsonVar('deadline');
         $status        = (string) ($this->request->getJsonVar('status') ?: 'backlog');
+
+        // Terima banyak assignee sekaligus (satu task, banyak orang) — tetap
+        // terima 'assignee' tunggal (lama) buat backward-compat.
+        $assigneeNames = $this->request->getJsonVar('assignees');
+        if (! is_array($assigneeNames) || $assigneeNames === []) {
+            $single        = trim((string) $this->request->getJsonVar('assignee'));
+            $assigneeNames = $single !== '' ? [$single] : [];
+        }
 
         if ($title === '' || $requirementId === null) {
             return $this->jsonError('Title and requirement are required', 422);
@@ -86,8 +100,16 @@ class ModuleTasks extends BaseController
         if ($dashboard === null) {
             return $this->jsonError('Dashboard not found', 422);
         }
-        $assignee   = $assigneeName !== '' ? (new UserModel())->where('name', $assigneeName)->first() : null;
-        $assigneeId = $assignee['id'] ?? null;
+
+        $userModel   = new UserModel();
+        $assigneeIds = [];
+        foreach (array_unique(array_filter(array_map('trim', $assigneeNames))) as $name) {
+            $row = $userModel->where('name', $name)->first();
+            if ($row !== null) {
+                $assigneeIds[] = $row['id'];
+            }
+        }
+        $primaryAssigneeId = $assigneeIds[0] ?? null;
 
         $requirement = (new RequirementModel())->find($requirementId);
         if ($requirement === null) {
@@ -110,11 +132,12 @@ class ModuleTasks extends BaseController
             'priority'         => 'medium',
             'progress_percent' => 0,
             'approval_state'   => $approvalState,
-            'pic_id'           => $assigneeId,
-            'assignee_id'      => $assigneeId,
+            'pic_id'           => $primaryAssigneeId,
+            'assignee_id'      => $primaryAssigneeId,
             'created_by'       => $user['id'],
             'deadline'         => $deadline ?: null,
         ], false);
+        $taskModel->syncAssignees($taskId, $assigneeIds);
 
         (new ActivityLogModel())->log([
             'actor_id'     => $user['id'],
@@ -129,15 +152,17 @@ class ModuleTasks extends BaseController
             'dashboard_id' => $dashboard['id'],
         ]);
 
-        if ($assigneeId !== null && $assigneeId !== $user['id']) {
-            (new NotificationModel())->notify(
-                'approved',
-                'Task baru',
-                "{$user['name']} menugaskan \"{$title}\" kepada Anda",
-                $assigneeId,
-                $taskId,
-                $dashboard['id'],
-            );
+        foreach ($assigneeIds as $assigneeId) {
+            if ($assigneeId !== $user['id']) {
+                (new NotificationModel())->notify(
+                    'approved',
+                    'Task baru',
+                    "{$user['name']} menugaskan \"{$title}\" kepada Anda",
+                    $assigneeId,
+                    $taskId,
+                    $dashboard['id'],
+                );
+            }
         }
 
         if (! $isOwner && $requirement['created_by'] && $requirement['created_by'] !== $user['id']) {
@@ -165,10 +190,12 @@ class ModuleTasks extends BaseController
             return $this->jsonError('Task not found', 404);
         }
         $requirement = $task['requirement_id'] ? (new RequirementModel())->find($task['requirement_id']) : null;
-        if ($requirement === null || ! TaskPolicy::isRequirementOwner($user, $requirement)) {
+        $isOwner     = $requirement !== null && TaskPolicy::isRequirementOwner($user, $requirement);
+        if (! $isOwner && ! TaskPolicy::isAdmin($user)) {
             return $this->jsonError('Only the requirement owner can approve this task', 403);
         }
-        if ($task['approval_state'] !== 'pending') {
+        // Admin/Manager boleh force-approve walau belum ada yang pending (override), owner biasa tetap hanya bisa saat genuinely pending.
+        if ($task['approval_state'] !== 'pending' && ! TaskPolicy::isAdmin($user)) {
             return $this->jsonError('This task is not waiting for approval', 422);
         }
 
@@ -206,10 +233,12 @@ class ModuleTasks extends BaseController
             return $this->jsonError('Task not found', 404);
         }
         $requirement = $task['requirement_id'] ? (new RequirementModel())->find($task['requirement_id']) : null;
-        if ($requirement === null || ! TaskPolicy::isRequirementOwner($user, $requirement)) {
+        $isOwner     = $requirement !== null && TaskPolicy::isRequirementOwner($user, $requirement);
+        if (! $isOwner && ! TaskPolicy::isAdmin($user)) {
             return $this->jsonError('Only the requirement owner can request a revision', 403);
         }
-        if ($task['approval_state'] !== 'pending') {
+        // Admin/Manager boleh force-return walau belum ada yang pending (override), owner biasa tetap hanya bisa saat genuinely pending.
+        if ($task['approval_state'] !== 'pending' && ! TaskPolicy::isAdmin($user)) {
             return $this->jsonError('This task is not waiting for approval', 422);
         }
 
@@ -301,17 +330,41 @@ class ModuleTasks extends BaseController
         if ($requirementId !== null) {
             $patch['requirement_id'] = $requirementId;
         }
-        $assigneeName = $this->request->getJsonVar('assignee');
-        if ($assigneeName !== null) {
-            $row = (new UserModel())->where('name', trim((string) $assigneeName))->first();
-            if ($row !== null) {
-                $patch['assignee_id'] = $row['id'];
-                $patch['pic_id']      = $row['id'];
+        $progress = $this->request->getJsonVar('progress_percent');
+        if ($progress !== null) {
+            $patch['progress_percent'] = max(0, min(100, (int) $progress));
+        }
+        $assigneeNames = $this->request->getJsonVar('assignees');
+        $syncedIds     = null;
+        if (is_array($assigneeNames)) {
+            $userModel = new UserModel();
+            $ids       = [];
+            foreach (array_unique(array_filter(array_map('trim', $assigneeNames))) as $name) {
+                $row = $userModel->where('name', $name)->first();
+                if ($row !== null) {
+                    $ids[] = $row['id'];
+                }
+            }
+            $syncedIds            = $ids;
+            $patch['assignee_id'] = $ids[0] ?? null;
+            $patch['pic_id']      = $ids[0] ?? null;
+        } else {
+            $assigneeName = $this->request->getJsonVar('assignee');
+            if ($assigneeName !== null) {
+                $row = (new UserModel())->where('name', trim((string) $assigneeName))->first();
+                if ($row !== null) {
+                    $patch['assignee_id'] = $row['id'];
+                    $patch['pic_id']      = $row['id'];
+                    $syncedIds            = [$row['id']];
+                }
             }
         }
 
         if ($patch !== []) {
             $taskModel->update($taskId, $patch);
+        }
+        if ($syncedIds !== null) {
+            $taskModel->syncAssignees($taskId, $syncedIds);
         }
 
         $after   = $this->baseShape($taskModel->findRichById($taskId));
@@ -470,7 +523,7 @@ class ModuleTasks extends BaseController
         $requirement = $task['requirement_id'] ? (new RequirementModel())->find($task['requirement_id']) : null;
         $isPm        = $dashboard !== null && TaskPolicy::isPmOfDashboard($user, $dashboard);
         $isOwner     = $requirement !== null && TaskPolicy::isRequirementOwner($user, $requirement);
-        if (! $isPm && ! $isOwner) {
+        if (! $isPm && ! $isOwner && ! TaskPolicy::isAdmin($user)) {
             return $this->jsonError("Only this dashboard's PM or the requirement owner can decide", 403);
         }
 
@@ -543,11 +596,13 @@ class ModuleTasks extends BaseController
         if ($evidenceId) {
             (new TaskEvidenceModel())->update($evidenceId, ['kind' => 'comment']);
         }
-        $taskModel->update($taskId, []);
 
-        $dashboard = $task['dashboard_id'] ? (new DashboardModel())->find($task['dashboard_id']) : null;
+        $dashboard  = $task['dashboard_id'] ? (new DashboardModel())->find($task['dashboard_id']) : null;
         $recipients = array_unique(array_filter([
-            $task['created_by'], $task['assignee_id'], $dashboard['pm_id'] ?? null,
+            $task['created_by'],
+            $task['assignee_id'],
+            ...$taskModel->assigneeIdsFor($taskId),
+            $dashboard['pm_id'] ?? null,
         ]));
         foreach ($recipients as $recipientId) {
             if ($recipientId === $user['id']) {
@@ -563,9 +618,10 @@ class ModuleTasks extends BaseController
     }
 
     /** @param array<string, mixed> $row @param array<string, mixed>|null $move */
-    private function shapeListRow(array $row, ?array $move = null): array
+    /** @param array<string, mixed> $row @param array<string, mixed>|null $move @param list<array{id:string,name:string}> $assignees */
+    private function shapeListRow(array $row, ?array $move = null, array $assignees = []): array
     {
-        $shaped = $this->baseShape($row);
+        $shaped = $this->baseShape($row, $assignees);
         $shaped['status_move'] = $this->shapeMove($move);
 
         return $shaped;
@@ -577,8 +633,9 @@ class ModuleTasks extends BaseController
         if ($row === null) {
             return null;
         }
-        $taskId = $row['id'];
-        $shaped = $this->baseShape($row);
+        $taskId    = $row['id'];
+        $assignees = (new TaskModel())->assigneesForTasks([$taskId])[$taskId] ?? [];
+        $shaped    = $this->baseShape($row, $assignees);
         $shaped['status_move'] = $this->shapeMove((new TaskStatusMoveModel())->pendingForTask($taskId));
         $shaped['comments']    = array_map(fn ($c) => [
             'id' => $c['id'], 'at' => $c['created_at'], 'actor' => $c['actor_name'] ?? '',
@@ -586,7 +643,8 @@ class ModuleTasks extends BaseController
         ], (new CommentModel())->forTask($taskId));
         $shaped['activity'] = array_map(fn ($a) => [
             'id' => $a['id'], 'at' => $a['created_at'], 'actor' => $a['actor_name'],
-            'action' => $a['action'], 'evidence_id' => $a['evidence_id'] ?: null,
+            'action' => $a['action'], 'action_type' => $a['action_type'] ?? null,
+            'evidence_id' => $a['evidence_id'] ?: null,
         ], (new ActivityLogModel())->forObject('task', $taskId));
         $shaped['evidences'] = array_map(fn ($e) => [
             'id' => $e['id'], 'at' => $e['created_at'], 'actor' => $e['actor_name'] ?? '',
@@ -597,9 +655,12 @@ class ModuleTasks extends BaseController
         return $shaped;
     }
 
-    /** @param array<string, mixed> $row */
-    private function baseShape(array $row): array
+    /** @param array<string, mixed> $row @param list<array{id:string,name:string}> $assignees */
+    private function baseShape(array $row, array $assignees = []): array
     {
+        $names       = $assignees !== [] ? array_column($assignees, 'name') : array_filter([$row['assignee_name'] ?? '']);
+        $assigneeStr = implode(', ', $names);
+
         return [
             'id'               => $row['id'],
             'code'             => $row['code'] ?? '',
@@ -611,9 +672,12 @@ class ModuleTasks extends BaseController
             'requirement_code' => $row['requirement_code'] ?? '',
             'status'           => $row['status'],
             'priority'         => $row['priority'] ?? 'medium',
+            'progress_percent' => (int) ($row['progress_percent'] ?? 0),
             'approval_state'   => $row['approval_state'],
-            'assignee'         => $row['assignee_name'] ?? '',
-            'pic'              => $row['assignee_name'] ?? '',
+            'assignee'         => $assigneeStr,
+            'pic'              => $assigneeStr,
+            'assignees'        => $names,
+            'assignee_ids'     => array_column($assignees, 'id'),
             'created_by'       => $row['creator_name'] ?? '',
             'requirement_owner' => $row['requirement_owner_name'] ?? '',
             'deadline'         => $row['deadline'],
