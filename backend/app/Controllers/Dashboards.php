@@ -28,6 +28,10 @@ class Dashboards extends BaseController
         $url         = trim((string) ($this->request->getJsonVar('url') ?? ''));
         $platform    = trim((string) ($this->request->getJsonVar('platform') ?? '')) ?: 'Custom';
         $category    = trim((string) ($this->request->getJsonVar('category') ?? '')) ?: 'General';
+        $criticality = trim((string) ($this->request->getJsonVar('criticality') ?? $this->request->getJsonVar('priority') ?? 'medium'));
+        if (! in_array($criticality, ['low', 'medium', 'high'], true)) {
+            $criticality = 'medium';
+        }
         $metadata    = $this->request->getJsonVar('metadata', true);
         $metadata    = is_array($metadata) ? $metadata : [];
 
@@ -45,7 +49,7 @@ class Dashboards extends BaseController
             'code'        => $model->generateCode($name),
             'description' => $description,
             'status'      => 'active',
-            'criticality' => 'medium',
+            'criticality' => $criticality,
             'owner_id'    => $model->findUserIdByName($ownerName),
             'pm_id'       => $model->findUserIdByName($pmName),
             'platform'    => $platform,

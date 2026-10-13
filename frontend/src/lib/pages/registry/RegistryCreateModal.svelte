@@ -36,6 +36,7 @@
   let formDescription = $state("");
   let formCategory = $state("");
   let formPic = $state("");
+  let formPriority = $state("medium");
   /** @type {Record<string, string>} */
   let formMeta = $state({});
   let formError = $state("");
@@ -43,6 +44,14 @@
 
   function closeCreate() {
     createOpen = false;
+    currentStep = 1;
+    formName = "";
+    formDescription = "";
+    formCategory = "";
+    formPic = "";
+    formPriority = "medium";
+    formMeta = {};
+    formError = "";
   }
 
   function nextStep() {
@@ -89,6 +98,8 @@
       name,
       description: formDescription.trim(),
       category: formCategory,
+      criticality: formPriority,
+      priority: formPriority,
       owner: pic,
       pm: pic,
       metadata,
@@ -235,6 +246,14 @@
                 {#each pmOptions as user (user.id)}
                   <option value={user.name}>{user.name}</option>
                 {/each}
+              </select>
+            </label>
+            <label>
+              Priority
+              <select bind:value={formPriority}>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
               </select>
             </label>
           </div>
