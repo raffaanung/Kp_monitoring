@@ -253,13 +253,18 @@ class ModuleTasks extends BaseController
             'actor_id' => $user['id'], 'actor_name' => $user['name'],
             'action' => "Owner minta revisi. {$note}", 'action_type' => 'approval',
             'object_type' => 'task', 'object_id' => $taskId, 'object_label' => $task['title'],
-            'dashboard_id' => $task['dashboard_id'], 'evidence_id' => $evidenceId,
+            'dashboard_id' => $task['dashboard_id'], 'evidence_id' => $evidenceId, 'reason' => $note,
         ]);
-        if ($task['created_by'] && $task['created_by'] !== $user['id']) {
-            (new NotificationModel())->notify(
-                'revision', 'Task needs revision', "\"{$task['title']}\": {$note}",
-                $task['created_by'], $taskId, $task['dashboard_id'],
-            );
+        $assigneeRows = (new TaskModel())->assigneesForTasks([$taskId])[$taskId] ?? [];
+        $assigneeUserIds = array_column($assigneeRows, 'id');
+        $targetRecipients = array_unique(array_filter(array_merge([$task['created_by']], $assigneeUserIds)));
+        foreach ($targetRecipients as $recipientId) {
+            if ($recipientId !== $user['id']) {
+                (new NotificationModel())->notify(
+                    'revision', 'Task dikembalikan (Return)', "\"{$task['title']}\": {$note}",
+                    $recipientId, $taskId, $task['dashboard_id'],
+                );
+            }
         }
 
         return $this->jsonOk(['result' => 'revision', 'task' => $this->shapeDetailRow($taskModel->findRichById($taskId))]);
@@ -545,6 +550,7 @@ class ModuleTasks extends BaseController
             $notifTitle  = 'Request disetujui';
             $notifBody   = "Pindah \"{$task['title']}\" ke {$move['to_status']} disetujui";
         } else {
+            $taskModel->update($taskId, ['approval_state' => 'revision']);
             $actionText  = "Minta revisi. {$note}";
             $notifType   = 'move_rejected';
             $notifTitle  = 'Perlu revisi';
@@ -558,8 +564,13 @@ class ModuleTasks extends BaseController
             'dashboard_id' => $task['dashboard_id'], 'evidence_id' => $evidenceId, 'reason' => $note ?: null,
         ]);
 
-        if ($move['requested_by']) {
-            (new NotificationModel())->notify($notifType, $notifTitle, $notifBody, $move['requested_by'], $taskId, $task['dashboard_id']);
+        $assigneeRows = (new TaskModel())->assigneesForTasks([$taskId])[$taskId] ?? [];
+        $assigneeUserIds = array_column($assigneeRows, 'id');
+        $targetRecipients = array_unique(array_filter(array_merge([$move['requested_by'] ?? null, $task['created_by']], $assigneeUserIds)));
+        foreach ($targetRecipients as $recipientId) {
+            if ($recipientId !== $user['id']) {
+                (new NotificationModel())->notify($notifType, $notifTitle, "\"{$task['title']}\": {$notifBody}", $recipientId, $taskId, $task['dashboard_id']);
+            }
         }
 
         return $this->jsonOk($this->shapeDetailRow($taskModel->findRichById($taskId)));
@@ -683,10 +694,49 @@ class ModuleTasks extends BaseController
             'deadline'         => $row['deadline'],
             'created_at'       => $row['created_at'],
             'updated_at'       => $row['updated_at'],
+            'last_return'      => $this->getLastReturnInfo($row['id'], $row['approval_state'] ?? ''),
             // List/board tidak ikut query comments (biar ringan). Default kosong supaya
             // frontend tidak crash baca task.comments.length; shapeDetailRow() menimpa ini
             // dengan comments sungguhan untuk halaman detail.
             'comments'         => [],
+        ];
+    }
+
+    /** @param string $taskId @param string $approvalState */
+    private function getLastReturnInfo(string $taskId, string $approvalState): ?array
+    {
+        if ($approvalState !== 'revision') {
+            return null;
+        }
+
+        $log = (new ActivityLogModel())
+            ->where('object_type', 'task')
+            ->where('object_id', $taskId)
+            ->where('action_type', 'approval')
+            ->orderBy('created_at', 'DESC')
+            ->first();
+
+        if (! $log) {
+            return [
+                'actor'       => 'Admin',
+                'at'          => null,
+                'note'        => 'Task dikembalikan untuk revisi.',
+                'action'      => 'Perlu revisi.',
+                'evidence_id' => null,
+            ];
+        }
+
+        $note = $log['reason'] ?? '';
+        if ($note === '') {
+            $note = preg_replace('/^(Owner minta revisi|Minta revisi|Task dikembalikan)\.\s*/i', '', (string) $log['action']);
+        }
+
+        return [
+            'actor'       => $log['actor_name'] ?: 'Admin',
+            'at'          => $log['created_at'],
+            'note'        => $note ?: 'Perlu revisi.',
+            'action'      => $log['action'],
+            'evidence_id' => $log['evidence_id'] ?: null,
         ];
     }
 

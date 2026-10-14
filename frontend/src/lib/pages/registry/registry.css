@@ -5317,26 +5317,327 @@
   }
 
   .task-action-btn {
-    width: 22px;
-    height: 22px;
-    border: 1px solid #e2e8f0;
-    border-radius: 7px;
-    background: #fff;
-    color: #475569;
-    font-size: 0.68rem;
+    min-width: 28px;
+    height: 20px;
+    padding: 0 6px;
+    border: 1px solid #1e293b;
+    border-radius: 9999px;
+    background: #0f172a;
+    color: #ffffff;
+    font-size: 0.72rem;
     font-weight: 700;
     line-height: 1;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.12s ease;
+    transition: all 0.15s ease;
   }
 
   .task-action-btn:hover {
+    background: #1e293b;
+    color: #ffffff;
+  }
+
+  .task-action-btn.btn-accept:hover {
+    background: #16a34a;
+    border-color: #15803d;
+    color: #ffffff;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(22, 163, 74, 0.35);
+  }
+
+  .task-action-btn.btn-return:hover {
+    background: #dc2626;
+    border-color: #b91c1c;
+    color: #ffffff;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(220, 38, 38, 0.35);
+  }
+
+  .task-action-btn.btn-assignee:hover {
+    background: #2563eb;
+    border-color: #1d4ed8;
+    color: #ffffff;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.35);
+  }
+
+  .task-action-btn svg {
+    display: block;
+    pointer-events: none;
+  }
+
+  .pop-eyebrow-accept {
+    color: #16a34a !important;
+    font-weight: 700;
+  }
+
+  .pop-eyebrow-return {
+    color: #dc2626 !important;
+    font-weight: 700;
+  }
+
+  .req-asterisk {
+    color: #dc2626;
+    font-weight: 700;
+  }
+
+  .approval-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 0.7rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid #e2e8f0;
+  }
+
+  .btn-confirm-accept {
+    border: none;
+    border-radius: 8px;
+    padding: 0.45rem 1rem;
+    font-size: 0.68rem;
+    font-weight: 700;
+    background: #16a34a;
+    color: #ffffff;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+
+  .btn-confirm-accept:hover:not(:disabled) {
+    background: #15803d;
+  }
+
+  .btn-confirm-accept:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .btn-confirm-return {
+    border: none;
+    border-radius: 8px;
+    padding: 0.45rem 1rem;
+    font-size: 0.68rem;
+    font-weight: 700;
+    background: #dc2626;
+    color: #ffffff;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+
+  .btn-confirm-return:hover:not(:disabled) {
+    background: #b91c1c;
+  }
+
+  .btn-confirm-return:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .btn-cancel {
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 0.45rem 0.85rem;
+    font-size: 0.68rem;
+    font-weight: 600;
+    background: #ffffff;
+    color: #475569;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .btn-cancel:hover {
     background: #f1f5f9;
-    border-color: #cbd5e1;
     color: #0f172a;
+  }
+
+  /* --- Indikator & Notifikasi Return untuk Tim Teknis --- */
+  .task-returned-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    background: #fff1f2;
+    border: 1px solid #fecdd3;
+    color: #e11d48;
+    font-size: 0.58rem;
+    font-weight: 750;
+    line-height: 1;
+    padding: 2px 6px;
+    border-radius: 9999px;
+    margin-left: 0.35rem;
+    vertical-align: middle;
+  }
+
+  .btn-view-return {
+    background: #dc2626 !important;
+    border-color: #b91c1c !important;
+    color: #ffffff !important;
+    padding: 0 8px !important;
+    height: 22px !important;
+    min-width: auto !important;
+    gap: 4px;
+    box-shadow: 0 1px 4px rgba(220, 38, 38, 0.25);
+  }
+
+  .btn-view-return:hover {
+    background: #b91c1c !important;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(220, 38, 38, 0.4);
+  }
+
+  .btn-return-label {
+    font-size: 0.62rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .readonly-dash {
+    color: #94a3b8;
+    font-size: 0.8rem;
+    padding-left: 4px;
+  }
+
+  /* Banner Alert Return di Accordion */
+  .task-return-banner {
+    background: #fff1f2;
+    border: 1px solid #fecdd3;
+    border-left: 4px solid #e11d48;
+    border-radius: 9px;
+    padding: 0.65rem 0.85rem;
+    margin-bottom: 0.85rem;
+    box-shadow: 0 1px 3px rgba(225, 29, 72, 0.08);
+  }
+
+  .return-banner-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.35rem;
+  }
+
+  .return-banner-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .return-banner-badge {
+    color: #be123c;
+    font-size: 0.64rem;
+    font-weight: 800;
+    letter-spacing: 0.3px;
+  }
+
+  .return-banner-meta {
+    color: #64748b;
+    font-size: 0.62rem;
+  }
+
+  .return-readonly-tag {
+    background: #ffe4e6;
+    border: 1px solid #fecdd3;
+    color: #9f1239;
+    font-size: 0.58rem;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 9999px;
+    white-space: nowrap;
+  }
+
+  .return-banner-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .return-banner-note-label {
+    font-size: 0.62rem;
+    font-weight: 700;
+    color: #475569;
+  }
+
+  .return-banner-quote {
+    margin: 0.15rem 0;
+    padding: 0.45rem 0.65rem;
+    background: #ffffff;
+    border: 1px solid #fecdd3;
+    border-radius: 7px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: #0f172a;
+    line-height: 1.45;
+  }
+
+  .return-banner-evidence {
+    margin-top: 0.25rem;
+  }
+
+  .return-evidence-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.62rem;
+    font-weight: 700;
+    color: #2563eb;
+    text-decoration: underline;
+  }
+
+  /* Modal Read-Only Return untuk Teknis */
+  .readonly-return-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.64rem;
+    color: #64748b;
+    margin: 0.15rem 0 0.35rem;
+  }
+
+  .readonly-note-box {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-left: 3px solid #dc2626;
+    border-radius: 7px;
+    padding: 0.55rem 0.75rem;
+    font-size: 0.68rem;
+    color: #0f172a;
+    font-weight: 550;
+    line-height: 1.45;
+  }
+
+  .readonly-evidence-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    margin-top: 0.35rem;
+  }
+
+  .readonly-evidence-label {
+    font-size: 0.62rem;
+    font-weight: 650;
+    color: #475569;
+  }
+
+  .btn-evidence-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.64rem;
+    font-weight: 700;
+    color: #2563eb;
+    text-decoration: underline;
+  }
+
+  .readonly-info-footer {
+    margin-top: 0.45rem;
+    padding: 0.45rem 0.65rem;
+    background: #f8fafc;
+    border: 1px dashed #cbd5e1;
+    border-radius: 7px;
+    font-size: 0.6rem;
+    color: #475569;
+    line-height: 1.4;
   }
 
   .approval-list {

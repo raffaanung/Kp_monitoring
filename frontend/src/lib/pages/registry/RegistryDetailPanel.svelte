@@ -301,27 +301,52 @@
     for (const t of tasks) loadModuleTaskDetail(t.id);
   }
 
-  /** Popup approval (accept/reject) per grup task. @type {string} */
-  let approvalPopupKey = $state('');
-  let approvalBusyId = $state('');
-  /** Accept/Return sekarang cuma MEMILIH keputusan (staged) — baru benar-benar jalan saat tombol Apply diklik. @type {'' | 'accept' | 'return'} */
-  let approvalDecision = $state('');
+  /** Modal Accept Task (+) */
+  let acceptModalTaskId = $state('');
+  let acceptNote = $state('');
+  /** @type {any} */
+  let acceptEvidence = $state(null);
+  let acceptEvidenceError = $state('');
+  let acceptBusy = $state(false);
 
-  /** @param {string} key */
-  function openApprovalPopup(key) {
-    approvalPopupKey = key;
-    approvalDecision = '';
+  /** Modal Return Task (-) */
+  let returnModalTaskId = $state('');
+  let returnDescription = $state('');
+  /** @type {any} */
+  let returnEvidence = $state(null);
+  let returnEvidenceError = $state('');
+  let returnValidationError = $state('');
+  let returnBusy = $state(false);
+
+  /** @param {string} taskId */
+  function openAcceptModal(taskId) {
+    acceptModalTaskId = String(taskId);
+    acceptNote = '';
+    acceptEvidence = null;
+    acceptEvidenceError = '';
   }
-  function closeApprovalPopup() {
-    approvalPopupKey = '';
-    approvalDecision = '';
+  function closeAcceptModal() {
+    acceptModalTaskId = '';
+    acceptNote = '';
+    acceptEvidence = null;
+    acceptEvidenceError = '';
   }
 
-  /** Catatan/penjelasan per task di popup approval. @type {Record<string, string>} */
-  let approvalNotes = $state({});
-  /** Evidence/screenshot opsional per task di popup approval. @type {Record<string, any>} */
-  let approvalEvidence = $state({});
-  let approvalEvidenceError = $state('');
+  /** @param {string} taskId */
+  function openReturnModal(taskId) {
+    returnModalTaskId = String(taskId);
+    returnDescription = '';
+    returnEvidence = null;
+    returnEvidenceError = '';
+    returnValidationError = '';
+  }
+  function closeReturnModal() {
+    returnModalTaskId = '';
+    returnDescription = '';
+    returnEvidence = null;
+    returnEvidenceError = '';
+    returnValidationError = '';
+  }
 
   /** @param {any} task */
   function hasPendingApproval(task) {
@@ -330,51 +355,130 @@
 
   /** Admin/Manager boleh accept/return kapan saja sebagai override, walau belum ada yang genuinely pending. @param {any} task */
   function canDecideApproval(task) {
-    return hasPendingApproval(task) || currentUserRole() === 'manager';
+    const role = currentUserRole();
+    return hasPendingApproval(task) || role === 'manager' || role === 'admin';
   }
 
-  /** @param {any} task @param {'accept' | 'return'} decision */
-  function selectApprovalDecision(task, decision) {
-    if (!canDecideApproval(task)) return;
-    approvalDecision = approvalDecision === decision ? '' : decision;
+  const isAdminOrManager = $derived.by(() => {
+    const role = currentUserRole();
+    return role === 'manager' || role === 'admin';
+  });
+
+  /** Modal Read-Only Return untuk Tim Teknis */
+  let readOnlyReturnTaskId = $state('');
+
+  /** Cek apakah task dalam status Return / Perlu Revisi */
+  function isTaskReturned(task) {
+    if (!task) return false;
+    if (task.approval_state === 'revision' || Boolean(task.last_return)) return true;
+    const latest = lastApprovalDecision(task);
+    if (latest && (latest.action?.toLowerCase().includes('revisi') || latest.action?.toLowerCase().includes('return') || latest.action?.toLowerCase().includes('ditolak'))) {
+      return true;
+    }
+    return false;
   }
 
-  /** @param {any} task @param {Event} e */
-  async function pickApprovalEvidence(task, e) {
+  /** Ambil detail catatan return terakhir dari admin */
+  function getReturnInfo(task) {
+    if (!task) return null;
+    if (task.last_return) {
+      return task.last_return;
+    }
+    const acts = task.activity || [];
+    const returnAct = acts.find((a) => 
+      a.action_type === 'approval' && 
+      (a.action?.toLowerCase().includes('revisi') || a.action?.toLowerCase().includes('return') || a.action?.toLowerCase().includes('ditolak'))
+    );
+    if (!returnAct) {
+      if (task.approval_state === 'revision') {
+        return {
+          actor: 'Admin',
+          at: task.updated_at || '',
+          action: 'Perlu revisi / task dikembalikan oleh Admin',
+          note: 'Task ini telah dikembalikan oleh Admin untuk diperbaiki oleh tim teknis.',
+          evidence_id: null
+        };
+      }
+      return null;
+    }
+    let noteText = returnAct.action;
+    noteText = noteText.replace(/^Owner minta revisi\.\s*/i, '');
+    noteText = noteText.replace(/^Minta revisi\.\s*/i, '');
+    noteText = noteText.replace(/^Task dikembalikan\.\s*/i, '');
+    return {
+      actor: returnAct.actor || 'Admin',
+      at: returnAct.at,
+      action: returnAct.action,
+      note: noteText || 'Perlu perbaikan dari tim teknis.',
+      evidence_id: returnAct.evidence_id || null
+    };
+  }
+
+  /** @param {Event} e */
+  async function pickAcceptEvidence(e) {
     const input = /** @type {HTMLInputElement} */ (e.currentTarget);
     const file = input.files?.[0];
     if (!file) return;
-    approvalEvidenceError = '';
+    acceptEvidenceError = '';
     try {
-      approvalEvidence[task.id] = await readEvidenceFile(file);
+      acceptEvidence = await readEvidenceFile(file);
     } catch (err) {
-      approvalEvidenceError = err instanceof Error ? err.message : String(err);
+      acceptEvidenceError = err instanceof Error ? err.message : String(err);
     }
   }
 
-  /** Eksekusi keputusan yang sudah dipilih (approvalDecision) — dipanggil lewat tombol Apply. @param {any} task */
-  async function applyApprovalDecision(task) {
-    if (!approvalDecision || !canDecideApproval(task)) return;
-    approvalBusyId = String(task.id);
-    const note = approvalNotes[task.id] || '';
-    const evidence = approvalEvidence[task.id] || null;
-    if (approvalDecision === 'accept') {
-      if (task.status_move) {
-        await approveStatusMove(task.id, note, evidence);
-      } else {
-        await approveModuleTask(task.id, note, evidence);
-      }
-    } else {
-      if (task.status_move) {
-        await rejectStatusMove(task.id, note, evidence);
-      } else {
-        await requestRevisionModuleTask(task.id, note, evidence);
-      }
+  /** @param {Event} e */
+  async function pickReturnEvidence(e) {
+    const input = /** @type {HTMLInputElement} */ (e.currentTarget);
+    const file = input.files?.[0];
+    if (!file) return;
+    returnEvidenceError = '';
+    try {
+      returnEvidence = await readEvidenceFile(file);
+    } catch (err) {
+      returnEvidenceError = err instanceof Error ? err.message : String(err);
     }
-    approvalNotes[task.id] = '';
-    approvalEvidence[task.id] = null;
-    approvalDecision = '';
-    approvalBusyId = '';
+  }
+
+  /** Submit Accept task dari modal (+) @param {any} task */
+  async function submitAccept(task) {
+    if (!canDecideApproval(task)) return;
+    acceptBusy = true;
+    try {
+      if (task.status_move) {
+        await approveStatusMove(task.id, acceptNote, acceptEvidence);
+      } else {
+        await approveModuleTask(task.id, acceptNote, acceptEvidence);
+      }
+      closeAcceptModal();
+    } catch (err) {
+      acceptEvidenceError = err instanceof Error ? err.message : String(err);
+    } finally {
+      acceptBusy = false;
+    }
+  }
+
+  /** Submit Return task ke tim teknis dari modal (-) @param {any} task */
+  async function submitReturn(task) {
+    if (!returnDescription.trim()) {
+      returnValidationError = 'Deskripsi / alasan return ke tim teknis wajib diisi.';
+      return;
+    }
+    if (!canDecideApproval(task)) return;
+    returnBusy = true;
+    returnValidationError = '';
+    try {
+      if (task.status_move) {
+        await rejectStatusMove(task.id, returnDescription.trim(), returnEvidence);
+      } else {
+        await requestRevisionModuleTask(task.id, returnDescription.trim(), returnEvidence);
+      }
+      closeReturnModal();
+    } catch (err) {
+      returnEvidenceError = err instanceof Error ? err.message : String(err);
+    } finally {
+      returnBusy = false;
+    }
   }
 
   /** Popup tambah assignee ke task yang sama (bukan bikin task baru). @type {string} */
@@ -1270,38 +1374,101 @@
                           </td>
                           <td>
                             <span class="task-status" style="color: {workflowStatusColor(task.status)}; background: {workflowStatusColor(task.status)}22">{workflowLabel(task.status)}</span>
+                            {#if isTaskReturned(task)}
+                              <span class="task-returned-badge" title="Task dikembalikan oleh Admin untuk revisi">↩ Returned</span>
+                            {/if}
                           </td>
                           <td>{formatDate(task.deadline)}</td>
                           <td class="task-actions-col">
-                            <div class="task-row-actions">
-                              <button
-                                type="button"
-                                class="task-action-btn"
-                                title="Status approval"
-                                aria-label="Status approval"
-                                onclick={(e) => { e.stopPropagation(); openApprovalPopup(task.id); }}
-                              >✓</button>
-                              <button
-                                type="button"
-                                class="task-action-btn"
-                                title="Add assignee"
-                                aria-label="Add assignee"
-                                onclick={(e) => { e.stopPropagation(); openAddAssignee(task.id); }}
-                              >+</button>
-                            </div>
+                            {#if isAdminOrManager}
+                              <div class="task-row-actions">
+                                <button
+                                  type="button"
+                                  class="task-action-btn btn-accept"
+                                  title="Approve / Accept task"
+                                  aria-label="Approve task"
+                                  onclick={(e) => { e.stopPropagation(); openAcceptModal(task.id); }}
+                                >✓</button>
+                                <button
+                                  type="button"
+                                  class="task-action-btn btn-return"
+                                  title="Return task ke tim teknis"
+                                  aria-label="Return task ke tim teknis"
+                                  onclick={(e) => { e.stopPropagation(); openReturnModal(task.id); }}
+                                >
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <polyline points="9 14 4 9 9 4" />
+                                    <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+                                  </svg>
+                                </button>
+                                <button
+                                  type="button"
+                                  class="task-action-btn btn-assignee"
+                                  title="Add assignee"
+                                  aria-label="Add assignee"
+                                  onclick={(e) => { e.stopPropagation(); openAddAssignee(task.id); }}
+                                >+</button>
+                              </div>
+                            {:else}
+                              <!-- Bagian Tim Teknis: Hanya bisa lihat saja ketika task di-return -->
+                              {#if isTaskReturned(task)}
+                                <button
+                                  type="button"
+                                  class="task-action-btn btn-view-return"
+                                  title="Lihat Catatan Return dari Admin (Hanya Baca)"
+                                  aria-label="Lihat Catatan Return dari Admin"
+                                  onclick={(e) => { e.stopPropagation(); readOnlyReturnTaskId = task.id; }}
+                                >
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <polyline points="9 14 4 9 9 4" />
+                                    <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+                                  </svg>
+                                  <span class="btn-return-label">Lihat Return</span>
+                                </button>
+                              {:else}
+                                <span class="readonly-dash" title="Hanya bisa melihat task">—</span>
+                              {/if}
+                            {/if}
                           </td>
                         </tr>
                         {#if isOpen}
                           <tr class="task-row-detail">
                             <td colspan="7">
                               <div class="task-accordion">
+                                {#if isTaskReturned(task)}
+                                  {@const ret = getReturnInfo(task)}
+                                  {#if ret}
+                                    <div class="task-return-banner">
+                                      <div class="return-banner-top">
+                                        <div class="return-banner-title">
+                                          <span class="return-banner-badge">⚠️ TASK DIKEMBALIKAN (RETURN) OLEH ADMIN</span>
+                                          <span class="return-banner-meta">Oleh: <strong>{ret.actor}</strong> {ret.at ? `· ${formatDate(ret.at)}` : ''}</span>
+                                        </div>
+                                        {#if !isAdminOrManager}
+                                          <span class="return-readonly-tag">👁️ Mode Teknis · Hanya Lihat</span>
+                                        {/if}
+                                      </div>
+                                      <div class="return-banner-body">
+                                        <span class="return-banner-note-label">Catatan / Alasan Return untuk Tim Teknis:</span>
+                                        <blockquote class="return-banner-quote">"{ret.note}"</blockquote>
+                                        {#if ret.evidence_id}
+                                          <div class="return-banner-evidence">
+                                            <a href="/api/evidences/{ret.evidence_id}/file" target="_blank" rel="noopener noreferrer" class="return-evidence-btn">
+                                              📎 Buka File Lampiran Bukti dari Admin
+                                            </a>
+                                          </div>
+                                        {/if}
+                                      </div>
+                                    </div>
+                                  {/if}
+                                {/if}
                                 <div class="task-accordion-cols">
                                   <div class="task-accordion-left">
                                     <div class="task-approval-outcome">
                                       <span class="task-accordion-label">Status Approval</span>
                                       <span class="approval-state-badge" data-state={task.approval_state}>{approvalLabel(task.approval_state)}</span>
                                       {#if hasPendingApproval(task)}
-                                        <p class="task-accordion-empty">Menunggu keputusan — pakai tombol ✓ di baris task untuk accept/reject.</p>
+                                        <p class="task-accordion-empty">Menunggu keputusan — gunakan tombol ✓ (Approve) atau return pada baris task.</p>
                                       {:else if lastApprovalDecision(task)}
                                         {@const decision = lastApprovalDecision(task)}
                                         <p class="task-decision-note">{decision.action}<br /><small>{decision.actor} · {formatDate(decision.at)}</small></p>
@@ -1486,78 +1653,124 @@
   </div>
 {/if}
 
-{#if approvalPopupKey}
-  {@const task = versionTasks.find((t) => t.id === approvalPopupKey)}
+{#if acceptModalTaskId}
+  {@const task = versionTasks.find((t) => String(t.id) === String(acceptModalTaskId))}
   {#if task}
-    <div class="req-detail-backdrop" use:portal role="presentation" onclick={closeApprovalPopup}></div>
-    <div class="attach-pop" use:portal role="dialog" aria-modal="true" aria-label="Status approval">
+    <div class="req-detail-backdrop" use:portal role="presentation" onclick={closeAcceptModal}></div>
+    <div class="attach-pop approval-pop-modal" use:portal role="dialog" aria-modal="true" aria-label="Accept task">
       <header>
         <div>
-          <p>Status Approval</p>
+          <p class="pop-eyebrow pop-eyebrow-accept">Accept Task</p>
           <h3>{task.title}</h3>
         </div>
-        <button type="button" onclick={closeApprovalPopup} aria-label="Close">×</button>
+        <button type="button" onclick={closeAcceptModal} aria-label="Close">×</button>
       </header>
       <div class="approval-list">
         <div class="approval-row">
           <div class="approval-row-head">
-            <strong>{task.assignees?.length ? task.assignees.join(', ') : '—'}</strong>
+            <strong>Tim Teknis: {task.assignees?.length ? task.assignees.join(', ') : '—'}</strong>
             <span class="task-status" style="color: {workflowStatusColor(task.status)}; background: {workflowStatusColor(task.status)}22">{workflowLabel(task.status)}</span>
           </div>
           {#if task.status_move}
-            <p class="approval-row-note">Minta pindah {workflowLabel(task.status_move.from)} → {workflowLabel(task.status_move.to)}</p>
+            <p class="approval-row-note">Permintaan pindah status ke <strong>{workflowLabel(task.status_move.to)}</strong> akan disetujui (Approved).</p>
           {:else if task.approval_state === 'pending'}
-            <p class="approval-row-note">Menunggu approval pembuatan task.</p>
-          {:else if currentUserRole() === 'manager'}
-            <p class="approval-row-note">Tidak ada yang pending, tapi sebagai Admin/Manager kamu tetap bisa pilih Accept/Return lalu Apply.</p>
+            <p class="approval-row-note">Pengajuan task baru akan disetujui (Approved) dan masuk ke Backlog.</p>
           {:else}
-            <p class="approval-row-note">No pending approval for this task — Accept/Return disabled.</p>
+            <p class="approval-row-note">Task akan disetujui (Accept override oleh Admin).</p>
           {/if}
-          <div class="approval-row-actions">
-            <button
-              type="button"
-              class="approval-accept"
-              class:selected={approvalDecision === 'accept'}
-              disabled={approvalBusyId === String(task.id) || !canDecideApproval(task)}
-              onclick={() => selectApprovalDecision(task, 'accept')}
-            >Accept</button>
-            <button
-              type="button"
-              class="approval-reject"
-              class:selected={approvalDecision === 'return'}
-              disabled={approvalBusyId === String(task.id) || !canDecideApproval(task)}
-              onclick={() => selectApprovalDecision(task, 'return')}
-            >Return</button>
-          </div>
+
           <label class="approval-note-field">
-            <span>Catatan / Penjelasan</span>
+            <span>Catatan / Keterangan Accept (Opsional)</span>
             <textarea
               rows="2"
-              placeholder="Tulis alasan accept/return (opsional)..."
-              disabled={!canDecideApproval(task)}
-              value={approvalNotes[task.id] || ''}
-              oninput={(e) => (approvalNotes[task.id] = e.currentTarget.value)}
+              placeholder="Berikan catatan persetujuan untuk tim teknis (opsional)..."
+              bind:value={acceptNote}
             ></textarea>
           </label>
           <label class="approval-note-field">
-            <span>Evidence (opsional)</span>
+            <span>Evidence / Lampiran Bukti (Opsional)</span>
             <input
               type="file"
               accept="image/*,.pdf"
-              disabled={!canDecideApproval(task)}
-              onchange={(e) => pickApprovalEvidence(task, e)}
+              onchange={pickAcceptEvidence}
             />
-            {#if approvalEvidence[task.id]}
-              <p class="task-evidence-picked">{approvalEvidence[task.id].name}</p>
+            {#if acceptEvidence}
+              <p class="task-evidence-picked">{acceptEvidence.name}</p>
             {/if}
-            {#if approvalEvidenceError}<p class="field-error">{approvalEvidenceError}</p>{/if}
+            {#if acceptEvidenceError}<p class="field-error">{acceptEvidenceError}</p>{/if}
           </label>
-          <button
-            type="button"
-            class="task-action-btn task-progress-apply"
-            disabled={!approvalDecision || approvalBusyId === String(task.id)}
-            onclick={() => applyApprovalDecision(task)}
-          >{approvalBusyId === String(task.id) ? 'Menerapkan...' : 'Apply'}</button>
+          <div class="approval-modal-actions">
+            <button type="button" class="btn-cancel" onclick={closeAcceptModal}>Batal</button>
+            <button
+              type="button"
+              class="btn-confirm-accept"
+              disabled={acceptBusy || !canDecideApproval(task)}
+              onclick={() => submitAccept(task)}
+            >{acceptBusy ? 'Menyetujui...' : 'Accept Task'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
+{/if}
+
+{#if returnModalTaskId}
+  {@const task = versionTasks.find((t) => String(t.id) === String(returnModalTaskId))}
+  {#if task}
+    <div class="req-detail-backdrop" use:portal role="presentation" onclick={closeReturnModal}></div>
+    <div class="attach-pop approval-pop-modal" use:portal role="dialog" aria-modal="true" aria-label="Return task ke tim teknis">
+      <header>
+        <div>
+          <p class="pop-eyebrow pop-eyebrow-return">Return Task ke Tim Teknis</p>
+          <h3>{task.title}</h3>
+        </div>
+        <button type="button" onclick={closeReturnModal} aria-label="Close">×</button>
+      </header>
+      <div class="approval-list">
+        <div class="approval-row">
+          <div class="approval-row-head">
+            <strong>Tim Teknis: {task.assignees?.length ? task.assignees.join(', ') : '—'}</strong>
+            <span class="task-status" style="color: {workflowStatusColor(task.status)}; background: {workflowStatusColor(task.status)}22">{workflowLabel(task.status)}</span>
+          </div>
+          {#if task.status_move}
+            <p class="approval-row-note">Permintaan pindah status ke <strong>{workflowLabel(task.status_move.to)}</strong> akan dikembalikan (Return) untuk direvisi.</p>
+          {:else if task.approval_state === 'pending'}
+            <p class="approval-row-note">Task akan dikembalikan ke status revisi untuk diperbaiki oleh tim teknis.</p>
+          {:else}
+            <p class="approval-row-note">Task akan dikembalikan ke tim teknis untuk revisi / perbaikan.</p>
+          {/if}
+
+          <label class="approval-note-field">
+            <span>Deskripsi / Catatan Perbaikan untuk Tim Teknis <strong class="req-asterisk">*</strong></span>
+            <textarea
+              rows="3"
+              placeholder="Tuliskan deskripsi/alasan return secara jelas agar tim teknis mengetahui bagian apa yang perlu diperbaiki..."
+              bind:value={returnDescription}
+              required
+            ></textarea>
+            {#if returnValidationError}<p class="field-error">{returnValidationError}</p>{/if}
+          </label>
+          <label class="approval-note-field">
+            <span>Evidence / Lampiran Bukti (Opsional)</span>
+            <input
+              type="file"
+              accept="image/*,.pdf"
+              onchange={pickReturnEvidence}
+            />
+            {#if returnEvidence}
+              <p class="task-evidence-picked">{returnEvidence.name}</p>
+            {/if}
+            {#if returnEvidenceError}<p class="field-error">{returnEvidenceError}</p>{/if}
+          </label>
+          <div class="approval-modal-actions">
+            <button type="button" class="btn-cancel" onclick={closeReturnModal}>Batal</button>
+            <button
+              type="button"
+              class="btn-confirm-return"
+              disabled={returnBusy || !returnDescription.trim() || !canDecideApproval(task)}
+              onclick={() => submitReturn(task)}
+            >{returnBusy ? 'Mengembalikan...' : 'Return ke Tim Teknis'}</button>
+          </div>
         </div>
       </div>
     </div>
@@ -1568,7 +1781,7 @@
   {@const task = versionTasks.find((t) => t.id === addAssigneePopupKey)}
   {#if task}
     <div class="req-detail-backdrop" use:portal role="presentation" onclick={closeAddAssignee}></div>
-    <form class="attach-pop" use:portal role="dialog" aria-modal="true" aria-label="Add assignee" onsubmit={(e) => { e.preventDefault(); submitAddAssignee(task); }}>
+    <form class="attach-pop" use:portal aria-label="Add assignee" onsubmit={(e) => { e.preventDefault(); submitAddAssignee(task); }}>
       <header>
         <div>
           <p>Add Assignee</p>
@@ -1591,6 +1804,59 @@
         <button type="submit" class="approval-accept" disabled={addingAssignee}>{addingAssignee ? 'Saving...' : 'Add'}</button>
       </div>
     </form>
+  {/if}
+{/if}
+
+{#if readOnlyReturnTaskId}
+  {@const task = versionTasks.find((t) => String(t.id) === String(readOnlyReturnTaskId))}
+  {#if task}
+    {@const ret = getReturnInfo(task)}
+    <div class="req-detail-backdrop" use:portal role="presentation" onclick={() => (readOnlyReturnTaskId = '')}></div>
+    <div class="attach-pop approval-pop-modal" use:portal role="dialog" aria-modal="true" aria-label="Catatan Return dari Admin">
+      <header>
+        <div>
+          <p class="pop-eyebrow pop-eyebrow-return">Catatan Pengembalian (Return) dari Admin</p>
+          <h3>{task.title}</h3>
+        </div>
+        <button type="button" onclick={() => (readOnlyReturnTaskId = '')} aria-label="Close">×</button>
+      </header>
+      <div class="approval-list">
+        <div class="approval-row">
+          <div class="approval-row-head">
+            <strong>Tim Teknis: {task.assignees?.length ? task.assignees.join(', ') : '—'}</strong>
+            <span class="task-status" style="color: #dc2626; background: #dc262618">Needs Revision</span>
+          </div>
+          <div class="readonly-return-meta">
+            <span>Dikembalikan oleh: <strong>{ret?.actor || 'Admin'}</strong></span>
+            {#if ret?.at}<span>· {formatDate(ret.at)}</span>{/if}
+          </div>
+
+          <div class="approval-note-field">
+            <span>Deskripsi / Catatan Perbaikan untuk Tim Teknis:</span>
+            <div class="readonly-note-box">
+              <p>{ret?.note || 'Tidak ada catatan tertulis.'}</p>
+            </div>
+          </div>
+
+          {#if ret?.evidence_id}
+            <div class="readonly-evidence-section">
+              <span class="readonly-evidence-label">Lampiran Bukti dari Admin:</span>
+              <a href="/api/evidences/{ret.evidence_id}/file" target="_blank" rel="noopener noreferrer" class="btn-evidence-link">
+                📎 Buka File Lampiran Bukti
+              </a>
+            </div>
+          {/if}
+
+          <div class="readonly-info-footer">
+            <span>👁️ <strong>Mode Tim Teknis (Hanya Lihat):</strong> Task ini dikembalikan oleh Admin. Silakan periksa instruksi perbaikan di atas dan perbarui pekerjaan Anda.</span>
+          </div>
+
+          <div class="approval-modal-actions">
+            <button type="button" class="btn-confirm-accept" onclick={() => (readOnlyReturnTaskId = '')}>Tutup</button>
+          </div>
+        </div>
+      </div>
+    </div>
   {/if}
 {/if}
 
