@@ -43,8 +43,11 @@ class Notifications extends BaseController
             'title'     => $row['title'],
             'body'      => $row['body'],
             'taskId'    => $row['task_id'] ?? null,
+            'taskCode'  => $row['task_code'] ?? null,
+            'taskTitle' => $row['task_title'] ?? null,
             'dashboard' => $row['dashboard_name'] ?? '',
             'read'      => (bool) $row['is_read'],
+            'channel'   => $row['channel'] ?? 'in_app',
         ];
     }
 }

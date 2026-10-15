@@ -16,8 +16,9 @@ class NotificationModel extends Model
     /** @return list<array<string, mixed>> */
     public function forUser(string $userId): array
     {
-        return $this->select('notifications.*, dashboards.name AS dashboard_name')
+        return $this->select('notifications.*, dashboards.name AS dashboard_name, tasks.code AS task_code, tasks.title AS task_title')
             ->join('dashboards', 'dashboards.id = notifications.dashboard_id', 'left')
+            ->join('tasks', 'tasks.id = notifications.task_id', 'left')
             ->where('to_user_id', $userId)
             ->orderBy('created_at', 'DESC')
             ->limit(50)
