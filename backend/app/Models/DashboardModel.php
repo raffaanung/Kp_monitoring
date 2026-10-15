@@ -140,6 +140,14 @@ class DashboardModel extends Model
             ->update();
     }
 
+    public function setCriticality(string $dashboardId, string $criticality): void
+    {
+        $this->builder()->where('id', $dashboardId)
+            ->set('criticality', $criticality)
+            ->set('updated_at', 'NOW()', false)
+            ->update();
+    }
+
     /** Metadata yang boleh disimpan. Nama field di luar daftar ini ditolak. */
     public const STANDARD_META = [
         'source_system',

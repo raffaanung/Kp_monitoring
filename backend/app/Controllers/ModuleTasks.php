@@ -312,7 +312,7 @@ class ModuleTasks extends BaseController
         $taskId = $id;
         $user   = $this->authUser();
         $role   = TaskPolicy::functionalRole($user['role_name'] ?? null);
-        if ($role !== 'pm') {
+        if ($role !== 'pm' && ! TaskPolicy::isAdmin($user)) {
             return $this->jsonError('Only a PM can edit task details', 403);
         }
 
@@ -433,6 +433,11 @@ class ModuleTasks extends BaseController
         $note       = trim((string) ($this->request->getJsonVar('note') ?? ''));
         $evidenceId = $this->uuidOrNull($this->request->getJsonVar('evidence_id'));
 
+        // Progress_percent opsional — bisa dibawa bareng perpindahan status, atau sendirian
+        // (progress-only request, status tetap) — dua-duanya lewat alur approval yang sama.
+        $progressRaw     = $this->request->getJsonVar('progress_percent');
+        $progressPercent = $progressRaw !== null ? max(0, min(100, (int) $progressRaw)) : null;
+
         $user        = $this->authUser();
         $role        = TaskPolicy::functionalRole($user['role_name'] ?? null);
         $taskModel   = new TaskModel();
@@ -446,7 +451,10 @@ class ModuleTasks extends BaseController
         if (! TaskPolicy::canUpdateBoard($user) && ! $isOwner) {
             return $this->jsonError("You are not allowed to change this task's status", 403);
         }
-        if ($task['status'] === $status) {
+
+        $statusChanged   = $task['status'] !== $status;
+        $progressChanged = $progressPercent !== null && $progressPercent !== (int) ($task['progress_percent'] ?? 0);
+        if (! $statusChanged && ! $progressChanged) {
             return $this->jsonOk(['result' => 'moved', 'task' => $this->shapeDetailRow($taskModel->findRichById($taskId))]);
         }
 
@@ -457,14 +465,32 @@ class ModuleTasks extends BaseController
 
         $dashboard = $task['dashboard_id'] ? (new DashboardModel())->find($task['dashboard_id']) : null;
 
+        // Verb + deskripsi dipisah supaya nggak dobel kata ("Pindah pindah ke X") — deskripsi cuma
+        // bagian tujuannya aja, verb-nya ("pindah"/"update progress") ditentukan oleh pemanggil.
+        $verb       = $statusChanged ? 'pindah' : 'update progress';
+        $describeChange = function () use ($statusChanged, $progressChanged, $status, $progressPercent): string {
+            if ($statusChanged && $progressChanged) {
+                return "ke {$status} dengan progress {$progressPercent}%";
+            }
+            if ($statusChanged) {
+                return "ke {$status}";
+            }
+
+            return "ke {$progressPercent}%";
+        };
+
         if ($isOwner || ($role === 'pm' && $dashboard !== null && TaskPolicy::isPmOfDashboard($user, $dashboard))) {
-            $taskModel->update($taskId, ['status' => $status]);
+            $patch = ['status' => $status];
+            if ($progressChanged) {
+                $patch['progress_percent'] = $progressPercent;
+            }
+            $taskModel->update($taskId, $patch);
             if ($evidenceId) {
                 (new TaskEvidenceModel())->update($evidenceId, ['kind' => 'pm_approve']);
             }
             (new ActivityLogModel())->log([
                 'actor_id' => $user['id'], 'actor_name' => $user['name'],
-                'action' => "Pindah ke {$status}. {$note}", 'action_type' => 'status_change',
+                'action' => ucfirst("{$verb} " . $describeChange()) . ". {$note}", 'action_type' => 'status_change',
                 'object_type' => 'task', 'object_id' => $taskId, 'object_label' => $task['title'],
                 'dashboard_id' => $task['dashboard_id'], 'evidence_id' => $evidenceId,
             ]);
@@ -476,6 +502,7 @@ class ModuleTasks extends BaseController
             $moveId = Id::new();
             $moveModel->insert([
                 'id' => $moveId, 'task_id' => $taskId, 'from_status' => $task['status'], 'to_status' => $status,
+                'to_progress_percent' => $progressChanged ? $progressPercent : null,
                 'requested_by' => $user['id'], 'note' => $note, 'evidence_id' => $evidenceId,
                 'status' => 'pending',
             ], false);
@@ -484,14 +511,14 @@ class ModuleTasks extends BaseController
             }
             (new ActivityLogModel())->log([
                 'actor_id' => $user['id'], 'actor_name' => $user['name'],
-                'action' => "Ajukan pindah {$task['status']} → {$status}. {$note}", 'action_type' => 'status_change',
+                'action' => "Ajukan {$verb} " . $describeChange() . ". {$note}", 'action_type' => 'status_change',
                 'object_type' => 'task', 'object_id' => $taskId, 'object_label' => $task['title'],
                 'dashboard_id' => $task['dashboard_id'], 'evidence_id' => $evidenceId,
             ]);
             if ($dashboard !== null && $dashboard['pm_id']) {
                 (new NotificationModel())->notify(
                     'move_request', 'Request pindah status',
-                    "{$user['name']} minta pindah \"{$task['title']}\" ke {$status}",
+                    "{$user['name']} minta {$verb} " . $describeChange() . " untuk \"{$task['title']}\"",
                     $dashboard['pm_id'], $taskId, $task['dashboard_id'],
                 );
             }
@@ -544,11 +571,27 @@ class ModuleTasks extends BaseController
         }
 
         if ($approve) {
-            $taskModel->update($taskId, ['status' => $move['to_status']]);
-            $actionText  = "Setujui pindah ke {$move['to_status']}. {$note}";
+            $moveStatusChanged = $move['from_status'] !== $move['to_status'];
+            $moveProgressGiven = $move['to_progress_percent'] !== null;
+
+            $patch = ['status' => $move['to_status']];
+            if ($moveProgressGiven) {
+                $patch['progress_percent'] = (int) $move['to_progress_percent'];
+            }
+            $taskModel->update($taskId, $patch);
+
+            $verb = $moveStatusChanged ? 'pindah' : 'update progress';
+            if ($moveStatusChanged && $moveProgressGiven) {
+                $changeDesc = "ke {$move['to_status']} dengan progress {$move['to_progress_percent']}%";
+            } elseif ($moveStatusChanged) {
+                $changeDesc = "ke {$move['to_status']}";
+            } else {
+                $changeDesc = "ke {$move['to_progress_percent']}%";
+            }
+            $actionText  = "Setujui {$verb} {$changeDesc}. {$note}";
             $notifType   = 'move_approved';
             $notifTitle  = 'Request disetujui';
-            $notifBody   = "Pindah \"{$task['title']}\" ke {$move['to_status']} disetujui";
+            $notifBody   = ucfirst("{$verb} {$changeDesc}") . " untuk \"{$task['title']}\" disetujui";
         } else {
             $taskModel->update($taskId, ['approval_state' => 'revision']);
             $actionText  = "Minta revisi. {$note}";
@@ -749,6 +792,7 @@ class ModuleTasks extends BaseController
 
         return [
             'from' => $move['from_status'], 'to' => $move['to_status'],
+            'to_progress_percent' => $move['to_progress_percent'] !== null ? (int) $move['to_progress_percent'] : null,
             'requested_by' => $move['requested_by_name'] ?? '', 'note' => $move['note'],
             'at' => $move['created_at'], 'evidence_id' => $move['evidence_id'] ?: null,
         ];

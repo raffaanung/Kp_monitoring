@@ -1707,6 +1707,40 @@
     font-weight: 600;
   }
 
+  /* Work Priority — dropdown-nya sama kayak status-dropdown, warnanya pakai kelas crit-high/medium/low yang sudah ada. */
+  .crit-dropdown {
+    display: inline-flex;
+    align-items: center;
+    height: 28px;
+    padding: 0 1.6rem 0 0.8rem;
+    border-radius: 6px;
+    font-size: 0.58rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 4l2 2 2-2'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.6rem center;
+    background-size: 0.8em;
+    transition: all 0.2s ease;
+  }
+  .crit-dropdown:hover {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    transform: translateY(-1px);
+  }
+  .crit-dropdown:focus {
+    outline: 2px solid #3b82f6;
+    outline-offset: 1px;
+  }
+  .crit-dropdown option {
+    background-color: #ffffff;
+    color: #0f172a;
+    font-weight: 600;
+    text-transform: none;
+  }
+
   /* Date Cell */
   .date-cell {
     display: flex;
@@ -5195,6 +5229,17 @@
     background: #f1f5f9;
   }
 
+  /* Baris task yang lagi nunggu approval (status_move pending / approval_state pending) ditandain kuning di sisinya, biar PIC langsung lihat tanpa buka accordion. */
+  .task-row-toggle.pending-approval {
+    box-shadow: inset 3px 0 0 #f59e0b;
+    background: #fffbeb;
+  }
+
+  .task-row-toggle.pending-approval:hover,
+  .task-row-toggle.pending-approval.open {
+    background: #fef3c7;
+  }
+
   .task-title-cell {
     display: inline-flex;
     align-items: center;
@@ -5361,6 +5406,14 @@
     color: #ffffff;
     transform: translateY(-1px);
     box-shadow: 0 2px 6px rgba(37, 99, 235, 0.35);
+  }
+
+  .task-action-btn.btn-remove-assignee:hover {
+    background: #ea580c;
+    border-color: #c2410c;
+    color: #ffffff;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(234, 88, 12, 0.35);
   }
 
   .task-action-btn svg {
@@ -5851,32 +5904,6 @@
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
-  }
-
-  .task-accordion-desc-wrap textarea {
-    width: 100%;
-    box-sizing: border-box;
-    border: 1px solid #cbd5e1;
-    border-radius: 8px;
-    padding: 0.45rem 0.55rem;
-    font: inherit;
-    font-size: 0.66rem;
-    resize: vertical;
-  }
-
-  .task-accordion-edit-link {
-    align-self: flex-start;
-    border: none;
-    background: transparent;
-    color: #2563eb;
-    font-size: 0.6rem;
-    font-weight: 700;
-    cursor: pointer;
-    padding: 0;
-  }
-
-  .task-accordion-edit-link:hover {
-    text-decoration: underline;
   }
 
   .field-error {

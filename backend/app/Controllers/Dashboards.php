@@ -231,6 +231,37 @@ class Dashboards extends BaseController
         return $this->jsonOk($after);
     }
 
+    /** Ganti Work Priority (criticality) — endpoint sendiri (bukan lewat update() yang butuh "manage_registry" penuh), supaya PIC dashboard ini juga boleh switch tanpa dikasih akses edit field lain. */
+    public function changeCriticality(string $id = '0'): ResponseInterface
+    {
+        $user      = $this->authUser();
+        $model     = new DashboardModel();
+        $dashboard = $model->find($id);
+        if ($dashboard === null) {
+            return $this->jsonError('Dashboard not found', 404);
+        }
+        if (! TaskPolicy::canManageRegistry($user) && ! TaskPolicy::isPmOfDashboard($user, $dashboard)) {
+            return $this->jsonError("Only an Admin or this dashboard's PIC can change the work priority", 403);
+        }
+
+        $dashboardId = $id;
+        $criticality = (string) $this->request->getJsonVar('criticality');
+        if (! in_array($criticality, ['low', 'medium', 'high'], true)) {
+            return $this->jsonError('That priority is not valid', 422);
+        }
+
+        $before = $this->shapeRow($model->findWithDetails($dashboardId));
+        $model->setCriticality($dashboardId, $criticality);
+
+        $after   = $this->shapeRow($model->findWithDetails($dashboardId));
+        $changes = $this->diffDashboard($before, $after);
+        if ($changes !== []) {
+            $this->logActivity($user, $dashboardId, $after['name'], 'update', 'Work priority changed', $changes);
+        }
+
+        return $this->jsonOk($after);
+    }
+
     public function setField(string $id = '0'): ResponseInterface
     {
         $user = $this->authUser();

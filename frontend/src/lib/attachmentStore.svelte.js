@@ -1,4 +1,4 @@
-import { api } from './api.js'
+import { api, fileUrl } from './api.js'
 
 /** @typedef {'requirement' | 'dashboard'} AttachmentOwner */
 /** @typedef {'pdf' | 'ppt' | 'xls' | 'file'} AttachmentKind */
@@ -136,9 +136,9 @@ export async function useAttachment(id, mode) {
   const meta = attachmentStore.items.find((item) => item.id === id)
   if (!meta) return false
   if (mode === 'download' || meta.kind !== 'pdf') {
-    triggerDownload(meta.file_url, meta.name)
+    triggerDownload(fileUrl(meta.file_url), meta.name)
   } else {
-    window.open(meta.file_url, '_blank', 'noopener')
+    window.open(fileUrl(meta.file_url), '_blank', 'noopener')
   }
   return true
 }

@@ -5,18 +5,21 @@
     listDashboards,
     registryStatusOptions,
     criticalityLabel,
+    criticalityOptions,
     sortOptions,
     rememberDetailId,
     changeDashboardStatus,
+    changeDashboardCriticality,
   } from '$lib/registryStore.svelte.js';
   import { requirementStatusSummary, requirementStore } from '$lib/requirementStore.svelte.js';
-  import { canCreateDashboard, listModuleTasks, taskModuleStore } from '$lib/taskModuleStore.svelte.js';
+  import { canCreateDashboard, isCurrentUserPmOf, listModuleTasks, taskModuleStore } from '$lib/taskModuleStore.svelte.js';
   import { listUsers } from '$lib/accessStore.svelte.js';
   import { portal } from '$lib/portal.js';
   import RegistrySopModal from '$lib/pages/registry/RegistrySopModal.svelte';
   import RegistryCreateModal from '$lib/pages/registry/RegistryCreateModal.svelte';
   import RegistryDetailPanel from '$lib/pages/registry/RegistryDetailPanel.svelte';
   import "$lib/pages/registry/registry.css";
+  import { page } from '$app/state';
 
   let status = $state("");
   let dashboard = $state("");
@@ -176,6 +179,11 @@
   let createOpen = $state(false);
 
   const canAdd = $derived(canCreateDashboard());
+
+  /** Work Priority cuma boleh diganti Admin/Manager atau PIC dashboard itu sendiri. @param {{ name: string }} item */
+  function canEditPriority(item) {
+    return canAdd || isCurrentUserPmOf(item.name);
+  }
   const pmOptions = $derived(listUsers({ status: "active" }));
   function openCreate() {
     createOpen = true;
@@ -187,6 +195,21 @@
     rememberDetailId(item.id);
     detailActiveTab = "overview";
   }
+
+  /** Klik notifikasi (?focusTask=id di URL) → otomatis buka dashboard yang benar, task-nya di-expand oleh RegistryDetailPanel sendiri lewat prop autoFocusTaskId. */
+  const focusTaskIdFromUrl = $derived(page.url.searchParams.get("focusTask") || "");
+
+  $effect(() => {
+    if (!focusTaskIdFromUrl) return;
+    void taskModuleStore.items;
+    const task = taskModuleStore.items.find((t) => String(t.id) === focusTaskIdFromUrl);
+    if (!task) return; // data task belum ke-load, effect ini jalan lagi begitu taskModuleStore.items terisi
+    const dash = allDashboards.find((d) => d.name === task.dashboard);
+    if (!dash || selectedDetail?.id === dash.id) return;
+    selectedDetail = dash;
+    rememberDetailId(dash.id);
+    detailActiveTab = "overview";
+  });
 
 </script>
 
@@ -362,7 +385,20 @@
                   </td>
 
                   <td>
-                    <span class="crit-badge crit-{item.criticality || 'low'}">{criticalityLabel(item.criticality) || '—'}</span>
+                    {#if canEditPriority(item)}
+                      <select
+                        class={`crit-dropdown crit-${item.criticality || 'low'}`}
+                        value={item.criticality || 'low'}
+                        onclick={(e) => e.stopPropagation()}
+                        onchange={(e) => changeDashboardCriticality(item.id, e.target.value)}
+                      >
+                        {#each criticalityOptions as opt}
+                          <option value={opt.value}>{opt.label}</option>
+                        {/each}
+                      </select>
+                    {:else}
+                      <span class="crit-badge crit-{item.criticality || 'low'}">{criticalityLabel(item.criticality) || '—'}</span>
+                    {/if}
                   </td>
 
                 </tr>
@@ -447,7 +483,7 @@
       {/if}
     </GlassPanel>
   {:else}
-    <RegistryDetailPanel bind:selectedDetail bind:detailActiveTab bind:selectedSopItem />
+    <RegistryDetailPanel bind:selectedDetail bind:detailActiveTab bind:selectedSopItem autoFocusTaskId={focusTaskIdFromUrl} />
   {/if}
 </section>
 

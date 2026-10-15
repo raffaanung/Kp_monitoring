@@ -39,6 +39,7 @@ $routes->group('api', ['filter' => 'auth'], static function ($routes) use ($uuid
     $routes->put("dashboards/{$uuid}", 'Dashboards::update/$1');
     $routes->delete("dashboards/{$uuid}", 'Dashboards::delete/$1');
     $routes->put("dashboards/{$uuid}/status", 'Dashboards::changeStatus/$1');
+    $routes->put("dashboards/{$uuid}/criticality", 'Dashboards::changeCriticality/$1');
     $routes->post("dashboards/{$uuid}/fields", 'Dashboards::setField/$1');
     $routes->put("dashboards/{$uuid}/fields", 'Dashboards::renameField/$1');
     $routes->delete("dashboards/{$uuid}/fields", 'Dashboards::removeField/$1');

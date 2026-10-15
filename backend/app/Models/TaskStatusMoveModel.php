@@ -10,7 +10,7 @@ class TaskStatusMoveModel extends Model
     protected $primaryKey    = 'id';
     protected $returnType    = 'array';
     protected $useAutoIncrement = false;
-    protected $allowedFields = ['id', 'task_id', 'from_status', 'to_status', 'requested_by', 'note', 'evidence_id', 'status'];
+    protected $allowedFields = ['id', 'task_id', 'from_status', 'to_status', 'to_progress_percent', 'requested_by', 'note', 'evidence_id', 'status'];
 
     public function pendingForTask(string $taskId): ?array
     {

@@ -1,5 +1,6 @@
 <script>
   import GlassPanel from '$lib/GlassPanel.svelte';
+  import { fileUrl } from '$lib/api.js';
   import { goto } from '$app/navigation';
   import TaskList from '../../../routes/tasks/list/+page.svelte';
   import TaskDetail from '../../../routes/tasks/[id]/+page.svelte';
@@ -49,7 +50,8 @@
   import RegistryInviteModal from './RegistryInviteModal.svelte';
   import PmCreateTaskModal from '$lib/PmCreateTaskModal.svelte';
 
-  let { selectedDetail = $bindable(), detailActiveTab = $bindable("overview"), selectedSopItem = $bindable() } = $props();
+  /** @type {{ selectedDetail: any, detailActiveTab: string, selectedSopItem: any, autoFocusTaskId?: string }} */
+  let { selectedDetail = $bindable(), detailActiveTab = $bindable("overview"), selectedSopItem = $bindable(), autoFocusTaskId = '' } = $props();
   void detailActiveTab;
 
   let inviteOpen = $state(false);
@@ -249,6 +251,8 @@
   let seenDash = $state('');
   let selectedVersionId = $state('');
   let activityQuery = $state('');
+  /** Supaya auto-focus (dari notifikasi) cuma diproses sekali per taskId, bukan diulang terus tiap effect jalan lagi. @type {string} */
+  let autoFocusHandledFor = $state('');
 
   $effect(() => {
     if (dashName === seenDash) return;
@@ -256,8 +260,27 @@
     work = 'overview';
     attachReqId = '';
     focusTaskId = '';
-    selectedVersionId = '';
+    // Jangan reset kalau lagi ada auto-focus (dari klik notifikasi) yang belum selesai diproses —
+    // efek di bawah ini perlu selectedVersionId tetap kosong sampai dia sendiri yang mengisi.
+    if (!autoFocusTaskId || autoFocusTaskId === autoFocusHandledFor) {
+      selectedVersionId = '';
+    }
     showSecret = '';
+  });
+
+  /**
+   * Klik notifikasi → lompat ke task yang bersangkutan: pilih versi requirement yang benar
+   * lalu expand accordion task-nya, persis seperti kalau user buka manual lewat Dashboard List.
+   */
+  $effect(() => {
+    if (!autoFocusTaskId || autoFocusTaskId === autoFocusHandledFor) return;
+    void taskModuleStore.items;
+    const task = taskModuleStore.items.find((t) => String(t.id) === autoFocusTaskId);
+    if (!task) return; // data task belum ke-load, effect ini otomatis jalan lagi pas taskModuleStore.items berubah
+    selectedVersionId = String(task.requirement_id || '');
+    expandedTaskId = String(task.id);
+    loadModuleTaskDetail(task.id);
+    autoFocusHandledFor = autoFocusTaskId;
   });
 
   /** @param {number | string} id */
@@ -294,7 +317,7 @@
     expandedTaskId = key;
     const opened = tasks.find((t) => t.id === key);
     if (opened) {
-      progressDraft = initialProgress(opened);
+      progressDraft = displayProgress(opened);
       kanbanDraftStatus = opened.status;
     }
     // List endpoint ringan — tarik detail lengkap (deskripsi/komentar/evidence) tiap task di grup ini sekali waktu di-expand.
@@ -520,11 +543,45 @@
     }
   }
 
+  /** Popup hapus assignee — dropdown-nya cuma isi assignee yang ADA di task itu (bukan seluruh roster tim). @type {string} */
+  let removeAssigneePopupKey = $state('');
+  let removeAssigneeName = $state('');
+  let removeAssigneeError = $state('');
+  let removingAssignee = $state(false);
+
+  /** @param {string} key */
+  function openRemoveAssignee(key) {
+    removeAssigneePopupKey = key;
+    removeAssigneeName = '';
+    removeAssigneeError = '';
+  }
+  function closeRemoveAssignee() {
+    removeAssigneePopupKey = '';
+  }
+
+  /** @param {any} task */
+  async function submitRemoveAssignee(task) {
+    if (!removeAssigneeName) {
+      removeAssigneeError = 'Pilih assignee yang mau dihapus.';
+      return;
+    }
+    removingAssignee = true;
+    /** @type {string[]} */
+    const current = Array.isArray(task.assignees) ? task.assignees : [];
+    const ok = await updateModuleTask(task.id, {
+      assignees: current.filter((n) => n !== removeAssigneeName),
+    });
+    removingAssignee = false;
+    if (ok) {
+      closeRemoveAssignee();
+    } else {
+      removeAssigneeError = 'Gagal menghapus assignee.';
+    }
+  }
+
   // --- Accordion: progress slider + mini kanban ---
   // Progress (0-100%) dan posisi kanban adalah 2 field independen, sama-sama manual
-  // (bukan satu diturunkan dari yang lain). Apply cuma nyala kalau keduanya "cocok"
-  // menurut statusForProgress() — jadi kalau cuma satu yang digeser, user harus
-  // menyamakan yang satunya dulu sebelum bisa disimpan.
+  // (bukan satu diturunkan dari yang lain) — Apply selalu bisa diklik terlepas keduanya cocok atau tidak.
   // (hanya 1 row yang bisa terbuka, jadi state ini boleh scalar)
   let progressDraft = $state(0);
   /** @type {string} Posisi kolom kanban hasil drag-drop card, independen dari progressDraft. */
@@ -532,8 +589,15 @@
   let progressBusy = $state(false);
   let progressError = $state('');
 
-  /** progress_percent di DB default 0 untuk task lama yang belum pernah digeser — jatuhkan ke posisi status di kanban. @param {any} task */
-  function initialProgress(task) {
+  /**
+   * Progress % yang beneran dipakai buat ditampilkan di mana pun (baris List Task, slider accordion, dst).
+   * progress_percent di DB default 0 untuk task yang belum pernah digeser manual — jatuhkan ke posisi status
+   * di kanban sebagai perkiraan awal. Begitu progress_percent pernah diisi (> 0), itu yang jadi acuan utama,
+   * bukan posisi status lagi — makanya baris list HARUS baca lewat fungsi ini, bukan taskProgress() langsung,
+   * supaya nggak kelihatan "Apply nggak ngaruh" padahal progress_percent-nya sudah benar kesimpen.
+   * @param {any} task
+   */
+  function displayProgress(task) {
     const stored = Number(task.progress_percent || 0);
     return stored > 0 ? stored : taskProgress(task.status);
   }
@@ -553,94 +617,63 @@
     kanbanDraftStatus = colKey;
   }
 
+  /** Apply cuma boleh jalan kalau posisi slider progress dan posisi card kanban SUDAH disamakan manual — kalau assignee cuma geser salah satu doang, Apply harus kekunci biar dia sadar harus nyamain progress juga. */
+  const canApplyProgress = $derived(statusForProgress(progressDraft) === kanbanDraftStatus);
+
   /** @param {any} task */
   async function applyProgress(task) {
+    if (!canApplyProgress) return;
     progressBusy = true;
     progressError = '';
     const pct = progressDraft;
     const targetStatus = kanbanDraftStatus;
-    let ok = true;
-    if (targetStatus !== task.status) {
-      ok = await moveModuleTask(task.id, targetStatus, { note: `Update progress ke ${pct}%` });
-    }
-    if (ok) {
-      ok = await updateModuleTask(task.id, { progress_percent: pct });
+    // Selalu lewat moveModuleTask (bukan updateModuleTask langsung) — status DAN progress dibawa
+    // dalam satu request yang sama, biar PM/Owner bisa diterapkan langsung tapi Teknis/assignee
+    // tetap harus menunggu approval PIC, termasuk kalau cuma progress yang berubah (kolom tetap).
+    const result = await moveModuleTask(task.id, targetStatus, { note: `Update progress ke ${pct}%`, progressPercent: pct });
+    const ok = result !== false;
+    // Issue/catatan yang lagi diketik ikut terkirim bareng Apply, nggak perlu tombol Kirim sendiri lagi.
+    if (ok && issueText.trim()) {
+      const commentOk = await addTaskComment(task.id, issueText.trim());
+      if (commentOk) {
+        issueText = '';
+      } else {
+        issueError = 'Gagal mengirim issue/catatan.';
+      }
     }
     progressBusy = false;
-    if (!ok) progressError = 'Gagal menerapkan — cek permission Anda.';
+    if (!ok) progressError = describeActionError();
   }
 
-  // --- Accordion: edit description ---
-  let descEditing = $state(false);
-  let descDraft = $state('');
-  let descSaving = $state(false);
-  let descError = $state('');
-
-  /** @param {any} task */
-  function startEditDescription(task) {
-    descDraft = task.description || '';
-    descError = '';
-    descEditing = true;
-  }
-  function cancelEditDescription() {
-    descEditing = false;
-    descError = '';
-  }
-  /** @param {any} task */
-  async function saveDescription(task) {
-    descSaving = true;
-    descError = '';
-    const ok = await updateModuleTask(task.id, { description: descDraft.trim() });
-    descSaving = false;
-    if (ok) {
-      descEditing = false;
-    } else {
-      descError = 'Gagal menyimpan deskripsi — cek permission Anda.';
-    }
+  /** Terjemahkan pesan error asli dari backend jadi bahasa yang jelas — bukan cuma "cek permission" generik, karena kadang penyebabnya bukan soal izin sama sekali (misal masih ada request lain yang pending). */
+  function describeActionError() {
+    const raw = taskModuleStore.lastActionError || '';
+    if (raw.includes('still waiting')) return 'Masih ada request lain yang menunggu keputusan PIC — tunggu itu diproses dulu sebelum mengajukan lagi.';
+    if (raw.includes('Only a PM') || raw.includes('not allowed')) return 'Gagal menerapkan — cek permission Anda.';
+    return raw || 'Gagal menerapkan — cek permission Anda.';
   }
 
-  // --- Accordion: lapor issue/catatan (dipakai sistem comment yang sudah ada) ---
+  // --- Accordion: lapor issue/catatan — dikirim bareng tombol Apply (progress/kanban), bukan tombol sendiri lagi ---
   let issueText = $state('');
-  let issuePosting = $state(false);
   let issueError = $state('');
 
-  /** @param {any} task */
-  async function submitIssue(task) {
-    if (!issueText.trim()) return;
-    issuePosting = true;
-    issueError = '';
-    const ok = await addTaskComment(task.id, issueText.trim());
-    issuePosting = false;
-    if (ok) {
-      issueText = '';
-    } else {
-      issueError = 'Gagal mengirim issue/catatan.';
-    }
-  }
-
   // --- Accordion: upload evidence/screenshot, bisa lebih dari 1 file ---
-  /** @type {File[]} */
-  let evidencePickedFiles = $state([]);
+  // Begitu file dipilih, langsung diupload (nggak perlu klik tombol submit terpisah lagi).
   let evidenceNote = $state('');
   let evidenceUploading = $state(false);
   let evidenceError = $state('');
 
-  /** @param {Event} e */
-  function pickEvidenceFiles(e) {
+  /** @param {any} task @param {Event} e */
+  async function pickEvidenceFiles(task, e) {
     const input = /** @type {HTMLInputElement} */ (e.currentTarget);
-    evidencePickedFiles = Array.from(input.files || []);
-  }
-
-  /** @param {any} task */
-  async function uploadEvidence(task) {
-    if (!evidencePickedFiles.length) return;
+    const files = Array.from(input.files || []);
+    if (!files.length) return;
     evidenceUploading = true;
     evidenceError = '';
     try {
-      const evidences = await Promise.all(evidencePickedFiles.map((f) => readEvidenceFile(f)));
+      const evidences = await Promise.all(files.map((f) => readEvidenceFile(f)));
       const ok = await addTaskEvidenceFiles(task.id, evidences, evidenceNote.trim());
       if (ok) {
-        evidencePickedFiles = [];
         evidenceNote = '';
       } else {
         evidenceError = 'Sebagian/semua file gagal diupload.';
@@ -649,16 +682,14 @@
       evidenceError = err instanceof Error ? err.message : String(err);
     }
     evidenceUploading = false;
+    input.value = '';
   }
 
   /** Reset semua draft accordion saat pindah/tutup row supaya tidak bocor ke task lain. */
   function resetAccordionDrafts() {
     progressError = '';
-    descEditing = false;
-    descError = '';
     issueText = '';
     issueError = '';
-    evidencePickedFiles = [];
     evidenceNote = '';
     evidenceError = '';
   }
@@ -669,9 +700,6 @@
     const activity = task.activity || [];
     return activity.find((a) => a.action_type === 'approval') || null;
   }
-
-  /** Kolom kanban yang jadi tujuan kalau slider progress di-apply sekarang. */
-  const progressTargetStatus = $derived(statusForProgress(progressDraft));
 
   const dashRequirements = $derived.by(() => {
     void requirementStore.items;
@@ -1352,8 +1380,10 @@
                     <tbody>
                       {#each versionTasks as task (task.id)}
                         {@const isOpen = expandedTaskId === task.id}
+                        {@const pct = displayProgress(task)}
                         <tr
                           class:late={isOverdue(task)}
+                          class:pending-approval={hasPendingApproval(task)}
                           class="task-row-toggle"
                           class:open={isOpen}
                           onclick={() => toggleTaskRow(task.id, [task])}
@@ -1367,9 +1397,9 @@
                           <td>{task.assignees?.length ? task.assignees.join(', ') : '—'}</td>
                           <td>{task.evidences?.length || '—'}</td>
                           <td>
-                            <span class="prog-bar" title="{taskProgress(task.status)}%">
-                              <span class="prog-track"><i style="width: {taskProgress(task.status)}%; background: {workflowStatusColor(task.status)}"></i></span>
-                              <b>{taskProgress(task.status)}%</b>
+                            <span class="prog-bar" title="{pct}%">
+                              <span class="prog-track"><i style="width: {pct}%; background: {workflowStatusColor(task.status)}"></i></span>
+                              <b>{pct}%</b>
                             </span>
                           </td>
                           <td>
@@ -1408,6 +1438,15 @@
                                   aria-label="Add assignee"
                                   onclick={(e) => { e.stopPropagation(); openAddAssignee(task.id); }}
                                 >+</button>
+                                {#if task.assignees?.length}
+                                  <button
+                                    type="button"
+                                    class="task-action-btn btn-remove-assignee"
+                                    title="Remove assignee"
+                                    aria-label="Remove assignee"
+                                    onclick={(e) => { e.stopPropagation(); openRemoveAssignee(task.id); }}
+                                  >−</button>
+                                {/if}
                               </div>
                             {:else}
                               <!-- Bagian Tim Teknis: Hanya bisa lihat saja ketika task di-return -->
@@ -1466,8 +1505,22 @@
                                   <div class="task-accordion-left">
                                     <div class="task-approval-outcome">
                                       <span class="task-accordion-label">Status Approval</span>
-                                      <span class="approval-state-badge" data-state={task.approval_state}>{approvalLabel(task.approval_state)}</span>
-                                      {#if hasPendingApproval(task)}
+                                      {#if task.status_move}
+                                        <span class="approval-state-badge" data-state="pending">Menunggu Approval</span>
+                                      {:else}
+                                        <span class="approval-state-badge" data-state={task.approval_state}>{approvalLabel(task.approval_state)}</span>
+                                      {/if}
+                                      {#if task.status_move}
+                                        <p class="task-accordion-empty">
+                                          {#if task.status_move.to !== task.status && task.status_move.to_progress_percent !== null}
+                                            Minta pindah {workflowLabel(task.status_move.to)} dengan progress {task.status_move.to_progress_percent}% — menunggu keputusan PIC.
+                                          {:else if task.status_move.to !== task.status}
+                                            Minta pindah ke {workflowLabel(task.status_move.to)} — menunggu keputusan PIC.
+                                          {:else}
+                                            Minta update progress ke {task.status_move.to_progress_percent}% — menunggu keputusan PIC.
+                                          {/if}
+                                        </p>
+                                      {:else if hasPendingApproval(task)}
                                         <p class="task-accordion-empty">Menunggu keputusan — gunakan tombol ✓ (Approve) atau return pada baris task.</p>
                                       {:else if lastApprovalDecision(task)}
                                         {@const decision = lastApprovalDecision(task)}
@@ -1488,7 +1541,6 @@
                                       />
                                       <div class="task-progress-readout">
                                         <b>{progressDraft}%</b>
-                                        <span>≈ {workflowLabel(progressTargetStatus)}</span>
                                       </div>
                                     </div>
                                   </div>
@@ -1496,17 +1548,7 @@
                                   <div class="task-accordion-right">
                                     <div class="task-accordion-desc-wrap">
                                       <span class="task-accordion-label">Description</span>
-                                      {#if descEditing}
-                                        <textarea rows="3" bind:value={descDraft} onclick={(e) => e.stopPropagation()}></textarea>
-                                        <div class="task-row-actions">
-                                          <button type="button" class="task-action-btn" disabled={descSaving} onclick={(e) => { e.stopPropagation(); saveDescription(task); }}>{descSaving ? 'Saving...' : 'Save'}</button>
-                                          <button type="button" class="task-action-btn" onclick={(e) => { e.stopPropagation(); cancelEditDescription(); }}>Cancel</button>
-                                        </div>
-                                        {#if descError}<p class="field-error">{descError}</p>{/if}
-                                      {:else}
-                                        <p class="task-accordion-desc">{task.description || 'No description.'}</p>
-                                        <button type="button" class="task-accordion-edit-link" onclick={(e) => { e.stopPropagation(); startEditDescription(task); }}>Edit description</button>
-                                      {/if}
+                                      <p class="task-accordion-desc">{task.description || 'No description.'}</p>
                                     </div>
 
                                     <div class="task-accordion-grid">
@@ -1529,21 +1571,16 @@
                                       {#if task.evidences?.length}
                                         <ul class="task-accordion-list">
                                           {#each task.evidences as ev (ev.id)}
-                                            <li><a href={ev.file_url} target="_blank" rel="noopener noreferrer">{ev.name}</a> <small>· {ev.actor}</small></li>
+                                            <li><a href={fileUrl(ev.file_url)} target="_blank" rel="noopener noreferrer">{ev.name}</a> <small>· {ev.actor}</small></li>
                                           {/each}
                                         </ul>
                                       {:else}
                                         <p class="task-accordion-empty">No evidence uploaded yet.</p>
                                       {/if}
                                       <div class="task-evidence-upload">
-                                        <input type="file" multiple accept="image/*,.pdf" onchange={pickEvidenceFiles} />
-                                        {#if evidencePickedFiles.length}
-                                          <p class="task-evidence-picked">{evidencePickedFiles.length} file dipilih: {evidencePickedFiles.map((f) => f.name).join(', ')}</p>
-                                        {/if}
-                                        <input type="text" class="task-evidence-note" placeholder="Catatan evidence (opsional)" bind:value={evidenceNote} />
-                                        <button type="button" class="task-action-btn" disabled={evidenceUploading || !evidencePickedFiles.length} onclick={() => uploadEvidence(task)}>
-                                          {evidenceUploading ? 'Uploading...' : 'Upload Evidence'}
-                                        </button>
+                                        <input type="text" class="task-evidence-note" placeholder="Catatan evidence (opsional)" bind:value={evidenceNote} disabled={evidenceUploading} />
+                                        <input type="file" multiple accept="image/*,.pdf" onchange={(e) => pickEvidenceFiles(task, e)} disabled={evidenceUploading} />
+                                        {#if evidenceUploading}<p class="task-evidence-picked">Mengupload...</p>{/if}
                                         {#if evidenceError}<p class="field-error">{evidenceError}</p>{/if}
                                       </div>
                                     </div>
@@ -1560,10 +1597,7 @@
                                         <p class="task-accordion-empty">No comments yet.</p>
                                       {/if}
                                       <div class="task-issue-input">
-                                        <input type="text" placeholder="Tulis issue/catatan..." bind:value={issueText} />
-                                        <button type="button" class="task-action-btn" disabled={issuePosting || !issueText.trim()} onclick={() => submitIssue(task)}>
-                                          {issuePosting ? 'Mengirim...' : 'Kirim'}
-                                        </button>
+                                        <input type="text" placeholder="Tulis issue/catatan... (terkirim bareng tombol Apply di bawah)" bind:value={issueText} disabled={progressBusy} />
                                         {#if issueError}<p class="field-error">{issueError}</p>{/if}
                                       </div>
                                     </div>
@@ -1595,11 +1629,14 @@
                                       </div>
                                     {/each}
                                   </div>
+                                  {#if !canApplyProgress}
+                                    <p class="field-error">Samakan dulu posisi slider progress dengan kolom kanban yang digeser sebelum Apply.</p>
+                                  {/if}
                                   {#if progressError}<p class="field-error">{progressError}</p>{/if}
                                   <button
                                     type="button"
                                     class="task-action-btn task-progress-apply"
-                                    disabled={progressBusy}
+                                    disabled={progressBusy || !canApplyProgress}
                                     onclick={(e) => { e.stopPropagation(); applyProgress(task); }}
                                   >{progressBusy ? 'Menerapkan...' : 'Apply'}</button>
                                 </div>
@@ -1802,6 +1839,36 @@
       <div class="approval-row-actions">
         <button type="button" class="approval-reject" onclick={closeAddAssignee}>Cancel</button>
         <button type="submit" class="approval-accept" disabled={addingAssignee}>{addingAssignee ? 'Saving...' : 'Add'}</button>
+      </div>
+    </form>
+  {/if}
+{/if}
+
+{#if removeAssigneePopupKey}
+  {@const task = versionTasks.find((t) => t.id === removeAssigneePopupKey)}
+  {#if task}
+    <div class="req-detail-backdrop" use:portal role="presentation" onclick={closeRemoveAssignee}></div>
+    <form class="attach-pop" use:portal aria-label="Remove assignee" onsubmit={(e) => { e.preventDefault(); submitRemoveAssignee(task); }}>
+      <header>
+        <div>
+          <p>Remove Assignee</p>
+          <h3>{task.title}</h3>
+        </div>
+        <button type="button" onclick={closeRemoveAssignee} aria-label="Close">×</button>
+      </header>
+      <label class="add-assignee-field">
+        <span>Assignee saat ini</span>
+        <select bind:value={removeAssigneeName}>
+          <option value="">Pilih yang mau dihapus...</option>
+          {#each task.assignees || [] as name (name)}
+            <option value={name}>{name}</option>
+          {/each}
+        </select>
+      </label>
+      {#if removeAssigneeError}<p class="attach-empty">{removeAssigneeError}</p>{/if}
+      <div class="approval-row-actions">
+        <button type="button" class="approval-reject" onclick={closeRemoveAssignee}>Cancel</button>
+        <button type="submit" class="approval-accept" disabled={removingAssignee}>{removingAssignee ? 'Removing...' : 'Remove'}</button>
       </div>
     </form>
   {/if}

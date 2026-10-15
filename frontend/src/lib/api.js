@@ -17,6 +17,18 @@ async function request(path, opts = {}) {
   return payload.data
 }
 
+/**
+ * Jadikan path relatif dari backend (misal file_url evidence/attachment: "/api/evidences/{id}/file")
+ * jadi URL yang bener lewat proxy dev server — tanpa prefix API_BASE ini, link download/gambar
+ * nembak ke origin SvelteKit sendiri (nggak ke-proxy ke backend), jadi 404/gagal diunduh.
+ * @param {string} path
+ */
+export function fileUrl(path) {
+  if (!path) return path
+  if (/^https?:\/\//i.test(path) || path.startsWith(API_BASE)) return path
+  return `${API_BASE}${path}`
+}
+
 export const api = {
   get: (path) => request(path),
   post: (path, body) => request(path, { method: 'POST', body: body ?? {} }),

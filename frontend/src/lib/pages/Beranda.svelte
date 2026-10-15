@@ -31,6 +31,7 @@
   import { requirementStore, requirementDashboardOptions } from '$lib/requirementStore.svelte.js'
   import { avatarUrl } from '$lib/settingsStore.svelte.js'
   import { authStore } from '$lib/authStore.svelte.js'
+  import { activityLogStore, listActivityLogs } from '$lib/activityLogStore.svelte.js'
 
   /**
    * Adapt module task → shape dipakai timeline helpers (startDate/meta/updatedAt).
@@ -166,27 +167,20 @@
       })),
   )
 
-  const recentActivities = $derived(
-    [...globalTasks]
-      .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
+  /** Log beneran dari activity_logs (bukan nebak dari status task terakhir seperti sebelumnya). */
+  const recentActivities = $derived.by(() => {
+    void activityLogStore.items
+    return listActivityLogs()
       .slice(0, 6)
-      .map((t) => {
-        const action =
-          t.status === 'selesai'
-            ? 'menyelesaikan'
-            : t.status === 'backlog'
-              ? 'menambahkan task'
-              : isOverdue(/** @type {any} */ (t))
-                ? 'menandai overdue'
-                : `update ${workflowLabel(t.status)}`
-        const whenDate = new Date(t.updatedAt)
+      .map((log) => {
+        const whenDate = new Date(log.at)
         const when =
           toISODate(whenDate) === todayISO
             ? whenDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-            : relativeWhen(t.updatedAt, now)
-        return { who: t.pic, action, target: t.title, when }
-      }),
-  )
+            : relativeWhen(log.at, now)
+        return { who: log.actor, action: log.action, target: log.objectLabel, when }
+      })
+  })
 
   /** @type {'overdue' | 'upcoming'} */
   let deadlineTab = $state('upcoming')
@@ -218,7 +212,7 @@
         note: `${dashboards} sources · ${periodNote}`,
         icon: 'dash',
         tone: 'mint',
-        go: () => pushTaskFilters({}, 'board'),
+        go: () => goto('/registry/list'),
       },
       {
         label: 'Total Task',

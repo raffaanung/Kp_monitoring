@@ -4,7 +4,7 @@
   import logoFull from '$lib/assets/edm-logo.png'
   import logoLight from '$lib/assets/edm-logo-white.png'
   import { login } from '$lib/authStore.svelte.js'
-  import { loadAppData } from '$lib/loadAppData.js'
+  import { loadAppData, startAutoRefresh } from '$lib/loadAppData.js'
 
   const FEATURES = [
     { label: 'Real-time', color: '#7c8cf8' },
@@ -27,6 +27,7 @@
     try {
       await login(username.trim(), password)
       loadAppData()
+      startAutoRefresh()
       goto('/')
     } catch (err) {
       error = err instanceof Error ? err.message : String(err)

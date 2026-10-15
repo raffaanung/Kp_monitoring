@@ -1,6 +1,7 @@
 <script>
   import { goto } from '$app/navigation'
   import GlassPanel from '$lib/GlassPanel.svelte'
+  import { fileUrl } from '$lib/api.js'
   import {
     getModuleTask,
     loadModuleTaskDetail,
@@ -398,7 +399,7 @@
                     {#if row.file}
                       <button type="button" class="file-card" onclick={() => (viewing = row.file)}>
                         {#if row.file.mime.startsWith('image/')}
-                          <img src={row.file.file_url} alt="" />
+                          <img src={fileUrl(row.file.file_url)} alt="" />
                         {:else}
                           <span class="file-ico" aria-hidden="true">FILE</span>
                         {/if}
@@ -497,9 +498,9 @@
             <button type="button" class="ghost-btn" onclick={() => (viewing = null)}>Close</button>
           </div>
           {#if viewing.mime.startsWith('image/')}
-            <img src={viewing.file_url} alt={viewing.name} />
+            <img src={fileUrl(viewing.file_url)} alt={viewing.name} />
           {:else}
-            <a class="file-link" href={viewing.file_url} download={viewing.name}>Download {viewing.name}</a>
+            <a class="file-link" href={fileUrl(viewing.file_url)} download={viewing.name}>Download {viewing.name}</a>
           {/if}
         </div>
       </div>

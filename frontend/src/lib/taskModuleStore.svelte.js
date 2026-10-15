@@ -33,6 +33,7 @@ import { accessStore } from './accessStore.svelte.js'
  * @typedef {Object} StatusMoveRequest
  * @property {TaskWorkflow} from
  * @property {TaskWorkflow} to
+ * @property {number | null} [to_progress_percent] Progress yang ikut diminta bareng request ini (null kalau cuma pindah status, nggak ikut ubah progress).
  * @property {string} requested_by
  * @property {string} [note]
  * @property {string} at
@@ -133,6 +134,10 @@ export const taskModuleStore = $state({
   loading: false,
   /** @type {string | null} */
   error: null,
+  /** Pesan error asli dari backend buat aksi terakhir (move/approve/dst) — dibaca UI yang butuh
+   * alasan SPESIFIK kenapa gagal (bukan cuma pesan generik "cek permission Anda"), misal
+   * "A move request is still waiting" vs benar-benar soal permission. @type {string | null} */
+  lastActionError: null,
 })
 
 export async function loadModuleTasksFromApi() {
@@ -162,6 +167,34 @@ function applyTaskUpdate(task) {
   } else {
     taskModuleStore.items = [...taskModuleStore.items, task]
   }
+}
+
+/**
+ * Optimistic update: tampilan di-update DULUAN (sebelum request API kelar) biar
+ * kerasa instan walau backend-nya lambat (remote DB + php -S, lihat pembahasan
+ * soal performa). Dipanggil tepat sebelum `await api...`, hasil baliknya (snapshot
+ * lama) dipakai buat rollback lewat rollbackOptimisticTask() kalau request gagal.
+ * Response sukses dari server tetap menimpa ini lewat applyTaskUpdate() seperti biasa.
+ * @param {number} id @param {Partial<ModuleTask>} patch @returns {ModuleTask | null} snapshot sebelum dipatch, untuk rollback
+ */
+function applyOptimisticPatch(id, patch) {
+  const idx = taskModuleStore.items.findIndex((t) => t.id === id)
+  if (idx < 0) return null
+  const prev = taskModuleStore.items[idx]
+  const next = [...taskModuleStore.items]
+  next[idx] = { ...prev, ...patch }
+  taskModuleStore.items = next
+  return prev
+}
+
+/** @param {number} id @param {ModuleTask | null} prev */
+function rollbackOptimisticTask(id, prev) {
+  if (!prev) return
+  const idx = taskModuleStore.items.findIndex((t) => t.id === id)
+  if (idx < 0) return
+  const next = [...taskModuleStore.items]
+  next[idx] = prev
+  taskModuleStore.items = next
 }
 
 /**
@@ -515,6 +548,7 @@ export async function createModuleTask(payload) {
  * @param {Partial<Pick<ModuleTask, 'title' | 'description' | 'deadline' | 'requirement_id'>> & { pic?: string, assignee?: string }} patch
  */
 export async function updateModuleTask(id, patch) {
+  const prev = applyOptimisticPatch(id, patch)
   try {
     const updated = await api.put(`/api/module-tasks/${id}`, {
       ...patch,
@@ -523,33 +557,48 @@ export async function updateModuleTask(id, patch) {
     applyTaskUpdate(updated)
     return true
   } catch {
+    rollbackOptimisticTask(id, prev)
     return false
   }
 }
 
 /**
- * PM: langsung pindah. Teknis: buat status_move request.
+ * PM/owner: langsung pindah (dan/atau update progress). Teknis: buat status_move request
+ * (progress_percent ikut dibawa di request yang sama, disetujui/ditolak bareng status-nya).
  * @param {number} id
  * @param {TaskWorkflow} status
- * @param {{ note?: string, evidence?: EvidenceFile | null }} [opts]
+ * @param {{ note?: string, evidence?: EvidenceFile | null, progressPercent?: number }} [opts]
  * @returns {Promise<'moved' | 'requested' | false>}
  */
 export async function moveModuleTask(id, status, opts = {}) {
+  // Tampilkan seolah langsung pindah; kalau ternyata jadi request (Teknis, menunggu PM),
+  // response asli dari server akan menimpa ini lagi dalam ~1-2 detik dengan status_move yang benar.
+  const optimisticPatch = { status }
+  if (opts.progressPercent !== undefined) optimisticPatch.progress_percent = opts.progressPercent
+  const prev = applyOptimisticPatch(id, optimisticPatch)
   try {
     const evidenceId = await uploadEvidenceIfPresent(id, opts.evidence, opts.note)
     const result = await api.post(`/api/module-tasks/${id}/move`, {
       status, note: opts.note || '', evidence_id: evidenceId,
+      progress_percent: opts.progressPercent ?? null,
     })
     applyTaskUpdate(result.task)
     await loadNotificationsFromApi()
     return result.result
-  } catch {
+  } catch (err) {
+    rollbackOptimisticTask(id, prev)
+    taskModuleStore.lastActionError = err instanceof Error ? err.message : String(err)
     return false
   }
 }
 
 /** @param {number} id @param {string} note @param {EvidenceFile | null} [evidence] */
 export async function approveStatusMove(id, note, evidence) {
+  const current = taskModuleStore.items.find((t) => t.id === id)
+  const prev = applyOptimisticPatch(id, {
+    status: current?.status_move?.to ?? current?.status,
+    status_move: null,
+  })
   try {
     const evidenceId = await uploadEvidenceIfPresent(id, evidence, note)
     const updated = await api.post(`/api/module-tasks/${id}/approve-move`, { note: note || '', evidence_id: evidenceId })
@@ -557,12 +606,14 @@ export async function approveStatusMove(id, note, evidence) {
     await loadNotificationsFromApi()
     return true
   } catch {
+    rollbackOptimisticTask(id, prev)
     return false
   }
 }
 
 /** @param {number} id @param {string} note @param {EvidenceFile | null} [evidence] */
 export async function rejectStatusMove(id, note, evidence) {
+  const prev = applyOptimisticPatch(id, { status_move: null })
   try {
     const evidenceId = await uploadEvidenceIfPresent(id, evidence, note)
     const updated = await api.post(`/api/module-tasks/${id}/reject-move`, { note: note || '', evidence_id: evidenceId })
@@ -570,6 +621,7 @@ export async function rejectStatusMove(id, note, evidence) {
     await loadNotificationsFromApi()
     return true
   } catch {
+    rollbackOptimisticTask(id, prev)
     return false
   }
 }
@@ -580,6 +632,7 @@ export async function rejectStatusMove(id, note, evidence) {
  * @param {number} id @param {string} [note] @param {EvidenceFile | null} [evidence]
  */
 export async function approveModuleTask(id, note, evidence) {
+  const prev = applyOptimisticPatch(id, { approval_state: 'approved' })
   try {
     const evidenceId = await uploadEvidenceIfPresent(id, evidence, note)
     const result = await api.post(`/api/module-tasks/${id}/approve`, { note: note || '', evidence_id: evidenceId })
@@ -587,12 +640,14 @@ export async function approveModuleTask(id, note, evidence) {
     await loadNotificationsFromApi()
     return true
   } catch {
+    rollbackOptimisticTask(id, prev)
     return false
   }
 }
 
 /** Owner requirement minta revisi task yang baru dibuat, belum masuk Backlog. @param {number} id @param {string} [note] @param {EvidenceFile | null} [evidence] */
 export async function requestRevisionModuleTask(id, note, evidence) {
+  const prev = applyOptimisticPatch(id, { approval_state: 'revision' })
   try {
     const evidenceId = await uploadEvidenceIfPresent(id, evidence, note)
     const result = await api.post(`/api/module-tasks/${id}/request-revision`, { note: note || '', evidence_id: evidenceId })
@@ -600,6 +655,7 @@ export async function requestRevisionModuleTask(id, note, evidence) {
     await loadNotificationsFromApi()
     return true
   } catch {
+    rollbackOptimisticTask(id, prev)
     return false
   }
 }
@@ -620,12 +676,17 @@ export async function resubmitModuleTask(id) {
 export async function addTaskComment(id, body, evidence) {
   const clean = (body || '').trim()
   if (!clean && !evidence?.file) return false
+  const current = taskModuleStore.items.find((t) => t.id === id)
+  // Comment sementara (id negatif biar gak pernah tabrakan sama id asli dari server) — ditimpa applyTaskUpdate() begitu respons asli datang.
+  const optimisticComment = { id: -Date.now(), at: new Date().toISOString(), actor: currentUserName(), body: clean, evidence_id: null }
+  const prev = current ? applyOptimisticPatch(id, { comments: [optimisticComment, ...(current.comments || [])] }) : null
   try {
     const evidenceId = await uploadEvidenceIfPresent(id, evidence)
     const updated = await api.post(`/api/module-tasks/${id}/comments`, { body: clean, evidence_id: evidenceId })
     applyTaskUpdate(updated)
     return true
   } catch {
+    rollbackOptimisticTask(id, prev)
     return false
   }
 }
@@ -702,20 +763,17 @@ export async function markAllNotificationsRead() {
 }
 
 /**
- * Handle notif click: mark read, set dashboard/tab, return path
+ * Handle notif click: mark read, lompat ke Workspaces → Dashboard → Requirement
+ * yang bersangkutan, dengan task-nya langsung ter-expand di accordion — persis
+ * alur manual (buka Dashboard List → klik dashboard → task-nya ada di situ),
+ * bukan ke papan Kanban umum atau halaman task lepas.
  * @param {AppNotification} notif
  */
 export function openNotification(notif) {
   markNotificationRead(notif.id)
   if (notif.dashboard) setBoardDashboard(notif.dashboard)
-  if (
-    notif.type === 'approval_request' ||
-    notif.type === 'revision' ||
-    notif.type === 'move_request' ||
-    notif.type === 'move_rejected'
-  ) {
-    setBoardTab('inbox')
-    return '/tasks/board'
+  if (notif.taskId) {
+    return `/registry/list?focusTask=${notif.taskId}`
   }
   setBoardTab('kanban')
   return '/tasks/board'
@@ -796,7 +854,13 @@ export function teknisAssignees() {
 }
 
 export function picOptions() {
-  return [...new Set([...accessStore.users.map((u) => u.name), ...taskModuleStore.items.map((t) => t.assignee || t.pic)])].sort()
+  // t.assignee/t.pic itu string gabungan "Nama A, Nama B" (tampilan lama, backward-compat) —
+  // sejak 1 task bisa punya banyak assignee, harus pecah lewat t.assignees (array nama asli)
+  // biar nggak ada "nama gabungan" nyangkut jadi satu opsi utuh di picker ini.
+  const taskNames = taskModuleStore.items.flatMap((t) =>
+    Array.isArray(t.assignees) && t.assignees.length ? t.assignees : [t.assignee || t.pic].filter(Boolean),
+  )
+  return [...new Set([...accessStore.users.map((u) => u.name), ...taskNames])].sort()
 }
 
 export function assigneeOptions() {

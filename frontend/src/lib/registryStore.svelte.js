@@ -167,6 +167,17 @@ export async function changeDashboardStatus(id, status) {
   }
 }
 
+/** Ganti Work Priority (criticality) — endpoint sendiri, Admin atau PIC dashboard itu aja yang boleh. @param {number} id @param {'low' | 'medium' | 'high'} criticality */
+export async function changeDashboardCriticality(id, criticality) {
+  try {
+    await api.put(`/api/dashboards/${id}/criticality`, { criticality })
+    await loadDashboardsFromApi()
+    return true
+  } catch {
+    return false
+  }
+}
+
 /**
  * Dashboard requirement counts are now computed live server-side (quick_stats.requirements_total),
  * so this just re-syncs the cached list after a requirement is created elsewhere.

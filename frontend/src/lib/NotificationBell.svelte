@@ -100,7 +100,12 @@
   ];
 
   function mapNotification(n) {
-    const isUser = n.type === 'comment' || n.type === 'move_request' || n.category === 'User';
+    // Semua tipe notifikasi beneran di app ini soal aksi orang spesifik (comment, minta pindah/approve,
+    // request disetujui/return) — nggak ada yang genuinely "System-level". Dulu cuma comment & move_request
+    // yang kehitung User, move_approved/move_rejected/approval_request/approved/revision ikut jatuh ke
+    // System (ikon monitor) padahal itu juga soal keputusan orang tertentu.
+    const userTypes = ['comment', 'move_request', 'move_approved', 'move_rejected', 'approval_request', 'approved', 'revision'];
+    const isUser = userTypes.includes(n.type) || n.category === 'User';
     const code = n.taskCode || (n.title && n.title.match(/^[A-Z0-9-]+/) ? n.title.match(/^[A-Z0-9-]+/)[0] : '');
     const subject = n.taskTitle || n.dashboard || '';
     const action = n.title && n.title !== code ? n.title : (n.type === 'comment' ? 'Comment added' : 'Task update');
