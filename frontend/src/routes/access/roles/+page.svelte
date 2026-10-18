@@ -1,6 +1,8 @@
 <script>
+  import { goto } from '$app/navigation'
   import GlassPanel from '$lib/GlassPanel.svelte'
   import SubmenuHeader from '$lib/SubmenuHeader.svelte'
+  import { authStore } from '$lib/authStore.svelte.js'
   import {
     accessStore,
     createRole,
@@ -9,6 +11,17 @@
     setRolePermission,
     countUsersInRole,
   } from '$lib/accessStore.svelte.js'
+
+  const canManageRoles = $derived(
+    authStore.user?.functional_role === 'manager' ||
+      (authStore.user?.permissions || []).includes('manage_roles'),
+  )
+
+  $effect(() => {
+    if (authStore.user && !canManageRoles) {
+      goto('/access/users')
+    }
+  })
 
   const roles = $derived(accessStore.roles)
   const permissions = $derived(accessStore.permissions)
@@ -174,6 +187,7 @@
   })
 </script>
 
+{#if canManageRoles}
 <section class="page">
   <GlassPanel>
     <SubmenuHeader
@@ -280,6 +294,7 @@
     </div>
   </GlassPanel>
 </section>
+{/if}
 
 {#if addOpen}
   <div class="backdrop" role="presentation" onclick={closeAdd} onkeydown={onKeydown}>

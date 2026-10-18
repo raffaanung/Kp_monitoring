@@ -3,6 +3,7 @@
 namespace App\Controllers;
 
 use App\Libraries\Id;
+use App\Libraries\TaskPolicy;
 use App\Models\PermissionModel;
 use App\Models\RoleModel;
 use CodeIgniter\HTTP\ResponseInterface;
@@ -21,6 +22,11 @@ class Roles extends BaseController
 
     public function create(): ResponseInterface
     {
+        $user = $this->authUser();
+        if ($user === null || ! TaskPolicy::canManageRoles($user)) {
+            return $this->jsonError('You are not allowed to manage roles', 403);
+        }
+
         $name        = trim((string) $this->request->getJsonVar('name'));
         $description = trim((string) ($this->request->getJsonVar('description') ?? ''));
         $permissions = $this->request->getJsonVar('permissions', true) ?? [];
@@ -45,6 +51,11 @@ class Roles extends BaseController
 
     public function update(string $id = '0'): ResponseInterface
     {
+        $user = $this->authUser();
+        if ($user === null || ! TaskPolicy::canManageRoles($user)) {
+            return $this->jsonError('You are not allowed to manage roles', 403);
+        }
+
         $roleId = $id;
         $model  = new RoleModel();
         $role   = $model->find($roleId);
@@ -74,6 +85,11 @@ class Roles extends BaseController
 
     public function delete(string $id = '0'): ResponseInterface
     {
+        $user = $this->authUser();
+        if ($user === null || ! TaskPolicy::canManageRoles($user)) {
+            return $this->jsonError('You are not allowed to manage roles', 403);
+        }
+
         $roleId = $id;
         $model  = new RoleModel();
         $role   = $model->find($roleId);
@@ -96,6 +112,11 @@ class Roles extends BaseController
 
     public function setPermission(string $id = '0'): ResponseInterface
     {
+        $user = $this->authUser();
+        if ($user === null || ! TaskPolicy::canManageRoles($user)) {
+            return $this->jsonError('You are not allowed to manage roles', 403);
+        }
+
         $roleId  = $id;
         $permKey = (string) $this->request->getJsonVar('perm_key');
         $value   = (bool) $this->request->getJsonVar('value');

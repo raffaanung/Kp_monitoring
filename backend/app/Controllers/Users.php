@@ -3,6 +3,7 @@
 namespace App\Controllers;
 
 use App\Libraries\Id;
+use App\Libraries\TaskPolicy;
 use App\Models\DivisionModel;
 use App\Models\UserModel;
 use CodeIgniter\HTTP\ResponseInterface;
@@ -16,6 +17,11 @@ class Users extends BaseController
 
     public function create(): ResponseInterface
     {
+        $user = $this->authUser();
+        if ($user === null || ! TaskPolicy::canManageUsers($user)) {
+            return $this->jsonError('You are not allowed to manage users', 403);
+        }
+
         $name     = trim((string) $this->request->getJsonVar('name'));
         $username = trim((string) $this->request->getJsonVar('username'));
         $password = (string) $this->request->getJsonVar('password');
@@ -64,6 +70,11 @@ class Users extends BaseController
 
     public function update(string $id = '0'): ResponseInterface
     {
+        $authUser = $this->authUser();
+        if ($authUser === null || ! TaskPolicy::canManageUsers($authUser)) {
+            return $this->jsonError('You are not allowed to manage users', 403);
+        }
+
         $userModel = new UserModel();
         if ($userModel->find($id) === null) {
             return $this->jsonError('User not found', 404);

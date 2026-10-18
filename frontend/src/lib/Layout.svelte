@@ -11,8 +11,14 @@
     displayName,
     avatarUrl,
   } from './settingsStore.svelte.js'
+  import { authStore } from './authStore.svelte.js'
 
   let { children } = $props()
+
+  const canManageRoles = $derived(
+    authStore.user?.functional_role === 'manager' ||
+      (authStore.user?.permissions || []).includes('manage_roles'),
+  )
 
   const session = $derived.by(() => {
     void taskModuleStore.session
@@ -171,7 +177,9 @@
             {#if railExpanded}
               <div class="subnav" class:visible={onAccess} aria-label="Sub menu User Access">
                 <a href="/access/users" class="sub-item" class:on={isAccessSub('users')}>User List</a>
-                <a href="/access/roles" class="sub-item" class:on={isAccessSub('roles')}>Role Management</a>
+                {#if canManageRoles}
+                  <a href="/access/roles" class="sub-item" class:on={isAccessSub('roles')}>Role Management</a>
+                {/if}
                 <a href="/access/profile" class="sub-item" class:on={isAccessSub('profile')}>Profile</a>
               </div>
             {/if}

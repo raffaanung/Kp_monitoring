@@ -1,6 +1,7 @@
 <script>
   import GlassPanel from '$lib/GlassPanel.svelte'
   import SubmenuHeader from '$lib/SubmenuHeader.svelte'
+  import { authStore } from '$lib/authStore.svelte.js'
   import {
     listUsers,
     createUser,
@@ -12,6 +13,11 @@
     teamLabels,
     statusLabel,
   } from '$lib/accessStore.svelte.js'
+
+  const canManageUsers = $derived(
+    authStore.user?.functional_role === 'manager' ||
+      (authStore.user?.permissions || []).includes('manage_users'),
+  )
 
   let role = $state('')
   let status = $state('')
@@ -172,7 +178,9 @@
       meta={`${items.length} user`}
     >
       {#snippet actions()}
-        <button type="button" class="btn-primary" onclick={openAdd}>+ Add User</button>
+        {#if canManageUsers}
+          <button type="button" class="btn-primary" onclick={openAdd}>+ Add User</button>
+        {/if}
       {/snippet}
     </SubmenuHeader>
 
@@ -256,7 +264,11 @@
                   <span class={`chip st-${user.status}`}>{statusLabel(user.status)}</span>
                 </td>
                 <td>
-                  <button type="button" class="edit-btn" onclick={() => openEdit(user)}>Edit</button>
+                  {#if canManageUsers}
+                    <button type="button" class="edit-btn" onclick={() => openEdit(user)}>Edit</button>
+                  {:else}
+                    <span class="muted">—</span>
+                  {/if}
                 </td>
               </tr>
             {/each}

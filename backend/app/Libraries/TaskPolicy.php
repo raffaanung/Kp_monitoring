@@ -54,6 +54,18 @@ class TaskPolicy
         return in_array('manage_registry', $user['permission_keys'] ?? [], true);
     }
 
+    /** Kelola Role & Permission (buat/ubah/hapus role, ubah permission matrix). @param array<string, mixed> $user */
+    public static function canManageRoles(array $user): bool
+    {
+        return self::isAdmin($user) || in_array('manage_roles', $user['permission_keys'] ?? [], true);
+    }
+
+    /** Kelola User (tambah/ubah akun user). @param array<string, mixed> $user */
+    public static function canManageUsers(array $user): bool
+    {
+        return self::isAdmin($user) || in_array('manage_users', $user['permission_keys'] ?? [], true);
+    }
+
     /** @param array<string, mixed> $user */
     public static function canEditField(array $user): bool
     {
