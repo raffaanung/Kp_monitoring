@@ -50,12 +50,6 @@
 
   /** Same labels as sidebar nav — driven by current route */
   const section = $derived.by(() => {
-    if (path.startsWith('/tasks/board') || path === '/tasks' || path === '/tasks/new' || path === '/tasks/detail') {
-      return { title: 'Task', sub: 'Board' }
-    }
-    if (path.startsWith('/tasks/list')) {
-      return { title: 'Task', sub: 'List Task' }
-    }
     if (path.startsWith('/tasks')) {
       return { title: 'Task', sub: 'Detail' }
     }

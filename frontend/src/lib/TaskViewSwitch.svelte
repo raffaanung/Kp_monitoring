@@ -10,12 +10,10 @@
     if (tab === active) return
     if (tab === 'list') {
       if (embedded) onList()
-      else goto('/tasks/list')
       return
     }
     setBoardTab(tab)
-    if (!embedded) goto('/tasks/board')
-    else if (active === 'list') onBoard()
+    if (active === 'list') onBoard()
   }
 </script>
 

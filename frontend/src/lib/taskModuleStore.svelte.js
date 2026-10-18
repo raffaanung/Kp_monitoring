@@ -1,6 +1,7 @@
 import { api } from './api.js'
 import { registryStore } from './registryStore.svelte.js'
 import { accessStore } from './accessStore.svelte.js'
+import { loadRequirementsFromApi } from './requirementStore.svelte.js'
 
 /** @typedef {'backlog' | 'development' | 'testing' | 'uat' | 'to_production' | 'selesai'} TaskWorkflow */
 /** @typedef {'pending' | 'revision' | 'approved'} ApprovalState */
@@ -144,7 +145,21 @@ export async function loadModuleTasksFromApi() {
   taskModuleStore.loading = true
   taskModuleStore.error = null
   try {
-    taskModuleStore.items = await api.get('/api/module-tasks')
+    const freshItems = await api.get('/api/module-tasks')
+    if (Array.isArray(freshItems)) {
+      const existingById = new Map(taskModuleStore.items.map((t) => [t.id, t]))
+      taskModuleStore.items = freshItems.map((fresh) => {
+        const prev = existingById.get(fresh.id)
+        if (!prev) return fresh
+        return {
+          ...fresh,
+          // Selalu prioritaskan evidence terbaru dari API atau pertahankan yang sudah dimuat agar tidak berkedip hilang-muncul
+          evidences: (fresh.evidences && fresh.evidences.length) ? fresh.evidences : (prev.evidences || []),
+          comments: (prev.comments && prev.comments.length) ? prev.comments : (fresh.comments || []),
+          activity: (prev.activity && prev.activity.length) ? prev.activity : (fresh.activity || []),
+        }
+      })
+    }
   } catch (e) {
     taskModuleStore.error = e instanceof Error ? e.message : String(e)
   } finally {
@@ -269,8 +284,22 @@ export const dashboardPicMap = undefined
 /** @param {string} dashboard */
 export function isCurrentUserPmOf(dashboard) {
   const session = taskModuleStore.session
-  return session.role === 'pm' && pmOfDashboard(dashboard) === session.name
+  const isPmRole =
+    session.role === 'pm' ||
+    session.role === 'pic' ||
+    session.label?.toLowerCase() === 'pic' ||
+    session.label?.toLowerCase() === 'pm'
+  if (!isPmRole) return false
+  if (!dashboard) return true
+  const pm = pmOfDashboard(dashboard)
+  if (!pm) {
+    const dashObj = registryStore.items.find((d) => d.name === dashboard || d.id === dashboard)
+    if (dashObj && dashObj.pm_id && String(dashObj.pm_id) === String(session.id)) return true
+    return true
+  }
+  return pm.toLowerCase() === (session.name || '').toLowerCase()
 }
+
 
 /** @deprecated use isCurrentUserPmOf */
 export function isCurrentUserPicOf(dashboard) {
@@ -297,9 +326,16 @@ export function canDeleteField() {
   return (taskModuleStore.session.permissions || []).includes('delete_field')
 }
 
+/** Edit form add dashboard mengikuti permission "edit_dashboard_form". Manager dan Admin diizinkan secara default. */
+export function canEditDashboardForm() {
+  const role = currentUserRole()
+  return role === 'manager' || role === 'admin' || (taskModuleStore.session.permissions || []).includes('edit_dashboard_form')
+}
+
 /** @param {string} [dashboard] */
 export function canManageRequirements(dashboard = '') {
   const role = currentUserRole()
+  if (role === 'manager' || role === 'admin') return true
   if (role !== 'pm') return false
   if (!dashboard) return true
   return isCurrentUserPmOf(dashboard)
@@ -307,12 +343,14 @@ export function canManageRequirements(dashboard = '') {
 
 /** Tambah requirement baru (termasuk tambah versi) mengikuti permission "create_requirement". */
 export function canCreateRequirement() {
-  return (taskModuleStore.session.permissions || []).includes('create_requirement')
+  const role = currentUserRole()
+  return role === 'manager' || role === 'admin' || (taskModuleStore.session.permissions || []).includes('create_requirement')
 }
 
 /** Tambah assignee ke requirement yang sudah ada mengikuti permission "add_assignee". */
 export function canAddAssignee() {
-  return (taskModuleStore.session.permissions || []).includes('add_assignee')
+  const role = currentUserRole()
+  return role === 'manager' || role === 'admin' || (taskModuleStore.session.permissions || []).includes('add_assignee')
 }
 
 /** Tombol Tambah Task dan izin buat task mengikuti permission "create_task" dari role. */
@@ -320,15 +358,77 @@ export function canCreateTask() {
   return (taskModuleStore.session.permissions || []).includes('create_task')
 }
 
-/** Board interaction: PM full move, teknis request only */
+/** Board interaction: PM/Manager full move, teknis request only */
 export function canUpdateBoard() {
   const role = currentUserRole()
-  return role === 'pm' || role === 'teknis'
+  return role === 'manager' || role === 'admin' || role === 'pm' || role === 'teknis'
+}
+
+/**
+ * Cek apakah user saat ini berhak mengupdate progress / memindahkan status task ini.
+ * - Manager / Admin: selalu boleh (full override).
+ * - PM dashboard task ini: boleh.
+ * - Owner requirement task ini: boleh.
+ * - Teknis: HANYA boleh jika task ini ditugaskan ke dirinya (assignee_ids / assignees / pic) atau dibuat olehnya.
+ * @param {any} task
+ * @returns {boolean}
+ */
+export function canUpdateTaskProgress(task) {
+  if (!task) return false
+  const role = currentUserRole()
+  if (role === 'manager' || role === 'admin') return true
+
+  const userName = currentUserName()
+  const userId = String(taskModuleStore.session.id || '')
+
+  // PM dari dashboard task ini
+  if (role === 'pm' && isCurrentUserPmOf(task.dashboard)) return true
+
+  // Owner dari requirement task ini
+  if (task.requirement_owner && task.requirement_owner === userName) return true
+
+  // Teknis: hanya jika di-assign ke dia atau dibuat olehnya
+  if (role === 'teknis') {
+    if (task.assignee_ids && Array.isArray(task.assignee_ids) && userId) {
+      if (task.assignee_ids.map(String).includes(userId)) {
+        return true
+      }
+    }
+    if (task.assignees && Array.isArray(task.assignees)) {
+      if (
+        task.assignees.some((a) =>
+          typeof a === 'string'
+            ? a.toLowerCase() === userName.toLowerCase()
+            : a.name?.toLowerCase() === userName.toLowerCase() || String(a.id) === userId,
+        )
+      ) {
+        return true
+      }
+    }
+    if (task.assignee) {
+      const parts = task.assignee.split(',').map((s) => s.trim().toLowerCase())
+      if (parts.includes(userName.toLowerCase())) {
+        return true
+      }
+    }
+    if (task.pic) {
+      const parts = task.pic.split(',').map((s) => s.trim().toLowerCase())
+      if (parts.includes(userName.toLowerCase())) {
+        return true
+      }
+    }
+    if (task.created_by && task.created_by.toLowerCase() === userName.toLowerCase()) {
+      return true
+    }
+    return false
+  }
+
+  return false
 }
 
 export function canCommentOnTask() {
   const role = currentUserRole()
-  return role === 'pm' || role === 'teknis'
+  return role === 'manager' || role === 'admin' || role === 'pm' || role === 'teknis'
 }
 
 /** @param {string} id */
@@ -433,7 +533,9 @@ export function listInboxTasks(dashboard = '') {
 
 /** @param {string} [dashboard] */
 export function inboxNeedsMyAction(dashboard = '') {
+  const role = currentUserRole()
   return listInboxTasks(dashboard).filter((t) => {
+    if (role === 'manager' || role === 'admin') return true
     if (t.status_move) return isCurrentUserPmOf(t.dashboard)
     if (t.approval_state === 'pending') return t.requirement_owner === currentUserName()
     return false
@@ -493,11 +595,14 @@ export function readEvidenceFile(file) {
 
 /** @param {number} taskId @param {EvidenceFile | null | undefined} evidence @param {string} [note] */
 async function uploadEvidenceIfPresent(taskId, evidence, note = '') {
-  if (!evidence?.file) return null
+  if (!evidence) return null
+  const uploadFile = evidence instanceof File ? evidence : (evidence?.file || evidence)
+  if (!uploadFile) return null
   const form = new FormData()
   form.append('task_id', String(taskId))
+  form.append('kind', 'evidence')
   form.append('note', note || '')
-  form.append('file', evidence.file)
+  form.append('file', uploadFile)
   const result = await api.postForm('/api/evidences', form)
   return result.id
 }
@@ -516,6 +621,7 @@ async function uploadEvidenceIfPresent(taskId, evidence, note = '') {
  *   assignee?: string,
  *   assignees?: string[],
  *   deadline: string,
+ *   attachments?: File[],
  * }} payload
  */
 export async function createModuleTask(payload) {
@@ -539,7 +645,26 @@ export async function createModuleTask(payload) {
     deadline: payload.deadline || '',
     status: payload.status || 'backlog',
   })
+
+  if (Array.isArray(payload.attachments) && payload.attachments.length && created?.id) {
+    for (const file of payload.attachments) {
+      try {
+        const form = new FormData()
+        form.append('task_id', String(created.id))
+        form.append('kind', 'task_attachment')
+        form.append('note', '')
+        form.append('file', file)
+        await api.postForm('/api/evidences', form)
+      } catch (err) {
+        console.error('Failed to upload task attachment:', err)
+      }
+    }
+    const rich = await loadModuleTaskDetail(created.id)
+    if (rich) return rich
+  }
+
   applyTaskUpdate(created)
+  void loadRequirementsFromApi()
   return created
 }
 
@@ -555,6 +680,7 @@ export async function updateModuleTask(id, patch) {
       assignee: patch.assignee ?? patch.pic,
     })
     applyTaskUpdate(updated)
+    void loadRequirementsFromApi()
     return true
   } catch {
     rollbackOptimisticTask(id, prev)
@@ -583,7 +709,8 @@ export async function moveModuleTask(id, status, opts = {}) {
       progress_percent: opts.progressPercent ?? null,
     })
     applyTaskUpdate(result.task)
-    await loadNotificationsFromApi()
+    void loadNotificationsFromApi()
+    void loadRequirementsFromApi()
     return result.result
   } catch (err) {
     rollbackOptimisticTask(id, prev)
@@ -603,7 +730,8 @@ export async function approveStatusMove(id, note, evidence) {
     const evidenceId = await uploadEvidenceIfPresent(id, evidence, note)
     const updated = await api.post(`/api/module-tasks/${id}/approve-move`, { note: note || '', evidence_id: evidenceId })
     applyTaskUpdate(updated)
-    await loadNotificationsFromApi()
+    void loadNotificationsFromApi()
+    void loadRequirementsFromApi()
     return true
   } catch {
     rollbackOptimisticTask(id, prev)
@@ -618,7 +746,7 @@ export async function rejectStatusMove(id, note, evidence) {
     const evidenceId = await uploadEvidenceIfPresent(id, evidence, note)
     const updated = await api.post(`/api/module-tasks/${id}/reject-move`, { note: note || '', evidence_id: evidenceId })
     applyTaskUpdate(updated)
-    await loadNotificationsFromApi()
+    void loadNotificationsFromApi()
     return true
   } catch {
     rollbackOptimisticTask(id, prev)
@@ -637,7 +765,8 @@ export async function approveModuleTask(id, note, evidence) {
     const evidenceId = await uploadEvidenceIfPresent(id, evidence, note)
     const result = await api.post(`/api/module-tasks/${id}/approve`, { note: note || '', evidence_id: evidenceId })
     applyTaskUpdate(result.task)
-    await loadNotificationsFromApi()
+    void loadNotificationsFromApi()
+    void loadRequirementsFromApi()
     return true
   } catch {
     rollbackOptimisticTask(id, prev)
@@ -652,7 +781,7 @@ export async function requestRevisionModuleTask(id, note, evidence) {
     const evidenceId = await uploadEvidenceIfPresent(id, evidence, note)
     const result = await api.post(`/api/module-tasks/${id}/request-revision`, { note: note || '', evidence_id: evidenceId })
     applyTaskUpdate(result.task)
-    await loadNotificationsFromApi()
+    void loadNotificationsFromApi()
     return true
   } catch {
     rollbackOptimisticTask(id, prev)
@@ -665,7 +794,7 @@ export async function resubmitModuleTask(id) {
   try {
     const result = await api.post(`/api/module-tasks/${id}/resubmit`, {})
     applyTaskUpdate(result.task)
-    await loadNotificationsFromApi()
+    void loadNotificationsFromApi()
     return true
   } catch {
     return false
@@ -681,30 +810,46 @@ export async function addTaskComment(id, body, evidence) {
   const optimisticComment = { id: -Date.now(), at: new Date().toISOString(), actor: currentUserName(), body: clean, evidence_id: null }
   const prev = current ? applyOptimisticPatch(id, { comments: [optimisticComment, ...(current.comments || [])] }) : null
   try {
-    const evidenceId = await uploadEvidenceIfPresent(id, evidence)
+    const evidenceId = await uploadEvidenceIfPresent(id, evidence, clean)
     const updated = await api.post(`/api/module-tasks/${id}/comments`, { body: clean, evidence_id: evidenceId })
     applyTaskUpdate(updated)
     return true
-  } catch {
+  } catch (err) {
+    taskModuleStore.lastActionError = err instanceof Error ? err.message : String(err)
     rollbackOptimisticTask(id, prev)
     return false
   }
 }
 
 /**
- * Upload beberapa evidence/screenshot sekaligus (bukan cuma 1 file per aksi).
- * Tiap file dikirim lewat addTaskComment() satu-satu (backend hanya punya 1 slot evidence per komentar);
- * catatan hanya ditempel di file pertama supaya tidak ada baris komentar duplikat di panel Comments.
- * @param {number} id @param {EvidenceFile[]} files @param {string} [note]
+ * Upload beberapa evidence/screenshot sekaligus beserta catatan dari teknis.
+ * Catatan tersimpan di task_evidences.note sehingga PM dapat membaca catatan per evidence.
+ * @param {number} id @param {EvidenceFile[]} files @param {string} [note] @param {number|null} [progressPercent]
  */
-export async function addTaskEvidenceFiles(id, files, note = '') {
+export async function addTaskEvidenceFiles(id, files, note = '', progressPercent = null) {
   if (!files?.length) return false
   let ok = true
-  let first = true
+  const cleanNote = (note || '').trim()
   for (const file of files) {
-    const result = await addTaskComment(id, first ? note : '', file)
-    if (!result) ok = false
-    first = false
+    try {
+      const form = new FormData()
+      form.append('task_id', String(id))
+      form.append('kind', 'evidence')
+      form.append('note', cleanNote)
+      if (progressPercent !== null && progressPercent !== undefined) {
+        form.append('progress_percent', String(progressPercent))
+      }
+      const uploadFile = file instanceof File ? file : (file?.file || file)
+      form.append('file', uploadFile)
+      await api.postForm('/api/evidences', form)
+    } catch (err) {
+      taskModuleStore.lastActionError = err instanceof Error ? err.message : String(err)
+      ok = false
+    }
+  }
+  const rich = await loadModuleTaskDetail(id)
+  if (rich) {
+    applyTaskUpdate(rich)
   }
   return ok
 }
@@ -776,7 +921,8 @@ export function openNotification(notif) {
     return `/registry/list?focusTask=${notif.taskId}`
   }
   setBoardTab('kanban')
-  return '/tasks/board'
+  if (notif.dashboard) return `/registry/list?dashboard=${encodeURIComponent(notif.dashboard)}`
+  return '/registry/list'
 }
 
 export const workflowColumns = [
@@ -815,11 +961,29 @@ export function progressForStatus(status) {
   return Math.round((idx / (workflowColumns.length - 1)) * 100)
 }
 
-/** Kebalikan progressForStatus(): persentase slider → kolom kanban terdekat. @param {number} pct */
+/**
+ * Persentase progress efektif sebuah task:
+ * - Kalau status sudah 'selesai', selalu 100%.
+ * - Kalau progress_percent > 0 diisi manual, gunakan itu.
+ * - Kalau 0 / belum pernah diisi manual, gunakan persentase default kolom kanban (progressForStatus).
+ * @param {any} task
+ */
+export function displayTaskProgress(task) {
+  if (!task) return 0
+  if (task.status === 'selesai') return 100
+  const stored = Number(task.progress_percent || 0)
+  return stored > 0 ? stored : progressForStatus(task.status)
+}
+
+/** Kebalikan progressForStatus(): persentase slider → kolom kanban yang sesuai rentangnya. @param {number} pct */
 export function statusForProgress(pct) {
-  const n = workflowColumns.length
-  const idx = Math.round((pct / 100) * (n - 1))
-  return workflowColumns[Math.max(0, Math.min(n - 1, idx))].key
+  const p = Number(pct || 0)
+  if (p >= 100) return 'selesai'
+  if (p >= 80) return 'to_production'
+  if (p >= 60) return 'uat'
+  if (p >= 40) return 'testing'
+  if (p >= 20) return 'development'
+  return 'backlog'
 }
 
 /** @param {ApprovalState | string} state */

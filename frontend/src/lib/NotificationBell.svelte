@@ -10,7 +10,7 @@
   import { formatRelativeTime } from "./format.js";
 
   let open = $state(false);
-  let activeTab = $state('System'); // 'All' | 'System' | 'User'
+  let activeTab = $state('All'); // 'All' | 'System' | 'User'
   let showAll = $state(false);
 
   const realNotifs = $derived.by(() => {
@@ -101,14 +101,22 @@
 
   function mapNotification(n) {
     // Semua tipe notifikasi beneran di app ini soal aksi orang spesifik (comment, minta pindah/approve,
-    // request disetujui/return) — nggak ada yang genuinely "System-level". Dulu cuma comment & move_request
-    // yang kehitung User, move_approved/move_rejected/approval_request/approved/revision ikut jatuh ke
-    // System (ikon monitor) padahal itu juga soal keputusan orang tertentu.
-    const userTypes = ['comment', 'move_request', 'move_approved', 'move_rejected', 'approval_request', 'approved', 'revision'];
+    // request disetujui/return, penugasan dashboard) — dihitung User (ikon avatar).
+    const userTypes = [
+      'comment',
+      'move_request',
+      'move_approved',
+      'move_rejected',
+      'approval_request',
+      'approved',
+      'revision',
+      'dashboard_assigned',
+    ];
     const isUser = userTypes.includes(n.type) || n.category === 'User';
-    const code = n.taskCode || (n.title && n.title.match(/^[A-Z0-9-]+/) ? n.title.match(/^[A-Z0-9-]+/)[0] : '');
-    const subject = n.taskTitle || n.dashboard || '';
-    const action = n.title && n.title !== code ? n.title : (n.type === 'comment' ? 'Comment added' : 'Task update');
+    const isDashboardOnly = n.type === 'dashboard_assigned' || (!n.taskId && !n.taskCode);
+    const code = isDashboardOnly ? '' : (n.taskCode || (n.title && n.title.match(/^[A-Z0-9-]+/) ? n.title.match(/^[A-Z0-9-]+/)[0] : ''));
+    const subject = isDashboardOnly ? (n.dashboard || '') : (n.taskTitle || n.dashboard || '');
+    const action = n.title && n.title !== code ? n.title : (n.type === 'comment' ? 'Comment added' : (n.type === 'dashboard_assigned' ? 'Dashboard ditugaskan' : 'Task update'));
     const details = n.body || '';
     const timeAgo = formatRelativeTime(n.at);
     return {
@@ -158,7 +166,7 @@
     } else {
       item.read = true;
       open = false;
-      goto('/tasks/board');
+      goto('/registry/list');
     }
   }
 
@@ -308,7 +316,7 @@
                     <span class="code">{item.code}</span>
                   {/if}
                   {#if item.subject}
-                    <span class="subject"> {item.subject}</span>
+                    <span class="subject" class:standout={!item.code}>{item.code ? ' ' : ''}{item.subject}</span>
                   {/if}
                   {#if item.code || item.subject}
                     <span class="sep"> · </span>
@@ -595,6 +603,11 @@
   .subject {
     font-weight: 500;
     color: #1e293b;
+  }
+
+  .subject.standout {
+    font-weight: 750;
+    color: #0f172a;
   }
 
   .sep {

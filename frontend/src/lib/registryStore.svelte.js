@@ -122,13 +122,9 @@ export function listDashboards(filters = {}) {
  * @returns {Promise<RegistryDashboard | null>}
  */
 export async function createDashboard(payload) {
-  try {
-    const created = await api.post('/api/dashboards', payload)
-    await loadDashboardsFromApi()
-    return created
-  } catch {
-    return null
-  }
+  const created = await api.post('/api/dashboards', payload)
+  await loadDashboardsFromApi()
+  return created
 }
 
 /**
@@ -258,3 +254,40 @@ export const sortOptions = [
   { value: 'criticality_asc', label: 'Lowest priority' },
   { value: 'status_asc', label: 'Status' },
 ]
+
+/**
+ * @typedef {Object} FormFieldSpec
+ * @property {string} key
+ * @property {string} label
+ * @property {string} placeholder
+ * @property {string} [type]
+ * @property {boolean} [secret]
+ * @property {boolean} [required]
+ */
+
+/**
+ * @typedef {Object} DashboardFormSchema
+ * @property {FormFieldSpec[]} profile_fields
+ * @property {FormFieldSpec[]} env_fields
+ * @property {FormFieldSpec[]} [custom_fields]
+ * @property {string} [updated_at]
+ * @property {string} [updated_by]
+ */
+
+export async function loadDashboardFormSchema() {
+  try {
+    return await api.get('/api/dashboards/form-schema')
+  } catch (err) {
+    console.error('Failed to load dashboard form schema:', err)
+    return null
+  }
+}
+
+/** @param {DashboardFormSchema} schema */
+export async function saveDashboardFormSchema(schema) {
+  return await api.put('/api/dashboards/form-schema', schema)
+}
+
+export async function resetDashboardFormSchema() {
+  return await api.post('/api/dashboards/form-schema/reset')
+}

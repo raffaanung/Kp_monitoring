@@ -1,7 +1,8 @@
 <script>
+  import { onMount } from 'svelte'
   import { fade, fly } from 'svelte/transition'
   import OpsChart from '../lib/OpsChart.svelte'
-  import logoFull from '../assets/edm-logo.png'
+  import logoFull from '$lib/assets/edm-logo.png'
   import NotificationBell from '../lib/NotificationBell.svelte'
   import ProfileSwitcher from '../lib/ProfileSwitcher.svelte'
   import GlassSwitch from '../lib/GlassSwitch.svelte'
@@ -25,10 +26,17 @@
     workflowStatusColor,
     workflowLabel,
     workflowProgressSolid,
+    workflowColumns,
     isOverdue,
   } from '../lib/taskModuleStore.svelte.js'
   import { pushTaskFilters } from '../lib/taskNav.js'
-  import { requirementStore, requirementDashboardOptions } from '../lib/requirementStore.svelte.js'
+  import {
+    requirementStore,
+    requirementDashboardOptions,
+    requirementStatusOptions,
+  } from '../lib/requirementStore.svelte.js'
+  import { registryStore, listDashboards } from '../lib/registryStore.svelte.js'
+  import { loadAppData } from '../lib/loadAppData.js'
   import { avatarUrl } from '../lib/settingsStore.svelte.js'
   import { authStore } from '../lib/authStore.svelte.js'
 
@@ -118,39 +126,82 @@
     return taskModuleStore.items.map(toBoardTask)
   })
 
+  onMount(() => {
+    loadAppData()
+  })
+
+  const allDashboards = $derived.by(() => {
+    void registryStore.items
+    return listDashboards()
+  })
+  const totalDashboardCount = $derived(allDashboards.length)
+
   const scopedTasks = $derived(tasksInRange(allBoardTasks, range.start, range.end))
 
   /** Feed & deadline — global, tidak ikut filter periode */
   const globalTasks = $derived(allBoardTasks)
 
-  const horizonISO = toISODate(addDays(now, 7))
+  // Horizon diperluas ke 30 hari ke depan supaya deadline di minggu/bulan ini tidak hilang
+  const horizonISO = toISODate(addDays(now, 30))
 
-  const overdueTasks = $derived(
-    globalTasks
-      .filter((t) => isOverdue(/** @type {any} */ (t)))
-      .sort((a, b) => a.deadline.localeCompare(b.deadline))
-      .slice(0, 8)
-      .map((t) => ({
+  const allDeadlinesCombined = $derived.by(() => {
+    void taskModuleStore.items
+    void requirementStore.items
+
+    /** @type {Array<{ id: string | number, title: string, pic: string, deadline: string, priority: string, status: string, isReq: boolean, dashboard?: string }>} */
+    const list = []
+
+    // 1. Task Kanban
+    for (const t of globalTasks) {
+      if (!t.deadline || t.status === 'selesai') continue
+      list.push({
         id: t.id,
         title: t.title,
-        pic: t.pic,
-        deadline: t.deadline,
-        status: t.status,
-        delay: delayLabel(t.deadline, now),
-      })),
-  )
-
-  const upcomingDeadlines = $derived(
-    globalTasks
-      .filter((t) => t.deadline >= todayISO && t.deadline <= horizonISO && t.status !== 'selesai')
-      .sort((a, b) => a.deadline.localeCompare(b.deadline))
-      .slice(0, 8)
-      .map((t) => ({
-        id: t.id,
-        title: t.title,
-        pic: t.pic,
+        pic: t.pic || '—',
         deadline: t.deadline,
         priority: t.priority === 'high' ? 'High' : t.priority === 'low' ? 'Low' : 'Medium',
+        status: t.status,
+        isReq: false,
+        dashboard: t.meta || '',
+      })
+    }
+
+    // 2. Requirement
+    for (const r of requirementStore.items) {
+      if (!r.due_date || r.status === 'done') continue
+      const picStr = Array.isArray(r.team) && r.team.length ? r.team.join(', ') : (r.created_by || '—')
+      list.push({
+        id: r.id,
+        title: r.title,
+        pic: picStr,
+        deadline: r.due_date,
+        priority: r.health === 'at_risk' ? 'High' : 'Medium',
+        status: r.status,
+        isReq: true,
+        dashboard: r.dashboard || '',
+      })
+    }
+
+    return list
+  })
+
+  const upcomingDeadlines = $derived(
+    allDeadlinesCombined
+      .filter((t) => (deadlineType === 'req' ? t.isReq : !t.isReq))
+      .filter((t) => t.deadline >= todayISO && t.deadline <= horizonISO)
+      .sort((a, b) => a.deadline.localeCompare(b.deadline))
+      .slice(0, 8),
+  )
+
+  const overdueTasks = $derived(
+    allDeadlinesCombined
+      .filter((t) => (deadlineType === 'req' ? t.isReq : !t.isReq))
+      .filter((t) => t.deadline < todayISO)
+      .sort((a, b) => a.deadline.localeCompare(b.deadline))
+      .slice(0, 8)
+      .map((t) => ({
+        ...t,
+        delay: delayLabel(t.deadline, now),
       })),
   )
 
@@ -190,6 +241,8 @@
 
   /** @type {'overdue' | 'upcoming'} */
   let deadlineTab = $state('upcoming')
+  /** @type {'task' | 'req'} */
+  let deadlineType = $state('task')
   /** @type {'tasks' | 'activity'} */
   let feedTab = $state('tasks')
 
@@ -208,17 +261,16 @@
     const aktif = scopedTasks.filter((t) => t.status !== 'selesai').length
     const overdue = scopedTasks.filter((t) => isOverdue(/** @type {any} */ (t))).length
     const done = scopedTasks.filter((t) => t.status === 'selesai').length
-    const dashboards = new Set(scopedTasks.map((t) => t.meta).filter(Boolean)).size
     const periodNote =
       period === 'today' ? 'today' : period === 'week' ? 'this week' : 'this month'
     return [
       {
         label: 'Total Dashboard',
-        value: String(dashboards),
-        note: `${dashboards} sumber · ${periodNote}`,
+        value: String(totalDashboardCount),
+        note: `${totalDashboardCount} sumber · ${periodNote}`,
         icon: 'dash',
         tone: 'mint',
-        go: () => pushTaskFilters({}, 'board'),
+        go: () => push('/registry/list'),
       },
       {
         label: 'Total Task',
@@ -263,8 +315,13 @@
   let chartView = $state('requirement')
 
   const chartDashboards = $derived.by(() => {
+    void registryStore.items
     void requirementStore.items
-    return requirementDashboardOptions()
+    const set = new Set([
+      ...allDashboards.map((d) => d.name),
+      ...requirementDashboardOptions(),
+    ])
+    return [...set].filter(Boolean).sort()
   })
 
   const requirementSeries = $derived.by(() => {
@@ -283,11 +340,18 @@
   const dashboardBarColors = ['#065fc6', '#339ef5', '#7c6bc4', '#e0a45a', '#2f7a52', '#94a3b8']
 
   const dashboardBar = $derived.by(() => {
+    void registryStore.items
+    void taskModuleStore.items
     /** @type {Map<string, number>} */
     const counts = new Map()
+    for (const d of allDashboards) {
+      if (d.name) counts.set(d.name, 0)
+    }
     for (const task of scopedTasks) {
-      const name = task.meta || '—'
-      counts.set(name, (counts.get(name) || 0) + 1)
+      const name = task.meta
+      if (name) {
+        counts.set(name, (counts.get(name) || 0) + 1)
+      }
     }
     const names = [...counts.keys()].sort(
       (a, b) => (counts.get(b) || 0) - (counts.get(a) || 0) || a.localeCompare(b),
@@ -402,6 +466,25 @@
 
   const weekItems = $derived(tasksInMonthWeeks(weekSource, boardBuckets))
 
+  const taskCountsByStatus = $derived.by(() => {
+    /** @type {Record<string, number>} */
+    const counts = {}
+    for (const col of workflowColumns) counts[col.key] = 0
+    for (const t of weekSource) {
+      if (t.status) counts[t.status] = (counts[t.status] || 0) + 1
+    }
+    return counts
+  })
+
+  const reqCountsByStatus = $derived.by(() => {
+    /** @type {Record<string, number>} */
+    const counts = { open: 0, in_progress: 0, done: 0 }
+    for (const r of weekSource) {
+      if (r.status) counts[r.status] = (counts[r.status] || 0) + 1
+    }
+    return counts
+  })
+
   /** @type {{ task: { id: number, title: string, meta: string, status: string, startDate: string, deadline: string, pic: string }, x: number, y: number } | null} */
   let taskTip = $state(null)
   /** @type {ReturnType<typeof setTimeout> | null} */
@@ -478,7 +561,7 @@
   /** @param {{ id: number, status: string }} item */
   function openWeekItem(item) {
     if (boardView === 'requirement') push(`/requirements/${item.id}`)
-    else pushTaskFilters({ status: item.status })
+    else pushTaskFilters({ taskId: item.id })
   }
 
   /** @param {string} date */
@@ -709,6 +792,42 @@
           </div>
         </div>
 
+        <div class="kanban-flow-legend" aria-label="Kanban position color guide">
+          <span class="legend-title">Posisi {boardView === 'requirement' ? 'Requirement' : 'Kanban'}:</span>
+          <div class="legend-chips">
+            {#if boardView === 'task'}
+              {#each workflowColumns as col}
+                {@const count = taskCountsByStatus[col.key] || 0}
+                <button
+                  type="button"
+                  class="flow-step"
+                  class:active={count > 0}
+                  style="--step-col:{workflowStatusColor(col.key)}"
+                  onclick={() => pushTaskFilters({ status: col.key }, 'board')}
+                  title={`Lihat task di kolom ${col.label} (${count} task)`}
+                >
+                  <span class="step-dot" style="background:{workflowStatusColor(col.key)}"></span>
+                  <span class="step-name">{col.label}</span>
+                  <span class="step-count" style="color:{workflowStatusColor(col.key)};background:color-mix(in srgb, {workflowStatusColor(col.key)} 14%, transparent)">{count}</span>
+                </button>
+              {/each}
+            {:else}
+              {#each requirementStatusOptions as st}
+                {@const count = reqCountsByStatus[st.value] || 0}
+                <div
+                  class="flow-step"
+                  class:active={count > 0}
+                  style="--step-col:{requirementColor(st.value)}"
+                >
+                  <span class="step-dot" style="background:{requirementColor(st.value)}"></span>
+                  <span class="step-name">{st.label}</span>
+                  <span class="step-count" style="color:{requirementColor(st.value)};background:color-mix(in srgb, {requirementColor(st.value)} 14%, transparent)">{count}</span>
+                </div>
+              {/each}
+            {/if}
+          </div>
+        </div>
+
         {#key period}
         <div class="day-canvas" in:fade={{ duration: 180 }}>
           <div class="day-axis week-axis" style="grid-template-columns: repeat({weekCount}, minmax(0, 1fr))">
@@ -757,7 +876,7 @@
                           style={weekBarStyle(item.bar, item.task.status)}
                           role="button"
                           tabindex="0"
-                          aria-label={item.task.title}
+                          aria-label={`${item.task.title} - ${statusLabel(item.task.status)}`}
                           onmouseenter={(e) => showTaskTip(e, item.task)}
                           onmouseleave={hideTaskTip}
                           onfocus={(e) => showTaskTip(e, item.task)}
@@ -772,9 +891,16 @@
                         >
                           <div class="event-solid" style="flex:{barProgress(item.task.status)}">
                             <div class="event-copy">
+                              <span class="event-pos-dot" style="background:var(--ev)"></span>
                               <strong>{item.task.title}</strong>
                             </div>
-                            <span class="face-mini">{initials(item.task.pic)}</span>
+                            <span
+                              class="event-status-chip"
+                              style="background:color-mix(in srgb, var(--ev) 16%, #fff);color:var(--ev);border-color:color-mix(in srgb, var(--ev) 30%, transparent)"
+                            >
+                              {statusLabel(item.task.status)}
+                            </span>
+                            <span class="face-mini" title={item.task.pic}>{initials(item.task.pic)}</span>
                           </div>
                           {#if barProgress(item.task.status) < 1}
                             <div class="event-ghost" style="flex:{1 - barProgress(item.task.status)}"></div>
@@ -807,6 +933,14 @@
           <dl class="task-tip-meta">
             <div><dt>Dashboard</dt><dd>{taskTip.task.meta}</dd></div>
             <div><dt>PIC</dt><dd>{taskTip.task.pic}</dd></div>
+            <div>
+              <dt>{boardView === 'requirement' ? 'Status' : 'Posisi'}</dt>
+              <dd>
+                <span class="tip-kanban-pos" style="color:{boardView === 'requirement' ? requirementColor(taskTip.task.status) : workflowStatusColor(taskTip.task.status)}">
+                  ● {statusLabel(taskTip.task.status)}
+                </span>
+              </dd>
+            </div>
             <div><dt>Start</dt><dd>{formatDate(taskTip.task.startDate)}</dd></div>
             <div><dt>Deadline</dt><dd>{formatDate(taskTip.task.deadline)}</dd></div>
           </dl>
@@ -851,7 +985,7 @@
                     <tr>
                       <td class="col-id"><span class="mono-id">{item.code}</span></td>
                       <td>
-                        <button type="button" class="task-link" onclick={() => pushTaskFilters({ status: item.status })}>{item.title}</button>
+                        <button type="button" class="task-link" onclick={() => pushTaskFilters({ taskId: item.id, dashboard: item.dashboard })}>{item.title}</button>
                       </td>
                       <td class="col-when"><span class="muted">{item.when}</span></td>
                       <td class="col-status"><span class="status-text" style="color:{workflowStatusColor(item.status)}">{statusLabel(item.status)}</span></td>
@@ -897,21 +1031,27 @@
           <div class="head-copy">
             <h2>Fokus Deadline</h2>
             <p class="sub" class:alert={deadlineTab === 'overdue'}>
-              {#if deadlineTab === 'overdue'}{overdueTasks.length} overdue{:else}7 hari ke depan{/if}
+              {#if deadlineTab === 'overdue'}
+                {overdueTasks.length} overdue
+              {:else}
+                30 hari ke depan ({upcomingDeadlines.length} deadline)
+              {/if}
             </p>
           </div>
           <div class="head-tools">
-            <button
-              type="button"
-              class="deadline-go"
-              onclick={() =>
-                deadlineTab === 'overdue'
-                  ? pushTaskFilters({ overdue: 'yes' })
-                  : pushTaskFilters({ aktif: 'yes' })
-              }
-            >
-              Lihat list
-            </button>
+            <div class="deadline-subfilter">
+              <select
+                class="deadline-type-select"
+                bind:value={deadlineType}
+                aria-label="Filter Tipe Deadline"
+              >
+                <option value="task">Task</option>
+                <option value="req">Requirement</option>
+              </select>
+              <svg class="select-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </div>
             <GlassSwitch
               class="compact"
               label="Filter deadline"
@@ -922,13 +1062,13 @@
           </div>
         </div>
 
-        {#key deadlineTab}
+        {#key `${deadlineTab}:${deadlineType}`}
           <div class="table-wrap" in:fade={{ duration: 180 }}>
             {#if deadlineTab === 'overdue'}
               <table class="modern-table deadline-table">
                 <thead>
                   <tr>
-                    <th class="col-task">Task</th>
+                    <th class="col-task">{deadlineType === 'req' ? 'Requirement' : 'Task'}</th>
                     <th class="col-pic">PIC</th>
                     <th class="col-date">Deadline</th>
                     <th class="col-late">Terlambat</th>
@@ -936,50 +1076,94 @@
                   </tr>
                 </thead>
                 <tbody>
-                  {#each overdueTasks.slice(0, 4) as row}
+                  {#if overdueTasks.length === 0}
                     <tr>
-                      <td class="col-task">
-                        <button type="button" class="task-link" onclick={() => pushTaskFilters({ overdue: 'yes', status: row.status })}>{row.title}</button>
+                      <td colspan="5" style="text-align:center;padding:1.5rem;color:#8e8e93;font-size:0.75rem;">
+                        {#if deadlineType === 'req'}
+                          Tidak ada deadline requirement yang terlewat.
+                        {:else}
+                          Tidak ada deadline task yang terlewat.
+                        {/if}
                       </td>
-                      <td class="col-pic">
-                        <span class="pic">
-                          <i class="face {faceTone(row.pic)}">{initials(row.pic)}</i>
-                          <span class="pic-name">{row.pic}</span>
-                        </span>
-                      </td>
-                      <td class="col-date"><span class="muted">{formatDate(row.deadline)}</span></td>
-                      <td class="col-late"><span class="late-text">{row.delay}</span></td>
-                      <td class="col-status"><span class="status-text" style="color:{workflowStatusColor(row.status)}">{statusLabel(row.status)}</span></td>
                     </tr>
-                  {/each}
+                  {:else}
+                    {#each overdueTasks.slice(0, 6) as row}
+                      <tr>
+                        <td class="col-task">
+                          {#if row.isReq}
+                            <button type="button" class="task-link" onclick={() => push(`/requirements/${row.id}`)}>
+                              {row.title}
+                              {#if row.dashboard}<span class="dash-tag">{row.dashboard}</span>{/if}
+                            </button>
+                          {:else}
+                            <button type="button" class="task-link" onclick={() => pushTaskFilters({ taskId: row.id, dashboard: row.dashboard })}>
+                              {row.title}
+                              {#if row.dashboard}<span class="dash-tag">{row.dashboard}</span>{/if}
+                            </button>
+                          {/if}
+                        </td>
+                        <td class="col-pic">
+                          <span class="pic">
+                            <i class="face {faceTone(row.pic)}">{initials(row.pic)}</i>
+                            <span class="pic-name">{row.pic}</span>
+                          </span>
+                        </td>
+                        <td class="col-date"><span class="muted">{formatDate(row.deadline)}</span></td>
+                        <td class="col-late"><span class="late-text">{row.delay}</span></td>
+                        <td class="col-status"><span class="status-text" style="color:{workflowStatusColor(row.status)}">{statusLabel(row.status)}</span></td>
+                      </tr>
+                    {/each}
+                  {/if}
                 </tbody>
               </table>
             {:else}
               <table class="modern-table deadline-table">
                 <thead>
                   <tr>
-                    <th class="col-task">Task</th>
+                    <th class="col-task">{deadlineType === 'req' ? 'Requirement' : 'Task'}</th>
                     <th class="col-pic">PIC</th>
                     <th class="col-date">Deadline</th>
                     <th class="col-status">Prioritas</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {#each upcomingDeadlines.slice(0, 4) as row}
+                  {#if upcomingDeadlines.length === 0}
                     <tr>
-                      <td class="col-task">
-                        <button type="button" class="task-link" onclick={() => pushTaskFilters({ aktif: 'yes', priority: row.priority.toLowerCase() })}>{row.title}</button>
+                      <td colspan="4" style="text-align:center;padding:1.5rem;color:#8e8e93;font-size:0.75rem;">
+                        {#if deadlineType === 'req'}
+                          Tidak ada deadline requirement aktif dalam 30 hari ke depan.
+                        {:else}
+                          Tidak ada deadline task aktif dalam 30 hari ke depan.
+                        {/if}
                       </td>
-                      <td class="col-pic">
-                        <span class="pic">
-                          <i class="face {faceTone(row.pic)}">{initials(row.pic)}</i>
-                          <span class="pic-name">{row.pic}</span>
-                        </span>
-                      </td>
-                      <td class="col-date"><span class="muted">{formatDate(row.deadline)}</span></td>
-                      <td class="col-status"><span class="prio-text {row.priority.toLowerCase()}">{row.priority}</span></td>
                     </tr>
-                  {/each}
+                  {:else}
+                    {#each upcomingDeadlines.slice(0, 6) as row}
+                      <tr>
+                        <td class="col-task">
+                          {#if row.isReq}
+                            <button type="button" class="task-link" onclick={() => push(`/requirements/${row.id}`)}>
+                              {row.title}
+                              {#if row.dashboard}<span class="dash-tag">{row.dashboard}</span>{/if}
+                            </button>
+                          {:else}
+                            <button type="button" class="task-link" onclick={() => pushTaskFilters({ taskId: row.id, dashboard: row.dashboard })}>
+                              {row.title}
+                              {#if row.dashboard}<span class="dash-tag">{row.dashboard}</span>{/if}
+                            </button>
+                          {/if}
+                        </td>
+                        <td class="col-pic">
+                          <span class="pic">
+                            <i class="face {faceTone(row.pic)}">{initials(row.pic)}</i>
+                            <span class="pic-name">{row.pic}</span>
+                          </span>
+                        </td>
+                        <td class="col-date"><span class="muted">{formatDate(row.deadline)}</span></td>
+                        <td class="col-status"><span class="prio-text {row.priority.toLowerCase()}">{row.priority}</span></td>
+                      </tr>
+                    {/each}
+                  {/if}
                 </tbody>
               </table>
             {/if}
@@ -2154,6 +2338,87 @@
     min-width: 0;
   }
 
+  .kanban-flow-legend {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 6px 14px 10px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  }
+
+  .legend-title {
+    font-size: 0.64rem;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    flex-shrink: 0;
+  }
+
+  .legend-chips {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .flow-step {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(0, 0, 0, 0.07);
+    background: rgba(255, 255, 255, 0.7);
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: #475569;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .flow-step:hover {
+    background: #ffffff;
+    border-color: color-mix(in srgb, var(--step-col, #94a3b8) 40%, transparent);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+  }
+
+  .flow-step.active {
+    background: color-mix(in srgb, var(--step-col, #94a3b8) 9%, #ffffff);
+    border-color: color-mix(in srgb, var(--step-col, #94a3b8) 32%, transparent);
+    color: #0f172a;
+  }
+
+  .step-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    flex-shrink: 0;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--step-col, #94a3b8) 24%, transparent);
+  }
+
+  .step-name {
+    line-height: 1;
+  }
+
+  .step-count {
+    padding: 1px 5px;
+    border-radius: 999px;
+    font-size: 0.6rem;
+    font-weight: 700;
+    line-height: 1.1;
+  }
+
+  .tip-kanban-pos {
+    font-size: 0.65rem;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
   .event {
     position: absolute;
     top: 0;
@@ -2164,14 +2429,17 @@
     min-width: 0;
     max-width: 100%;
     cursor: pointer;
-    transition: filter 0.15s ease, transform 0.15s ease;
+    border: 1px solid color-mix(in srgb, var(--ev, #94a3b8) 34%, transparent);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    transition: filter 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
   }
 
   .event:hover,
   .event:focus-visible {
     filter: brightness(0.97);
     outline: none;
-    box-shadow: 0 0 0 2px rgba(26, 26, 26, 0.18);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.09), 0 0 0 2px color-mix(in srgb, var(--ev, #94a3b8) 40%, transparent);
   }
 
   .task-tip-pos {
@@ -2257,27 +2525,62 @@
     align-items: center;
     justify-content: space-between;
     gap: 6px;
-    min-width: 0;
-    padding: 0 6px 0 10px;
-    background: color-mix(in srgb, var(--ev, #94a3b8) 42%, #ffffff);
+    min-width: min(150px, 100%);
+    padding: 0 6px 0 8px;
+    background: color-mix(in srgb, var(--ev, #94a3b8) 28%, #ffffff);
+    border-left: 3.5px solid var(--ev, #94a3b8);
   }
 
   .event-ghost {
-    min-width: 10px;
-    background: color-mix(in srgb, var(--ev, #94a3b8) 16%, #ffffff);
+    min-width: 8px;
+    background: color-mix(in srgb, var(--ev, #94a3b8) 12%, #ffffff);
   }
 
-  .event-copy { min-width: 0; overflow: hidden; }
+  .event-copy {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .event-pos-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    flex-shrink: 0;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--ev, #94a3b8) 25%, transparent);
+  }
 
   .event-copy strong {
     display: block;
     font-size: 0.62rem;
     font-weight: 700;
-    color: #1a1a1a;
+    color: #0f172a;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     line-height: 1.15;
+  }
+
+  .event-status-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 6px;
+    border-radius: 999px;
+    border: 1px solid;
+    font-size: 0.56rem;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+    flex-shrink: 0;
+    letter-spacing: -0.01em;
+  }
+
+  @media (max-width: 768px) {
+    .event-status-chip {
+      display: none;
+    }
   }
 
   .face-mini {

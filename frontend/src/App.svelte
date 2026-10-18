@@ -4,13 +4,12 @@
   import { push } from 'svelte-spa-router'
   import { wrap } from 'svelte-spa-router/wrap'
   import Layout from './lib/Layout.svelte'
+  import LoadingScreen from './lib/LoadingScreen.svelte'
   import { loadAppData } from './lib/loadAppData.js'
   import { authStore, initAuth } from './lib/authStore.svelte.js'
   import PageShell from './lib/PageShell.svelte'
   import Home from './pages/Home.svelte'
   import Login from './pages/Login.svelte'
-  import TaskBoard from './pages/TaskBoard.svelte'
-  import TaskList from './pages/TaskList.svelte'
   import TaskDetail from './pages/TaskDetail.svelte'
   import RequirementNew from './pages/RequirementNew.svelte'
   import RequirementDetail from './pages/RequirementDetail.svelte'
@@ -40,11 +39,6 @@
   const routes = {
     '/login': withTransition(Login, { public: true }),
     '/': withTransition(Home),
-    '/tasks': withTransition(TaskBoard),
-    '/tasks/board': withTransition(TaskBoard),
-    '/tasks/list': withTransition(TaskList),
-    '/tasks/new': withTransition(TaskBoard),
-    '/tasks/detail': withTransition(TaskBoard),
     '/tasks/:id': withTransition(TaskDetail),
     '/requirements/new': withTransition(RequirementNew),
     '/requirements/detail': withTransition(RequirementDetailGate),
@@ -71,11 +65,13 @@
   })
 </script>
 
-<Layout>
-  {#if !authStore.loading}
+{#if authStore.loading}
+  <LoadingScreen />
+{:else}
+  <Layout>
     <Router {routes} onConditionsFailed={handleConditionsFailed} />
-  {/if}
-</Layout>
+  </Layout>
+{/if}
 
 <style>
   :global(.stage-body > *) {

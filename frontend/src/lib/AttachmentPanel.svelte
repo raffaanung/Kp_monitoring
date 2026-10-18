@@ -146,8 +146,13 @@
     <footer class="foot">
       <button type="button" class="ghost" onclick={closeModal}>Close</button>
       {#if canManage}
-        <button type="button" class="primary" onclick={openPicker} disabled={busy}>
-          {busy ? 'Saving…' : 'Upload'}
+        <button type="button" class="primary" onclick={openPicker} disabled={busy} style="display:inline-flex;align-items:center;gap:7px;">
+          {#if busy}
+            <span class="btn-spinner sm"></span>
+            <span>Saving…</span>
+          {:else}
+            <span>Upload</span>
+          {/if}
         </button>
         <input bind:this={picker} type="file" multiple onchange={onPick} />
       {/if}

@@ -27,10 +27,17 @@
     open = false
   }
 
+  let loggingOut = $state(false)
+
   async function doLogout() {
-    open = false
-    await logout()
-    goto('/login')
+    loggingOut = true
+    try {
+      await logout()
+      open = false
+      goto('/login')
+    } finally {
+      loggingOut = false
+    }
   }
 
   /** @param {string} n */
@@ -80,8 +87,13 @@
   <div class="menu" use:portal style={menuStyle} role="listbox" aria-label="Menu profil">
     <p class="menu-title">{name} &middot; {label}</p>
     <a class="profile-link" href="/access/profile" onclick={close}>Buka halaman profil</a>
-    <button type="button" class="option logout" onclick={doLogout}>
-      <strong>Log out</strong>
+    <button type="button" class="option logout" onclick={doLogout} disabled={loggingOut} style="display:inline-flex;align-items:center;gap:7px;">
+      {#if loggingOut}
+        <span class="btn-spinner blue sm"></span>
+        <strong>Logging out…</strong>
+      {:else}
+        <strong>Log out</strong>
+      {/if}
     </button>
   </div>
 {/if}

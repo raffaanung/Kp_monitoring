@@ -14,6 +14,7 @@
     taskModuleStore,
     addTaskComment,
     canUpdateBoard,
+    canUpdateTaskProgress,
     canCommentOnTask,
     approveModuleTask,
     requestRevisionModuleTask,
@@ -47,7 +48,9 @@
     void taskModuleStore.session
     void taskModuleStore.items
     if (!task) return false
-    return currentUserRole() === 'pm' && isCurrentUserPmOf(task.dashboard)
+    const r = currentUserRole()
+    if (r === 'manager' || r === 'admin') return true
+    return r === 'pm' && isCurrentUserPmOf(task.dashboard)
   })
 
   const canComment = $derived.by(() => {
@@ -62,6 +65,8 @@
 
   const asPm = $derived.by(() => {
     void taskModuleStore.session
+    const r = currentUserRole()
+    if (r === 'manager' || r === 'admin') return true
     return task ? isCurrentUserPmOf(task.dashboard) : false
   })
 
@@ -71,10 +76,11 @@
     return task ? task.requirement_owner === currentUserName() : false
   })
 
-  /** Owner requirement boleh ubah status task-nya sendiri juga, apa pun role-nya (termasuk Admin). */
+  /** User hanya boleh ubah/request status task jika berhak mengupdate progress task ini. */
   const canBoard = $derived.by(() => {
     void taskModuleStore.session
-    return canUpdateBoard() || asRequirementOwner
+    if (!task) return false
+    return canUpdateTaskProgress(task)
   })
 
   const journey = $derived.by(() => {
@@ -222,7 +228,7 @@
     if (!task || !canEdit) return
     if (!confirm(`Hapus task "${task.title}"?`)) return
     await deleteModuleTask(task.id)
-    push('/tasks/list')
+    push('/registry/list')
   }
 
   async function onApproveMove() {
@@ -296,14 +302,14 @@
   {#if !task}
     <GlassPanel>
       <p class="state error">Task tidak ditemukan.</p>
-      <a class="pill on back-link" href="/tasks/board" use:link>← Kembali ke Board</a>
+      <a class="pill on back-link" href="/registry/list" use:link>← Kembali ke Workspaces</a>
     </GlassPanel>
   {:else}
     <div class="layout">
       <GlassPanel class="span-2">
         <div class="hero">
           <div class="strip">
-            <a class="back" href="/tasks/board" use:link aria-label="Kembali ke board">←</a>
+            <a class="back" href="/registry/list" use:link aria-label="Kembali ke workspaces">←</a>
             <div class="strip-copy">
               <div class="meta">
                 <span class="mono-id">{task.code}</span>
@@ -450,6 +456,8 @@
                   <button type="button" class="ghost-btn" onclick={onMove}>
                     {role === 'teknis' ? 'Ajukan pindah' : 'Ubah status'}
                   </button>
+                {:else if role === 'teknis' && !canBoard && task.approval_state === 'approved'}
+                  <span class="assignee-only-hint" style="font-size:0.7rem; color:#64748b; font-style:italic;">(Hanya assignee yang dapat mengajukan perubahan status task ini)</span>
                 {/if}
                 {#if canComment}
                   <button type="submit" class="primary">Kirim tanggapan</button>

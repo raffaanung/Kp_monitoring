@@ -22,6 +22,16 @@ class TaskStatusMoveModel extends Model
             ->first();
     }
 
+    /** @return list<array<string, mixed>> */
+    public function allForTask(string $taskId): array
+    {
+        return $this->select('task_status_moves.*, requester.name AS requested_by_name')
+            ->join('users AS requester', 'requester.id = task_status_moves.requested_by', 'left')
+            ->where('task_status_moves.task_id', $taskId)
+            ->orderBy('task_status_moves.created_at', 'ASC')
+            ->findAll();
+    }
+
     /**
      * Pending move untuk banyak task sekaligus, 1 query (hindari N+1 saat render list task).
      * @param list<string> $taskIds

@@ -99,12 +99,24 @@ class DashboardModel extends Model
     /** Mirrors registryStore.svelte.js's createDashboard() code generator for parity. */
     public function generateCode(string $name): string
     {
-        preg_match_all('/[A-Za-z0-9]+/', $name, $matches);
-        $initials = '';
-        foreach ($matches[0] as $word) {
-            $initials .= strtoupper($word[0]);
+        // Pisahkan kata, termasuk pemisahan camelCase (misal FinSight -> Fin Sight)
+        $clean = trim((string) preg_replace('/([a-z])([A-Z])/', '$1 $2', $name));
+        preg_match_all('/[A-Za-z0-9]+/', $clean, $matches);
+        $words = $matches[0] ?? [];
+
+        if (count($words) >= 2) {
+            $initials = '';
+            foreach ($words as $word) {
+                $initials .= strtoupper($word[0]);
+            }
+            $base = substr($initials, 0, 6);
+        } else {
+            // Satu kata: ambil 3-4 huruf pertama (misal Traxiss -> TRAX)
+            $single = preg_replace('/[^A-Za-z0-9]/', '', $name);
+            $base = strtoupper(substr($single, 0, 4));
         }
-        $base = substr($initials, 0, 6) ?: 'DB';
+
+        $base = $base ?: 'DB';
 
         $code = $base;
         $n    = 2;
@@ -173,10 +185,23 @@ class DashboardModel extends Model
         'frontend',
     ];
 
+    public static function isValidCustomKey(string $key): bool
+    {
+        $key = trim($key);
+        if ($key === '') {
+            return false;
+        }
+        if (in_array($key, self::STANDARD_META, true)) {
+            return true;
+        }
+
+        return (bool) preg_match('/^[a-zA-Z0-9_\-]{1,64}$/', $key);
+    }
+
     public function setField(string $dashboardId, string $key, string $value): bool
     {
         $key = trim($key);
-        if (! in_array($key, self::STANDARD_META, true)) {
+        if (! self::isValidCustomKey($key)) {
             return false;
         }
         $db  = db_connect();

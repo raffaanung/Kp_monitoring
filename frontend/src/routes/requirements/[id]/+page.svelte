@@ -3,8 +3,8 @@
   import GlassPanel from '$lib/GlassPanel.svelte'
   import PmCreateTaskModal from '$lib/PmCreateTaskModal.svelte'
   import { attachmentStore, listAttachments, loadAttachmentsFromApi, useAttachment } from '$lib/attachmentStore.svelte.js'
-  import TaskBoard from '../../tasks/board/+page.svelte'
-  import TaskList from '../../tasks/list/+page.svelte'
+  import TaskBoard from '$lib/pages/tasks/TaskBoard.svelte'
+  import TaskList from '$lib/pages/tasks/TaskList.svelte'
   import {
     getRequirement,
     updateRequirement,
@@ -28,6 +28,7 @@
     workflowColumns,
     workflowStatusColor,
     isOverdue,
+    displayTaskProgress,
     currentUserName,
     approveModuleTask,
     requestRevisionModuleTask,
@@ -96,7 +97,8 @@
     const done = childTasks.filter((t) => t.status === 'selesai').length
     const aktif = childTasks.filter((t) => t.status !== 'selesai' && t.status !== 'backlog').length
     const overdue = childTasks.filter((t) => isOverdue(t)).length
-    const pct = total ? Math.round((done / total) * 100) : 0
+    const sum = childTasks.reduce((acc, t) => acc + displayTaskProgress(t), 0)
+    const pct = total ? Math.round(sum / total) : 0
     return { total, done, aktif, overdue, pct }
   })
 
@@ -334,7 +336,7 @@
   /** @param {number} id */
   function openChildTask(id) {
     if (embedded) onOpenTask(id)
-    else goto(`/tasks/${id}`)
+    else goto(`/registry/list?focusTask=${id}`)
   }
 
   /** @param {string} name */
@@ -405,8 +407,14 @@
                 onclick={downloadAttachments}
                 disabled={!attachments.length || downloading}
                 title={attachments.length ? 'Download requirement attachments' : 'No attachments yet'}
+                style="display:inline-flex;align-items:center;gap:6px;"
               >
-                {downloading ? 'Mengunduh…' : 'Download Attachment'}
+                {#if downloading}
+                  <span class="btn-spinner blue sm"></span>
+                  <span>Mengunduh…</span>
+                {:else}
+                  <span>Download Attachment</span>
+                {/if}
               </button>
               {#if canEdit}
                 <button type="button" class="req-add" onclick={openTaskModal}>+ Add Task</button>

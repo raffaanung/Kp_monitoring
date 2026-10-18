@@ -43,6 +43,8 @@
   let deadline = $state('')
   let selectedReqId = $state(/** @type {string} */ (''))
   let error = $state('')
+  /** @type {File[]} */
+  let attachedFiles = $state([])
 
   function today() {
     const d = new Date()
@@ -118,6 +120,7 @@
       saving = false
       selectedReqId = requirementId || (reqChoices[0]?.id ?? '')
       assignees = defaultAssignees()
+      attachedFiles = []
     })
   })
 
@@ -131,6 +134,28 @@
       assignees = valid
     }
   })
+
+  /** @param {Event & { currentTarget: HTMLInputElement }} e */
+  function onPickFiles(e) {
+    const input = e.currentTarget
+    if (!input.files?.length) return
+    attachedFiles = [...attachedFiles, ...Array.from(input.files)]
+    input.value = ''
+  }
+
+  /** @param {number} idx */
+  function removeAttachedFile(idx) {
+    attachedFiles = attachedFiles.filter((_, i) => i !== idx)
+  }
+
+  /** @param {number} bytes */
+  function formatFileSize(bytes) {
+    if (!bytes || bytes <= 0) return '0 B'
+    const k = 1024
+    const sizes = ['B', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
+  }
 
   async function submit(event) {
     event.preventDefault()
@@ -171,6 +196,7 @@
         deadline,
         assignees: [...assignees],
         status: 'backlog',
+        attachments: attachedFiles,
       })
     } catch (err) {
       saving = false
@@ -279,6 +305,56 @@
           <input type="date" bind:value={deadline} />
         </label>
 
+        <div class="field attachment-field">
+          <div class="attachment-label-row">
+            <span>Attachment / Lampiran <small class="opt-hint">(Opsional)</small></span>
+            {#if attachedFiles.length}
+              <span class="file-count-badge">{attachedFiles.length} file dipilih</span>
+            {/if}
+          </div>
+          <label class="file-drop-box">
+            <input
+              type="file"
+              multiple
+              accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.csv"
+              onchange={onPickFiles}
+            />
+            <div class="file-drop-content">
+              <div class="drop-icon-circle">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                </svg>
+              </div>
+              <div class="drop-text-group">
+                <span class="file-drop-text">Klik untuk pilih file lampiran</span>
+                <span class="file-drop-sub">Gambar, PDF, Dokumen (Maks. 20MB per file)</span>
+              </div>
+            </div>
+          </label>
+          {#if attachedFiles.length}
+            <div class="attached-list">
+              {#each attachedFiles as file, idx (file.name + idx)}
+                <div class="attached-chip">
+                  <span class="chip-file-icon">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                    </svg>
+                  </span>
+                  <span class="chip-name" title={file.name}>{file.name}</span>
+                  <span class="chip-size">{formatFileSize(file.size)}</span>
+                  <button type="button" class="btn-remove-chip" aria-label={`Hapus ${file.name}`} onclick={() => removeAttachedFile(idx)}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <line x1="18" y1="6" x2="6" y2="18"></line>
+                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                  </button>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+
         {#if error}
           <p class="err">{error}</p>
         {/if}
@@ -286,7 +362,14 @@
 
       <footer class="actions">
         <button type="button" class="ghost" onclick={onClose}>Cancel</button>
-        <button type="submit" class="primary" disabled={!activeReq || saving}>{saving ? 'Saving…' : 'Create & Assign'}</button>
+        <button type="submit" class="primary" disabled={!activeReq || saving} style="display:inline-flex;align-items:center;gap:7px;">
+          {#if saving}
+            <span class="btn-spinner sm"></span>
+            <span>Saving…</span>
+          {:else}
+            <span>Create & Assign</span>
+          {/if}
+        </button>
       </footer>
   </form>
 {/if}
@@ -575,5 +658,160 @@
   .primary:disabled {
     opacity: 0.45;
     cursor: not-allowed;
+  }
+
+  .attachment-field {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .attachment-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .opt-hint {
+    font-size: 0.65rem;
+    font-weight: 450;
+    color: #8a8a90;
+    margin-left: 0.25rem;
+  }
+
+  .file-count-badge {
+    font-size: 0.65rem;
+    font-weight: 650;
+    color: #065fc6;
+    background: rgba(6, 95, 198, 0.08);
+    padding: 0.15rem 0.45rem;
+    border-radius: 999px;
+  }
+
+  .file-drop-box {
+    position: relative;
+    display: block;
+    cursor: pointer;
+    border: 1.5px dashed rgba(0, 0, 0, 0.16);
+    border-radius: 12px;
+    background: #fafafb;
+    padding: 0.75rem 1rem;
+    text-align: center;
+    transition: all 0.18s ease;
+  }
+
+  .file-drop-box:hover {
+    border-color: #065fc6;
+    background: rgba(6, 95, 198, 0.03);
+  }
+
+  .file-drop-box input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+    z-index: 1;
+  }
+
+  .file-drop-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.65rem;
+    pointer-events: none;
+  }
+
+  .drop-icon-circle {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #065fc6;
+    flex-shrink: 0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  }
+
+  .drop-text-group {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.1rem;
+    text-align: left;
+  }
+
+  .file-drop-text {
+    font-size: 0.74rem;
+    font-weight: 650;
+    color: #1a1a1a;
+  }
+
+  .file-drop-sub {
+    font-size: 0.63rem;
+    color: #8a8a90;
+  }
+
+  .attached-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    max-height: 120px;
+    overflow-y: auto;
+    padding: 0.15rem 0;
+  }
+
+  .attached-chip {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.35rem 0.55rem;
+    background: #f7f8fa;
+    border: 1px solid rgba(0, 0, 0, 0.07);
+    border-radius: 8px;
+    font-size: 0.72rem;
+  }
+
+  .chip-file-icon {
+    display: flex;
+    align-items: center;
+    color: #5c5c62;
+    flex-shrink: 0;
+  }
+
+  .chip-name {
+    font-weight: 550;
+    color: #1a1a1a;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+  }
+
+  .chip-size {
+    font-size: 0.64rem;
+    color: #8a8a90;
+    flex-shrink: 0;
+  }
+
+  .btn-remove-chip {
+    background: transparent;
+    border: none;
+    padding: 0.15rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #8a8a90;
+    border-radius: 4px;
+    transition: all 0.15s ease;
+  }
+
+  .btn-remove-chip:hover {
+    background: rgba(190, 18, 60, 0.1);
+    color: #be123c;
   }
 </style>

@@ -22,12 +22,6 @@ class CheckNotifs extends BaseCommand
             CLI::write("Task #{$t['id']} [{$t['code']}] - {$t['title']} | status: {$t['status']} | approval_state: {$t['approval_state']} | created_by: {$t['created_by']} | assignees: " . implode(', ', $aNames));
         }
 
-        CLI::write("\n=== ACTIVITY LOGS FOR TSK-045 ===", 'yellow');
-        $logs = $db->table('activity_logs')->where('object_id', 'c715d91d-f81c-4dd4-81bc-52da58b7ef2e')->orderBy('created_at', 'DESC')->get()->getResultArray();
-        foreach ($logs as $l) {
-            CLI::write("Log [{$l['id']}] at {$l['created_at']} by {$l['actor_name']} ({$l['action_type']}): {$l['action']} | reason: {$l['reason']}");
-        }
-
         CLI::write("\n=== RECENT NOTIFICATIONS ===", 'yellow');
         $notifs = $db->table('notifications')->orderBy('created_at', 'DESC')->limit(10)->get()->getResultArray();
         foreach ($notifs as $n) {
@@ -35,10 +29,21 @@ class CheckNotifs extends BaseCommand
             CLI::write("   Body: {$n['body']}");
         }
 
-        CLI::write("\n=== USERS ===", 'yellow');
-        $users = $db->table('users')->join('roles', 'roles.id = users.role_id', 'left')->select('users.id, users.name, users.username, roles.name as role_name')->get()->getResultArray();
-        foreach ($users as $u) {
-            CLI::write("User [{$u['id']}]: {$u['name']} (@{$u['username']}) - Role: {$u['role_name']}");
+
+
+        CLI::write("\n=== ROLE PERMISSIONS ===", 'yellow');
+        $rolePerms = $db->table('role_permissions')
+            ->join('roles', 'roles.id = role_permissions.role_id')
+            ->join('permissions', 'permissions.id = role_permissions.permission_id')
+            ->select('roles.name as role_name, permissions.perm_key as perm_key')
+            ->orderBy('roles.name, permissions.perm_key')
+            ->get()->getResultArray();
+        $byRole = [];
+        foreach ($rolePerms as $rp) {
+            $byRole[$rp['role_name']][] = $rp['perm_key'];
+        }
+        foreach ($byRole as $rName => $keys) {
+            CLI::write("Role {$rName}: " . implode(', ', $keys));
         }
     }
 }

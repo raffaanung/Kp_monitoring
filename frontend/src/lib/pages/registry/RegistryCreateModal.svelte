@@ -170,6 +170,11 @@
     aria-labelledby="add-dashboard-title"
     onclick={(e) => e.stopPropagation()}
     onsubmit={onCreate}
+    onkeydown={(e) => {
+      if (e.key === 'Enter' && e.target instanceof HTMLInputElement && e.target.type !== 'submit') {
+        e.preventDefault();
+      }
+    }}
   >
     <div class="wizard-left">
       <div class="left-header">
@@ -267,17 +272,11 @@
             </label>
             <label>
               Unit
-              <select bind:value={formCategory}>
-                <option value="">Select a unit...</option>
-                <option value="Finance">Finance</option>
-                <option value="HR">HR</option>
-                <option value="Operations">Operations</option>
-                <option value="Sales">Sales</option>
-                <option value="Marketing">Marketing</option>
-                <option value="IT">IT</option>
-                <option value="Legal">Legal</option>
-                <option value="General">Other / General</option>
-              </select>
+              <input
+                type="text"
+                bind:value={formCategory}
+                placeholder="Contoh: Finance, Operasional, IT..."
+              />
             </label>
             <label>
               <span>PIC <span class="req">*</span></span>
@@ -392,26 +391,28 @@
                 <input type="file" multiple bind:files={reqFiles} />
               </label>
             </div>
-            <label>
-              Assign To <span class="input-hint">(optional — Tim Teknis)</span>
+            <div class="wizard-field">
+              <span class="wizard-field-label">
+                Assign To <span class="input-hint">(optional — Tim Teknis)</span>
+              </span>
               {#if teknisRoster.length === 0}
                 <span class="input-hint">No Tim Teknis members available yet.</span>
               {:else}
-                <div class="grid-2">
+                <div class="assign-grid">
                   {#each teknisRoster as member (member.name)}
-                    <label style="flex-direction: row; align-items: center; gap: 0.5rem; font-weight: 500;">
+                    {@const isChecked = reqAssignTo.includes(member.name)}
+                    <label class="assign-checkbox-card" class:checked={isChecked}>
                       <input
                         type="checkbox"
-                        style="width: auto;"
-                        checked={reqAssignTo.includes(member.name)}
+                        checked={isChecked}
                         onchange={() => toggleReqAssignee(member.name)}
                       />
-                      <span>{member.name}</span>
+                      <span class="assign-name">{member.name}</span>
                     </label>
                   {/each}
                 </div>
               {/if}
-            </label>
+            </div>
           </div>
         {/if}
       </div>

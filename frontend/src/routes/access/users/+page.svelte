@@ -58,6 +58,9 @@
     addOpen = false
   }
 
+  let addSubmitting = $state(false)
+  let editSubmitting = $state(false)
+
   async function onAddSubmit(event) {
     event.preventDefault()
     error = ''
@@ -73,6 +76,7 @@
       error = 'Password must be at least 6 characters'
       return
     }
+    addSubmitting = true
     try {
       await createUser({
         name,
@@ -83,6 +87,8 @@
       addOpen = false
     } catch (err) {
       error = err instanceof Error ? err.message : String(err)
+    } finally {
+      addSubmitting = false
     }
   }
 
@@ -119,19 +125,24 @@
       editError = 'Username must be 8 digits'
       return
     }
-    const res = await updateUser(editId, {
-      name: editName,
-      username: editUsername,
-      role_id: editRole,
-      unit: editUnit,
-      team_ids: editTeam,
-      status: editStatus,
-    })
-    if (!res.ok) {
-      editError = res.reason
-      return
+    editSubmitting = true
+    try {
+      const res = await updateUser(editId, {
+        name: editName,
+        username: editUsername,
+        role_id: editRole,
+        unit: editUnit,
+        team_ids: editTeam,
+        status: editStatus,
+      })
+      if (!res.ok) {
+        editError = res.reason
+        return
+      }
+      editOpen = false
+    } finally {
+      editSubmitting = false
     }
-    editOpen = false
   }
 
   /** @param {string} n */
@@ -309,7 +320,14 @@
 
         <div class="actions">
           <button type="button" class="ghost" onclick={closeAdd}>Cancel</button>
-          <button type="submit" class="primary">Save user</button>
+          <button type="submit" class="primary" disabled={addSubmitting} style="display:inline-flex;align-items:center;gap:7px;">
+            {#if addSubmitting}
+              <span class="btn-spinner sm"></span>
+              <span>Saving…</span>
+            {:else}
+              <span>Save user</span>
+            {/if}
+          </button>
         </div>
       </form>
     </div>
@@ -398,7 +416,14 @@
 
         <div class="actions">
           <button type="button" class="ghost" onclick={closeEdit}>Cancel</button>
-          <button type="submit" class="primary">Save changes</button>
+          <button type="submit" class="primary" disabled={editSubmitting} style="display:inline-flex;align-items:center;gap:7px;">
+            {#if editSubmitting}
+              <span class="btn-spinner sm"></span>
+              <span>Saving…</span>
+            {:else}
+              <span>Save changes</span>
+            {/if}
+          </button>
         </div>
       </form>
     </div>

@@ -5,6 +5,7 @@ namespace App\Controllers;
 use App\Libraries\TaskPolicy;
 use App\Models\ActivityLogModel;
 use App\Models\DashboardModel;
+use App\Models\NotificationModel;
 use CodeIgniter\HTTP\ResponseInterface;
 
 class Dashboards extends BaseController
@@ -27,7 +28,7 @@ class Dashboards extends BaseController
         $ownerName   = trim((string) ($this->request->getJsonVar('owner') ?? ''));
         $url         = trim((string) ($this->request->getJsonVar('url') ?? ''));
         $platform    = trim((string) ($this->request->getJsonVar('platform') ?? '')) ?: 'Custom';
-        $category    = trim((string) ($this->request->getJsonVar('category') ?? '')) ?: 'General';
+        $category    = trim((string) ($this->request->getJsonVar('category') ?? ''));
         $criticality = trim((string) ($this->request->getJsonVar('criticality') ?? $this->request->getJsonVar('priority') ?? 'medium'));
         if (! in_array($criticality, ['low', 'medium', 'high'], true)) {
             $criticality = 'medium';
@@ -44,6 +45,7 @@ class Dashboards extends BaseController
             return $this->jsonError('A dashboard with that name already exists.', 422);
         }
 
+        $pmId = $model->findUserIdByName($pmName);
         $id = $model->createDashboard([
             'name'        => $name,
             'code'        => $model->generateCode($name),
@@ -51,7 +53,7 @@ class Dashboards extends BaseController
             'status'      => 'active',
             'criticality' => $criticality,
             'owner_id'    => $model->findUserIdByName($ownerName),
-            'pm_id'       => $model->findUserIdByName($pmName),
+            'pm_id'       => $pmId,
             'platform'    => $platform,
             'category'    => $category,
             'url'         => $url,
@@ -59,14 +61,30 @@ class Dashboards extends BaseController
         ]);
         foreach ($metadata as $key => $value) {
             $value = trim((string) $value);
-            if ($value === '' || ! in_array((string) $key, DashboardModel::STANDARD_META, true)) {
+            $strKey = (string) $key;
+            if ($value === '' || ! DashboardModel::isValidCustomKey($strKey)) {
                 continue;
             }
-            $model->setField($id, (string) $key, $value);
+            $model->setField($id, $strKey, $value);
         }
 
         $row = $this->shapeRow($model->findWithDetails($id));
         $this->logActivity($user, $id, $name, 'create', 'Dashboard created', $this->diffDashboard([], $row));
+
+        if ($pmId && $pmId !== $user['id']) {
+            try {
+                (new NotificationModel())->notify(
+                    'dashboard_assigned',
+                    'Dashboard ditugaskan',
+                    "{$user['name']} menugaskan Anda sebagai PM untuk dashboard \"{$name}\"",
+                    $pmId,
+                    null,
+                    $id
+                );
+            } catch (\Throwable $e) {
+                log_message('error', 'Failed to send dashboard assignment notification: ' . $e->getMessage());
+            }
+        }
 
         return $this->jsonOk($row);
     }
@@ -74,14 +92,19 @@ class Dashboards extends BaseController
     public function update(string $id = '0'): ResponseInterface
     {
         $user        = $this->authUser();
-        if (! TaskPolicy::canManageRegistry($user)) {
-            return $this->jsonError('You do not have permission to manage the dashboard registry', 403);
-        }
-
         $dashboardId = $id;
         $model       = new DashboardModel();
-        if ($model->find($dashboardId) === null) {
+        $dashboard   = $model->find($dashboardId);
+        if ($dashboard === null) {
             return $this->jsonError('Dashboard not found', 404);
+        }
+
+        $canManage = TaskPolicy::canManageRegistry($user)
+            || TaskPolicy::isPmOfDashboard($user, $dashboard)
+            || TaskPolicy::canEditField($user);
+
+        if (! $canManage) {
+            return $this->jsonError('You do not have permission to manage the dashboard registry', 403);
         }
         $before    = $this->shapeRow($model->findWithDetails($dashboardId));
         $beforeMeta = $before['metadata'] ?? [];
@@ -123,10 +146,11 @@ class Dashboards extends BaseController
         $metadata = $this->request->getJsonVar('metadata', true);
         $metadata = is_array($metadata) ? $metadata : [];
         foreach ($metadata as $key => $value) {
-            if (! in_array((string) $key, DashboardModel::STANDARD_META, true)) {
+            $strKey = (string) $key;
+            if (! DashboardModel::isValidCustomKey($strKey)) {
                 continue;
             }
-            $requested['meta_' . $key] = [(string) ($beforeMeta[$key] ?? ''), trim((string) $value)];
+            $requested['meta_' . $strKey] = [(string) ($beforeMeta[$strKey] ?? ''), trim((string) $value)];
         }
 
         $resetCode = (bool) $this->request->getJsonVar('reset_code');
@@ -165,10 +189,11 @@ class Dashboards extends BaseController
             $model->update($dashboardId, $userColumns);
         }
         foreach ($metadata as $key => $value) {
-            if (! in_array((string) $key, DashboardModel::STANDARD_META, true)) {
+            $strKey = (string) $key;
+            if (! DashboardModel::isValidCustomKey($strKey)) {
                 continue;
             }
-            $model->setField($dashboardId, (string) $key, (string) $value);
+            $model->setField($dashboardId, $strKey, (string) $value);
         }
         $model->touch($dashboardId);
 
@@ -176,6 +201,25 @@ class Dashboards extends BaseController
         $changes = $this->diffDashboard($before, $after);
         if ($changes !== []) {
             $this->logActivity($user, $dashboardId, $after['name'], 'update', 'Dashboard updated', $changes);
+        }
+
+        if (array_key_exists('pm_id', $userColumns)) {
+            $newPmId = $userColumns['pm_id'];
+            $oldPmId = $model->findUserIdByName((string) ($before['pm'] ?? ''));
+            if ($newPmId && $newPmId !== $oldPmId && $newPmId !== $user['id']) {
+                try {
+                    (new NotificationModel())->notify(
+                        'dashboard_assigned',
+                        'Dashboard ditugaskan',
+                        "{$user['name']} menugaskan Anda sebagai PM untuk dashboard \"{$after['name']}\"",
+                        $newPmId,
+                        null,
+                        $dashboardId
+                    );
+                } catch (\Throwable $e) {
+                    log_message('error', 'Failed to send dashboard assignment notification: ' . $e->getMessage());
+                }
+            }
         }
 
         return $this->jsonOk($after);
@@ -362,7 +406,7 @@ class Dashboards extends BaseController
             'owner'       => 'Owner',
             'pm'          => 'PM',
             'platform'    => 'Platform',
-            'category'    => 'Category',
+            'category'    => 'Unit',
             'url'         => 'URL',
             'version'     => 'Version',
             'criticality' => 'Kritikalitas',
@@ -457,5 +501,104 @@ class Dashboards extends BaseController
             'tasks'       => [],
             'history'     => [],
         ];
+    }
+
+    public static function defaultFormSchema(): array
+    {
+        return [
+            'profile_fields' => [
+                ['key' => 'framework', 'label' => 'Framework', 'placeholder' => 'Contoh: SvelteKit', 'type' => 'text', 'required' => false],
+                ['key' => 'framework_version', 'label' => 'Framework Version', 'placeholder' => 'Contoh: 2.5', 'type' => 'text', 'required' => false],
+                ['key' => 'backend', 'label' => 'Backend', 'placeholder' => 'Contoh: CodeIgniter', 'type' => 'text', 'required' => false],
+                ['key' => 'backend_version', 'label' => 'Backend Version', 'placeholder' => 'Contoh: 4.5', 'type' => 'text', 'required' => false],
+                ['key' => 'frontend', 'label' => 'Front End', 'placeholder' => 'Contoh: Svelte', 'type' => 'text', 'required' => false],
+            ],
+            'env_fields' => [
+                ['key' => 'db', 'label' => 'Database Engine', 'placeholder' => 'Contoh: PostgreSQL', 'type' => 'text', 'required' => false],
+                ['key' => 'ip', 'label' => 'IP Address', 'placeholder' => 'Contoh: 10.0.0.12', 'type' => 'text', 'required' => false],
+                ['key' => 'db_name', 'label' => 'Database Name', 'placeholder' => 'Database name', 'type' => 'text', 'required' => false],
+                ['key' => 'db_user', 'label' => 'Database Username', 'placeholder' => 'Database username', 'type' => 'text', 'required' => false],
+                ['key' => 'db_pass', 'label' => 'Password', 'placeholder' => 'Database password', 'type' => 'password', 'secret' => true, 'required' => false],
+            ],
+            'custom_fields' => [],
+        ];
+    }
+
+    public function getFormSchema(): ResponseInterface
+    {
+        $schemaPath = WRITEPATH . 'dashboard_form_schema.json';
+        if (file_exists($schemaPath)) {
+            $content = file_get_contents($schemaPath);
+            $data = json_decode((string) $content, true);
+            if (is_array($data) && isset($data['profile_fields'], $data['env_fields'])) {
+                return $this->jsonOk($data);
+            }
+        }
+
+        return $this->jsonOk(self::defaultFormSchema());
+    }
+
+    public function saveFormSchema(): ResponseInterface
+    {
+        $user = $this->authUser();
+        if (! TaskPolicy::canEditDashboardForm($user)) {
+            return $this->jsonError('You do not have permission to edit the dashboard form schema', 403);
+        }
+
+        $profileFields = $this->request->getJsonVar('profile_fields', true);
+        $envFields     = $this->request->getJsonVar('env_fields', true);
+        $customFields  = $this->request->getJsonVar('custom_fields', true);
+
+        if (! is_array($profileFields) || ! is_array($envFields)) {
+            return $this->jsonError('Invalid form schema payload', 422);
+        }
+
+        $sanitize = static function (array $list): array {
+            $cleaned = [];
+            foreach ($list as $item) {
+                if (! is_array($item)) continue;
+                $key = trim((string) ($item['key'] ?? ''));
+                $label = trim((string) ($item['label'] ?? ''));
+                if ($key === '' || $label === '') continue;
+                $key = preg_replace('/[^a-zA-Z0-9_\-]/', '_', strtolower($key));
+                $cleaned[] = [
+                    'key'         => $key,
+                    'label'       => $label,
+                    'placeholder' => trim((string) ($item['placeholder'] ?? '')),
+                    'type'        => in_array($item['type'] ?? '', ['text', 'textarea', 'password', 'select'], true) ? $item['type'] : 'text',
+                    'secret'      => ! empty($item['secret']),
+                    'required'    => ! empty($item['required']),
+                ];
+            }
+            return $cleaned;
+        };
+
+        $schema = [
+            'profile_fields' => $sanitize($profileFields),
+            'env_fields'     => $sanitize($envFields),
+            'custom_fields'  => is_array($customFields) ? $sanitize($customFields) : [],
+            'updated_at'     => date('Y-m-d H:i:s'),
+            'updated_by'     => $user['name'] ?? 'System',
+        ];
+
+        $schemaPath = WRITEPATH . 'dashboard_form_schema.json';
+        file_put_contents($schemaPath, json_encode($schema, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+
+        return $this->jsonOk($schema);
+    }
+
+    public function resetFormSchema(): ResponseInterface
+    {
+        $user = $this->authUser();
+        if (! TaskPolicy::canEditDashboardForm($user)) {
+            return $this->jsonError('You do not have permission to reset the dashboard form schema', 403);
+        }
+
+        $schemaPath = WRITEPATH . 'dashboard_form_schema.json';
+        if (file_exists($schemaPath)) {
+            @unlink($schemaPath);
+        }
+
+        return $this->jsonOk(self::defaultFormSchema());
     }
 }

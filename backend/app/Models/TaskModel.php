@@ -82,6 +82,7 @@ class TaskModel extends Model
                 ->orWhere('tasks.assignee_id', $uid)
                 ->orWhere('requirements.created_by', $uid)
                 ->orWhere("tasks.id IN (SELECT task_id FROM task_assignees WHERE user_id = {$escaped})", null, false)
+                ->orWhere("tasks.requirement_id IN (SELECT requirement_id FROM requirement_team_members WHERE user_id = {$escaped})", null, false)
                 ->groupEnd();
         }
         if (! empty($filters['q'])) {

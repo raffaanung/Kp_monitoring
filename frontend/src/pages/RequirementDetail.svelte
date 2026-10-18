@@ -26,6 +26,7 @@
     workflowColumns,
     workflowStatusColor,
     isOverdue,
+    displayTaskProgress,
     currentUserName,
     approveModuleTask,
     requestRevisionModuleTask,
@@ -74,7 +75,8 @@
     const done = childTasks.filter((t) => t.status === 'selesai').length
     const aktif = childTasks.filter((t) => t.status !== 'selesai' && t.status !== 'backlog').length
     const overdue = childTasks.filter((t) => isOverdue(t)).length
-    const pct = total ? Math.round((done / total) * 100) : 0
+    const sum = childTasks.reduce((acc, t) => acc + displayTaskProgress(t), 0)
+    const pct = total ? Math.round(sum / total) : 0
     return { total, done, aktif, overdue, pct }
   })
 
@@ -291,7 +293,7 @@
   function openKanban() {
     if (!item) return
     setBoardDashboard(item.dashboard)
-    push('/tasks/board')
+    push('/registry/list')
   }
 
   /** @param {string} name */

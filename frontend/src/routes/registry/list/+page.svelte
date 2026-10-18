@@ -198,6 +198,8 @@
 
   /** Klik notifikasi (?focusTask=id di URL) → otomatis buka dashboard yang benar, task-nya di-expand oleh RegistryDetailPanel sendiri lewat prop autoFocusTaskId. */
   const focusTaskIdFromUrl = $derived(page.url.searchParams.get("focusTask") || "");
+  /** Klik notifikasi dashboard (?dashboard=name di URL) → otomatis buka detail dashboard yang bersangkutan */
+  const focusDashFromUrl = $derived(page.url.searchParams.get("dashboard") || page.url.searchParams.get("focusDashboard") || "");
 
   $effect(() => {
     if (!focusTaskIdFromUrl) return;
@@ -211,6 +213,14 @@
     detailActiveTab = "overview";
   });
 
+  $effect(() => {
+    if (!focusDashFromUrl || focusTaskIdFromUrl) return;
+    const dash = allDashboards.find((d) => d.name === focusDashFromUrl || String(d.id) === focusDashFromUrl);
+    if (!dash || selectedDetail?.id === dash.id) return;
+    selectedDetail = dash;
+    rememberDetailId(dash.id);
+    detailActiveTab = "overview";
+  });
 </script>
 
 <section class="page registry-page" class:detail={!!selectedDetail}>

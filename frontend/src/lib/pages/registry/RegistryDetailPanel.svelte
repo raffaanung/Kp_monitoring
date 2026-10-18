@@ -2,21 +2,21 @@
   import GlassPanel from '$lib/GlassPanel.svelte';
   import { fileUrl } from '$lib/api.js';
   import { goto } from '$app/navigation';
-  import TaskList from '../../../routes/tasks/list/+page.svelte';
-  import TaskDetail from '../../../routes/tasks/[id]/+page.svelte';
-  import TaskBoard from '../../../routes/tasks/board/+page.svelte';
+  import TaskList from '$lib/pages/tasks/TaskList.svelte';
+  import TaskBoard from '$lib/pages/tasks/TaskBoard.svelte';
   import { getDashboard, registryStatusLabel, updateDashboard } from '$lib/registryStore.svelte.js';
   import {
     addTaskComment,
     addTaskEvidenceFiles,
-    approvalLabel,
     approveModuleTask,
     approveStatusMove,
     canCreateDashboard,
     canCreateRequirement,
     canCreateTask,
     canEditField,
+    canUpdateTaskProgress,
     currentUserRole,
+    isCurrentUserPmOf,
     isOverdue,
     listInboxTasks,
     listModuleTasks,
@@ -48,6 +48,7 @@
   import { portal } from '$lib/portal.js';
   import AttachmentPanel from '$lib/AttachmentPanel.svelte';
   import RegistryInviteModal from './RegistryInviteModal.svelte';
+  import RegistryEditModal from './RegistryEditModal.svelte';
   import PmCreateTaskModal from '$lib/PmCreateTaskModal.svelte';
 
   /** @type {{ selectedDetail: any, detailActiveTab: string, selectedSopItem: any, autoFocusTaskId?: string }} */
@@ -55,6 +56,7 @@
   void detailActiveTab;
 
   let inviteOpen = $state(false);
+  let editOpen = $state(false);
   /** @type {Record<string, { id: string, name: string, role: string, perm: string }[]>} */
   let membersByDashboard = $state({});
   const members = $derived(membersByDashboard[selectedDetail?.id] ?? []);
@@ -115,19 +117,20 @@
       .toUpperCase();
   }
 
-  const canEdit = $derived(canEditField() || canCreateDashboard());
+  const canEdit = $derived(canEditField() || canCreateDashboard() || isPicOrManager);
   const dashboardCode = $derived.by(() => {
-    const raw = String(selectedDetail?.code || '').trim().toUpperCase();
-    if (raw.startsWith('EDM-')) return raw;
-    if (raw) return `EDM-${raw}`;
-    const initials = String(selectedDetail?.name || '')
-      .split(/\s+/)
-      .filter(Boolean)
-      .map((part) => part[0])
-      .join('')
-      .slice(0, 6)
-      .toUpperCase();
-    return `EDM-${initials || 'DB'}`;
+    let raw = String(selectedDetail?.code || '').trim().toUpperCase();
+    if (raw.startsWith('EDM-')) raw = raw.slice(4);
+    if (!raw || raw.length === 1) {
+      const clean = String(selectedDetail?.name || '').trim().replace(/([a-z])([A-Z])/, '$1 $2');
+      const words = clean.split(/\s+/).filter(Boolean);
+      if (words.length >= 2) {
+        raw = words.map((w) => w[0]).join('').slice(0, 6).toUpperCase();
+      } else if (words.length === 1) {
+        raw = words[0].replace(/[^A-Za-z0-9]/g, '').slice(0, 4).toUpperCase();
+      }
+    }
+    return `EDM-${raw || 'DB'}`;
   });
 
   let editingKey = $state('');
@@ -291,21 +294,44 @@
 
   /**
    * @param {number | string} id
-   * @param {'kanban' | 'tasks' | 'requirement'} from
+   * @param {'kanban' | 'tasks' | 'requirement'} [from]
    */
   function openTask(id, from) {
-    focusTaskId = String(id);
-    taskFrom = from;
-    work = 'task';
+    work = 'overview';
+    expandedTaskId = String(id);
+    loadModuleTaskDetail(id);
   }
 
   function closeTask() {
     focusTaskId = '';
-    work = taskFrom === 'requirement' ? 'requirement' : taskFrom;
+    work = 'overview';
   }
 
   /** Accordion: grup task (judul sama) di "List Task" bisa di-expand di tempat. @type {string} */
   let expandedTaskId = $state('');
+  let lastSyncedDraftKey = $state('');
+
+  /**
+   * Pastikan progressDraft dan kanbanDraftStatus selalu tersinkronisasi dengan posisi
+   * approval terakhir dari PM saat task dibuka (baik lewat klik row, notification, atau role switch).
+   */
+  $effect(() => {
+    if (!expandedTaskId) {
+      lastSyncedDraftKey = '';
+      return;
+    }
+    const currentTask = versionTasks.find((t) => String(t.id) === String(expandedTaskId))
+      || taskModuleStore.items.find((t) => String(t.id) === String(expandedTaskId));
+    if (currentTask) {
+      const approvedPct = displayProgress(currentTask);
+      const syncKey = `${currentTask.id}:${currentTask.status}:${approvedPct}`;
+      if (lastSyncedDraftKey !== syncKey) {
+        progressDraft = approvedPct;
+        kanbanDraftStatus = currentTask.status;
+        lastSyncedDraftKey = syncKey;
+      }
+    }
+  });
 
   /** @param {string} key @param {any[]} tasks */
   function toggleTaskRow(key, tasks) {
@@ -315,10 +341,12 @@
       return;
     }
     expandedTaskId = key;
-    const opened = tasks.find((t) => t.id === key);
+    const opened = tasks.find((t) => String(t.id) === String(key));
     if (opened) {
-      progressDraft = displayProgress(opened);
+      const approvedPct = displayProgress(opened);
+      progressDraft = approvedPct;
       kanbanDraftStatus = opened.status;
+      lastSyncedDraftKey = `${opened.id}:${opened.status}:${approvedPct}`;
     }
     // List endpoint ringan — tarik detail lengkap (deskripsi/komentar/evidence) tiap task di grup ini sekali waktu di-expand.
     for (const t of tasks) loadModuleTaskDetail(t.id);
@@ -373,19 +401,47 @@
 
   /** @param {any} task */
   function hasPendingApproval(task) {
-    return Boolean(task.status_move) || task.approval_state === 'pending';
+    return Boolean(task.status_move);
   }
 
-  /** Admin/Manager boleh accept/return kapan saja sebagai override, walau belum ada yang genuinely pending. @param {any} task */
+  /** PIC (PM) dan Admin/Manager berhak memutuskan approval (Accept/Return). @param {any} task */
   function canDecideApproval(task) {
     const role = currentUserRole();
-    return hasPendingApproval(task) || role === 'manager' || role === 'admin';
+    if (role === 'manager' || role === 'admin') return true;
+    const isPmRole =
+      role === 'pm' ||
+      role === 'pic' ||
+      taskModuleStore.session.label?.toLowerCase() === 'pic' ||
+      taskModuleStore.session.label?.toLowerCase() === 'pm';
+    if (isPmRole) {
+      const d = task?.dashboard || dashName;
+      if (!d) return true;
+      if (selectedDetail?.pm && selectedDetail.pm.toLowerCase() === (taskModuleStore.session.name || '').toLowerCase()) return true;
+      if (selectedDetail?.pm_id && String(selectedDetail.pm_id) === String(taskModuleStore.session.id)) return true;
+      return isCurrentUserPmOf(d);
+    }
+    return false;
   }
 
-  const isAdminOrManager = $derived.by(() => {
+  const isPicOrManager = $derived.by(() => {
+    void taskModuleStore.session;
     const role = currentUserRole();
-    return role === 'manager' || role === 'admin';
+    if (role === 'manager' || role === 'admin') return true;
+    const isPmRole =
+      role === 'pm' ||
+      role === 'pic' ||
+      taskModuleStore.session.label?.toLowerCase() === 'pic' ||
+      taskModuleStore.session.label?.toLowerCase() === 'pm';
+    if (isPmRole) {
+      if (!dashName) return true;
+      if (selectedDetail?.pm && selectedDetail.pm.toLowerCase() === (taskModuleStore.session.name || '').toLowerCase()) return true;
+      if (selectedDetail?.pm_id && String(selectedDetail.pm_id) === String(taskModuleStore.session.id)) return true;
+      return isCurrentUserPmOf(dashName);
+    }
+    return false;
   });
+  const isAdminOrManager = $derived(isPicOrManager);
+
 
   /** Modal Read-Only Return untuk Tim Teknis */
   let readOnlyReturnTaskId = $state('');
@@ -437,6 +493,15 @@
     };
   }
 
+  /** @param {number} bytes */
+  function formatFileSize(bytes) {
+    if (!bytes || bytes <= 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+  }
+
   /** @param {Event} e */
   async function pickAcceptEvidence(e) {
     const input = /** @type {HTMLInputElement} */ (e.currentTarget);
@@ -466,18 +531,17 @@
   /** Submit Accept task dari modal (+) @param {any} task */
   async function submitAccept(task) {
     if (!canDecideApproval(task)) return;
-    acceptBusy = true;
+    const note = acceptNote;
+    const evidence = acceptEvidence;
+    closeAcceptModal();
     try {
       if (task.status_move) {
-        await approveStatusMove(task.id, acceptNote, acceptEvidence);
+        await approveStatusMove(task.id, note, evidence);
       } else {
-        await approveModuleTask(task.id, acceptNote, acceptEvidence);
+        await approveModuleTask(task.id, note, evidence);
       }
-      closeAcceptModal();
     } catch (err) {
-      acceptEvidenceError = err instanceof Error ? err.message : String(err);
-    } finally {
-      acceptBusy = false;
+      console.error('Gagal menyetujui task:', err);
     }
   }
 
@@ -488,36 +552,47 @@
       return;
     }
     if (!canDecideApproval(task)) return;
-    returnBusy = true;
+    const desc = returnDescription.trim();
+    const evidence = returnEvidence;
     returnValidationError = '';
+    closeReturnModal();
     try {
       if (task.status_move) {
-        await rejectStatusMove(task.id, returnDescription.trim(), returnEvidence);
+        await rejectStatusMove(task.id, desc, evidence);
       } else {
-        await requestRevisionModuleTask(task.id, returnDescription.trim(), returnEvidence);
+        await requestRevisionModuleTask(task.id, desc, evidence);
       }
-      closeReturnModal();
     } catch (err) {
-      returnEvidenceError = err instanceof Error ? err.message : String(err);
-    } finally {
-      returnBusy = false;
+      console.error('Gagal mengembalikan task:', err);
     }
   }
 
-  /** Popup tambah assignee ke task yang sama (bukan bikin task baru). @type {string} */
-  let addAssigneePopupKey = $state('');
+  /** Popup kelola assignee (+ / −) untuk task. @type {number | string | null} */
+  let manageAssigneeTaskId = $state(/** @type {number | string | null} */ (null));
+  let assigneeModalTab = $state(/** @type {'add' | 'remove'} */ ('add'));
   let newAssigneeName = $state('');
+  let removeAssigneeName = $state('');
   let addAssigneeError = $state('');
+  let removeAssigneeError = $state('');
   let addingAssignee = $state(false);
+  let removingAssignee = $state(false);
 
-  /** @param {string} key */
-  function openAddAssignee(key) {
-    addAssigneePopupKey = key;
+  /** @param {any} taskId @param {'add' | 'remove'} [defaultTab] */
+  function openManageAssignee(taskId, defaultTab = 'add') {
+    manageAssigneeTaskId = taskId;
+    assigneeModalTab = defaultTab;
     newAssigneeName = '';
+    removeAssigneeName = '';
     addAssigneeError = '';
+    removeAssigneeError = '';
   }
-  function closeAddAssignee() {
-    addAssigneePopupKey = '';
+
+  function closeManageAssignee() {
+    manageAssigneeTaskId = null;
+    newAssigneeName = '';
+    removeAssigneeName = '';
+    addAssigneeError = '';
+    removeAssigneeError = '';
   }
 
   /** @param {any} task */
@@ -532,31 +607,32 @@
       return;
     }
     addingAssignee = true;
+    addAssigneeError = '';
     const ok = await updateModuleTask(task.id, {
       assignees: [...current, newAssigneeName],
     });
     addingAssignee = false;
     if (ok) {
-      closeAddAssignee();
+      newAssigneeName = '';
+      addAssigneeError = '';
     } else {
       addAssigneeError = 'Gagal menambah assignee.';
     }
   }
 
-  /** Popup hapus assignee — dropdown-nya cuma isi assignee yang ADA di task itu (bukan seluruh roster tim). @type {string} */
-  let removeAssigneePopupKey = $state('');
-  let removeAssigneeName = $state('');
-  let removeAssigneeError = $state('');
-  let removingAssignee = $state(false);
-
-  /** @param {string} key */
-  function openRemoveAssignee(key) {
-    removeAssigneePopupKey = key;
-    removeAssigneeName = '';
+  /** @param {any} task @param {string} nameToRemove */
+  async function deleteSpecificAssignee(task, nameToRemove) {
+    if (!nameToRemove) return;
+    removingAssignee = true;
     removeAssigneeError = '';
-  }
-  function closeRemoveAssignee() {
-    removeAssigneePopupKey = '';
+    const current = Array.isArray(task.assignees) ? task.assignees : [];
+    const ok = await updateModuleTask(task.id, {
+      assignees: current.filter((n) => n !== nameToRemove),
+    });
+    removingAssignee = false;
+    if (!ok) {
+      removeAssigneeError = 'Gagal menghapus assignee.';
+    }
   }
 
   /** @param {any} task */
@@ -565,18 +641,8 @@
       removeAssigneeError = 'Pilih assignee yang mau dihapus.';
       return;
     }
-    removingAssignee = true;
-    /** @type {string[]} */
-    const current = Array.isArray(task.assignees) ? task.assignees : [];
-    const ok = await updateModuleTask(task.id, {
-      assignees: current.filter((n) => n !== removeAssigneeName),
-    });
-    removingAssignee = false;
-    if (ok) {
-      closeRemoveAssignee();
-    } else {
-      removeAssigneeError = 'Gagal menghapus assignee.';
-    }
+    await deleteSpecificAssignee(task, removeAssigneeName);
+    removeAssigneeName = '';
   }
 
   // --- Accordion: progress slider + mini kanban ---
@@ -598,6 +664,7 @@
    * @param {any} task
    */
   function displayProgress(task) {
+    if (task.status === 'selesai') return 100;
     const stored = Number(task.progress_percent || 0);
     return stored > 0 ? stored : taskProgress(task.status);
   }
@@ -618,29 +685,39 @@
   }
 
   /** Apply cuma boleh jalan kalau posisi slider progress dan posisi card kanban SUDAH disamakan manual — kalau assignee cuma geser salah satu doang, Apply harus kekunci biar dia sadar harus nyamain progress juga. */
-  const canApplyProgress = $derived(statusForProgress(progressDraft) === kanbanDraftStatus);
+  const canApplyProgress = $derived.by(() => {
+    const currentTask = versionTasks.find((t) => String(t.id) === String(expandedTaskId))
+      || taskModuleStore.items.find((t) => String(t.id) === String(expandedTaskId));
+    if (!currentTask || !canUpdateTaskProgress(currentTask)) return false;
+    const effectiveStatus = kanbanDraftStatus || currentTask?.status || '';
+    return Boolean(effectiveStatus) && statusForProgress(progressDraft) === effectiveStatus;
+  });
 
   /** @param {any} task */
   async function applyProgress(task) {
-    if (!canApplyProgress) return;
+    if (!canApplyProgress || !canUpdateTaskProgress(task)) return;
     progressBusy = true;
     progressError = '';
     const pct = progressDraft;
-    const targetStatus = kanbanDraftStatus;
-    // Selalu lewat moveModuleTask (bukan updateModuleTask langsung) — status DAN progress dibawa
-    // dalam satu request yang sama, biar PM/Owner bisa diterapkan langsung tapi Teknis/assignee
-    // tetap harus menunggu approval PIC, termasuk kalau cuma progress yang berubah (kolom tetap).
-    const result = await moveModuleTask(task.id, targetStatus, { note: `Update progress ke ${pct}%`, progressPercent: pct });
-    const ok = result !== false;
-    // Issue/catatan yang lagi diketik ikut terkirim bareng Apply, nggak perlu tombol Kirim sendiri lagi.
-    if (ok && issueText.trim()) {
-      const commentOk = await addTaskComment(task.id, issueText.trim());
-      if (commentOk) {
-        issueText = '';
-      } else {
-        issueError = 'Gagal mengirim issue/catatan.';
+    const targetStatus = kanbanDraftStatus || task.status;
+
+    // Jika ada file evidence yang sudah dipilih tapi belum diupload, upload sekalian bersama pengajuan
+    if (pickedEvidenceFiles.length > 0) {
+      try {
+        const evidences = await Promise.all(pickedEvidenceFiles.map((f) => readEvidenceFile(f)));
+        await addTaskEvidenceFiles(task.id, evidences, evidenceNote.trim(), pct);
+        pickedEvidenceFiles = [];
+        evidenceNote = '';
+      } catch {
+        /* non-fatal, move tetap diproses */
       }
     }
+
+    const result = await moveModuleTask(task.id, targetStatus, {
+      note: `Update progress ke ${pct}%`,
+      progressPercent: pct,
+    });
+    const ok = result !== false;
     progressBusy = false;
     if (!ok) progressError = describeActionError();
   }
@@ -653,45 +730,185 @@
     return raw || 'Gagal menerapkan — cek permission Anda.';
   }
 
-  // --- Accordion: lapor issue/catatan — dikirim bareng tombol Apply (progress/kanban), bukan tombol sendiri lagi ---
-  let issueText = $state('');
-  let issueError = $state('');
-
   // --- Accordion: upload evidence/screenshot, bisa lebih dari 1 file ---
-  // Begitu file dipilih, langsung diupload (nggak perlu klik tombol submit terpisah lagi).
+  // File dipilih dulu (staged) agar user bisa mengisi catatan evidence terlebih dahulu,
+  // lalu diunggah via tombol "Upload Evidence" atau otomatis saat klik "Apply".
+  /** @type {File[]} */
+  let pickedEvidenceFiles = $state([]);
   let evidenceNote = $state('');
   let evidenceUploading = $state(false);
   let evidenceError = $state('');
 
-  /** @param {any} task @param {Event} e */
-  async function pickEvidenceFiles(task, e) {
+  /** @param {Event} e */
+  function onSelectEvidenceFiles(e) {
     const input = /** @type {HTMLInputElement} */ (e.currentTarget);
     const files = Array.from(input.files || []);
     if (!files.length) return;
+    pickedEvidenceFiles = [...pickedEvidenceFiles, ...files];
+    evidenceError = '';
+    input.value = '';
+  }
+
+  /** @param {number} idx */
+  function removePickedEvidenceFile(idx) {
+    pickedEvidenceFiles = pickedEvidenceFiles.filter((_, i) => i !== idx);
+  }
+
+  function cancelPickedEvidence() {
+    pickedEvidenceFiles = [];
+    evidenceError = '';
+  }
+
+  /** @param {any} task */
+  async function submitEvidenceFiles(task) {
+    if (!pickedEvidenceFiles.length || !canUpdateTaskProgress(task)) return;
     evidenceUploading = true;
     evidenceError = '';
     try {
-      const evidences = await Promise.all(files.map((f) => readEvidenceFile(f)));
-      const ok = await addTaskEvidenceFiles(task.id, evidences, evidenceNote.trim());
+      const evidences = await Promise.all(pickedEvidenceFiles.map((f) => readEvidenceFile(f)));
+      const ok = await addTaskEvidenceFiles(task.id, evidences, evidenceNote.trim(), progressDraft);
       if (ok) {
+        pickedEvidenceFiles = [];
         evidenceNote = '';
       } else {
-        evidenceError = 'Sebagian/semua file gagal diupload.';
+        evidenceError = taskModuleStore.lastActionError || 'Sebagian/semua file gagal diupload.';
       }
     } catch (err) {
       evidenceError = err instanceof Error ? err.message : String(err);
     }
     evidenceUploading = false;
-    input.value = '';
   }
 
   /** Reset semua draft accordion saat pindah/tutup row supaya tidak bocor ke task lain. */
   function resetAccordionDrafts() {
     progressError = '';
-    issueText = '';
-    issueError = '';
+    pickedEvidenceFiles = [];
     evidenceNote = '';
     evidenceError = '';
+  }
+
+  /**
+   * Susun riwayat journey progres task dari awal pembuatan, seluruh status_moves,
+   * bukti evidence per milestone, hingga respon persetujuan/return PM.
+   * @param {any} task
+   */
+  function getTaskJourney(task) {
+    if (!task) return [];
+    /** @type {any[]} */
+    const moves = task.status_moves || [];
+    /** @type {any[]} */
+    const evidences = task.evidences || [];
+    /** @type {any[]} */
+    const activities = (task.activity || []).filter((a) => a.action_type === 'approval');
+
+    const steps = [];
+
+    // Step 1: Titik awal pembuatan task (0% / Backlog)
+    const initEvidences = evidences.filter(
+      (e) => e.progress_percent === 0 || (e.progress_percent === null && moves.length === 0),
+    );
+    steps.push({
+      id: `init-${task.id}`,
+      stepNum: 1,
+      pct: 0,
+      toStatus: 'backlog',
+      status: 'approved',
+      statusLabel: 'Backlog (Awal)',
+      requestedBy: task.created_by || 'Creator',
+      at: task.created_at,
+      note: task.description || 'Task dibuat.',
+      evidences: initEvidences,
+      feedback: null,
+    });
+
+    if (moves.length === 0) {
+      const currentPct = displayProgress(task);
+      if (currentPct > 0 || task.status !== 'backlog') {
+        const remainingEvidences = evidences.filter((e) => !initEvidences.includes(e));
+        steps.push({
+          id: `curr-${task.id}`,
+          stepNum: 2,
+          pct: currentPct,
+          toStatus: task.status,
+          status: isTaskReturned(task) ? 'rejected' : 'approved',
+          statusLabel: workflowLabel(task.status),
+          requestedBy: task.assignees?.join(', ') || task.created_by || 'Tim Teknis',
+          at: task.updated_at || task.created_at,
+          note: `Progress berjalan di ${currentPct}% (${workflowLabel(task.status)})`,
+          evidences: remainingEvidences,
+          feedback: isTaskReturned(task)
+            ? {
+                type: 'return',
+                actor: getReturnInfo(task)?.actor || 'PM',
+                at: getReturnInfo(task)?.at,
+                text: getReturnInfo(task)?.note || 'Perlu revisi.',
+                evidenceId: getReturnInfo(task)?.evidence_id,
+              }
+            : null,
+        });
+      }
+      return steps;
+    }
+
+    moves.forEach((m, idx) => {
+      const targetPct = m.to_progress_percent !== null ? Number(m.to_progress_percent) : (taskProgress(m.to) || 0);
+      const moveEvidences = evidences.filter((e) => Number(e.progress_percent) === targetPct);
+
+      let feedback = null;
+      if (m.status !== 'pending') {
+        const feedbackAct = activities.find((a) => {
+          if (!m.at) return false;
+          const actTime = new Date(a.at).getTime();
+          const moveTime = new Date(m.at).getTime();
+          return actTime >= moveTime - 5000;
+        }) || activities[0];
+
+        if (feedbackAct) {
+          feedback = {
+            type: m.status === 'approved' ? 'approved' : 'return',
+            actor: feedbackAct.actor || 'PIC/Admin',
+            at: feedbackAct.at,
+            text: feedbackAct.reason || feedbackAct.description || (m.status === 'approved' ? 'Disetujui oleh PIC.' : 'Dikembalikan untuk revisi.'),
+            evidenceId: feedbackAct.evidence_id,
+          };
+        } else if (m.status === 'rejected') {
+          const ret = getReturnInfo(task);
+          if (ret) {
+            feedback = {
+              type: 'return',
+              actor: ret.actor || 'PM',
+              at: ret.at,
+              text: ret.note || 'Perlu revisi.',
+              evidenceId: ret.evidence_id,
+            };
+          }
+        }
+      }
+
+      steps.push({
+        id: m.id,
+        stepNum: idx + 2,
+        pct: targetPct,
+        toStatus: m.to,
+        status: m.status,
+        requestedBy: m.requested_by || 'Tim Teknis',
+        at: m.at,
+        note: m.note || `Pengajuan progress ke ${targetPct}% (${workflowLabel(m.to)})`,
+        evidences: moveEvidences,
+        feedback,
+      });
+    });
+
+    return steps;
+  }
+
+  /**
+   * Filter lampiran evidence milik progress tertentu.
+   * @param {any} task
+   * @param {number} pct
+   */
+  function evidencesForProgress(task, pct) {
+    return (task?.evidences || []).filter((e) => Number(e.progress_percent) === pct);
   }
 
   /** Entry activity paling baru yang merupakan keputusan approve/reject (bukan sekadar status_change biasa). @param {any} task */
@@ -746,8 +963,9 @@
 
   const versionProgress = $derived.by(() => {
     const total = versionTasks.length;
-    const done = versionTasks.filter((task) => task.status === 'selesai').length;
-    return { total, pct: total ? Math.round((done / total) * 100) : 0 };
+    if (!total) return { total: 0, pct: 0 };
+    const sum = versionTasks.reduce((acc, task) => acc + displayProgress(task), 0);
+    return { total, pct: Math.round(sum / total) };
   });
 
   const dashboardActivity = $derived.by(() => {
@@ -828,8 +1046,9 @@
   function progressOfGroup(group) {
     const tasks = group.versions.flatMap((version) => tasksForRequirement(version.id));
     const total = tasks.length;
-    const done = tasks.filter((task) => task.status === 'selesai').length;
-    return { total, pct: total ? Math.round((done / total) * 100) : 0 };
+    if (!total) return { total: 0, pct: 0 };
+    const sum = tasks.reduce((acc, task) => acc + displayProgress(task), 0);
+    return { total, pct: Math.round(sum / total) };
   }
   /**
    * @param {'development' | 'production'} env
@@ -851,11 +1070,29 @@
   const prodFields = $derived(selectedDetail ? envFields('production') : []);
   const profileFields = $derived.by(() => {
     const meta = selectedDetail?.metadata || {};
-    return profileSpec.map((field) => ({
+    const list = profileSpec.map((field) => ({
       id: `meta:${field.key}`,
       label: field.label,
       value: String(meta[field.key] || ''),
     }));
+    const standardKeys = new Set([
+      ...profileSpec.map((f) => f.key),
+      'source_system', 'deploy', 'pm', 'refresh_cadence',
+      'development_link', 'production_link',
+      'development_db', 'development_ip', 'development_db_name', 'development_db_user', 'development_db_pass',
+      'production_db', 'production_ip', 'production_db_name', 'production_db_user', 'production_db_pass',
+    ]);
+    for (const [k, v] of Object.entries(meta)) {
+      if (!standardKeys.has(k) && !k.startsWith('development_') && !k.startsWith('production_')) {
+        const readableLabel = k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+        list.push({
+          id: `meta:${k}`,
+          label: readableLabel,
+          value: String(v || ''),
+        });
+      }
+    }
+    return list;
   });
   const teamPeople = $derived.by(() => {
     /** @type {{ id: string, name: string, role: string, removable: boolean }[]} */
@@ -1021,6 +1258,113 @@
           {/if}
         </div>
       {/snippet}
+
+      {#snippet taskJourneySnippet(task)}
+        {@const journey = getTaskJourney(task)}
+        <div class="task-journey-container simplified">
+          <div class="journey-header">
+            <div class="journey-header-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+              <span>Riwayat & Journey Progress Task</span>
+            </div>
+          </div>
+
+          <div class="task-journey-timeline">
+            {#each journey as step, i (step.id)}
+              <div class="journey-step {step.status}">
+                <div class="journey-rail">
+                  <div class="journey-badge-dot" title="Step {step.stepNum}: {step.pct}%">
+                    {#if step.status === 'approved'}
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    {:else if step.status === 'rejected'}
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                      </svg>
+                    {:else if step.status === 'pending'}
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10"/>
+                        <polyline points="12 6 12 12 14 14"/>
+                      </svg>
+                    {:else}
+                      <span style="font-size: 9px; font-weight: 700;">{step.stepNum}</span>
+                    {/if}
+                  </div>
+                  {#if i < journey.length - 1}
+                    <div class="journey-line"></div>
+                  {/if}
+                </div>
+
+                <div class="journey-content-card">
+                  <div class="journey-card-top">
+                    <div class="journey-step-tag">
+                      <span class="step-pct-badge">{step.pct}%</span>
+                      <span class="step-title">
+                        {step.toStatus ? workflowLabel(step.toStatus) : (step.statusLabel || 'Progress Milestone')}
+                      </span>
+                      <span class="journey-author">
+                        · Oleh: <strong>{step.requestedBy}</strong>
+                        {#if step.at} · {formatDate(step.at)}{/if}
+                      </span>
+                    </div>
+                    <span class="status-pill pill-{step.status}">
+                      {#if step.status === 'approved'}
+                        Disetujui PM
+                      {:else if step.status === 'rejected'}
+                        Perlu Revisi / Returned
+                      {:else if step.status === 'pending'}
+                        Menunggu Approval PM
+                      {:else}
+                        Status
+                      {/if}
+                    </span>
+                  </div>
+
+                  {#if step.note && !step.note.startsWith('Update progress ke')}
+                    <div class="journey-simple-note">
+                      <span class="journey-note-label">Catatan:</span>
+                      <span class="journey-note-val">"{step.note}"</span>
+                    </div>
+                  {/if}
+
+                  {#if step.evidences && step.evidences.length > 0}
+                    <div class="journey-simple-evidences">
+                      <span class="journey-ev-label">Evidence ({step.evidences.length}):</span>
+                      <div class="journey-ev-inline-list">
+                        {#each step.evidences as ev (ev.id)}
+                          <span class="journey-ev-item">
+                            <a href={fileUrl(ev.file_url)} target="_blank" rel="noopener noreferrer" class="journey-ev-link">{ev.name}</a>
+                            {#if ev.note}
+                              <small class="journey-ev-item-note">("{ev.note}")</small>
+                            {/if}
+                          </span>
+                        {/each}
+                      </div>
+                    </div>
+                  {/if}
+
+                  {#if step.feedback}
+                    <div class="journey-simple-feedback feedback-{step.feedback.type}">
+                      <span class="feedback-author">Respon PM ({step.feedback.actor}):</span>
+                      <span class="feedback-text">"{step.feedback.text}"</span>
+                      {#if step.feedback.evidenceId}
+                        <a href="/api/evidences/{step.feedback.evidenceId}/file" target="_blank" rel="noopener noreferrer" class="feedback-link">
+                          Lampiran PM
+                        </a>
+                      {/if}
+                    </div>
+                  {/if}
+                </div>
+              </div>
+            {/each}
+          </div>
+        </div>
+      {/snippet}
       <!-- ERP Standard Object Header -->
       <div class="erp-object-header">
         <div class="erp-header-top">
@@ -1058,6 +1402,21 @@
           </div>
 
           <div class="erp-actions">
+            {#if canEdit}
+              <button
+                type="button"
+                class="btn-outline btn-edit-dash"
+                onclick={() => (editOpen = true)}
+                title="Edit informasi dashboard ini"
+                style="display:inline-flex; align-items:center; gap:6px;"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+                <span>Edit Dashboard</span>
+              </button>
+            {/if}
             <AttachmentPanel
               ownerType="dashboard"
               ownerId={selectedDetail.id}
@@ -1110,10 +1469,8 @@
               </ul>
             {/if}
           </div>
-        {:else if work === 'tasks' || work === 'task'}
-          <button type="button" class="progress-link work-back" onclick={() => (work === 'task' ? closeTask() : (work = 'overview'))}>← Back</button>
-        {/if}
-        {#if work === 'tasks'}
+        {:else if work === 'tasks'}
+          <button type="button" class="progress-link work-back" onclick={() => (work = 'overview')}>← Back</button>
           <div class="work-surface">
             <TaskList
               lockedDashboard={dashName}
@@ -1122,18 +1479,12 @@
               onOpenBoard={() => (work = 'overview')}
             />
           </div>
-        {:else if work === 'task'}
-          <div class="work-surface">
-            {#key focusTaskId}
-              <TaskDetail taskId={focusTaskId} embedded onBack={closeTask} />
-            {/key}
-          </div>
         {:else if work !== 'source' && work !== 'activity'}
         <div class="sheet">
           <div class="sheet-facts">
             <div class="sheet-fact">
               <span>Unit</span>
-              <strong>{selectedDetail.category || selectedDetail.platform || '—'}</strong>
+              <strong>{selectedDetail.category || '—'}</strong>
             </div>
             <div class="sheet-fact">
               <span>Created</span>
@@ -1271,7 +1622,7 @@
           <section class="sheet-block">
             <header class="sheet-head sheet-head-req">
               <div class="sheet-head-title">
-                <h3 class="sheet-section-title">Requirement</h3>
+                <h3 class="sheet-section-title">Requirement/Batch</h3>
                 {#if activeGroup}
                   <div class="version-history" role="group" aria-label="Filter versi">
                     {#each [...activeGroup.versions].reverse() as version (version.id)}
@@ -1305,7 +1656,7 @@
             {:else}
               {@const files = filesFor(activeVersion.id)}
               {#if dashRequirements.length > 1}
-                <div class="req-picks" role="tablist" aria-label="Requirement">
+                <div class="req-picks" role="tablist" aria-label="Requirement/Batch">
                   {#each dashRequirements as group (group.root.id)}
                     <button
                       type="button"
@@ -1394,7 +1745,29 @@
                               {task.title}
                             </span>
                           </td>
-                          <td>{task.assignees?.length ? task.assignees.join(', ') : '—'}</td>
+                          <td>
+                            <div class="assignee-cell">
+                              <span class="assignee-names">
+                                {task.assignees?.length ? task.assignees.join(', ') : '—'}
+                              </span>
+                              {#if isAdminOrManager}
+                                <button
+                                  type="button"
+                                  class="assignee-pop-trigger icon-only"
+                                  title="Kelola Assignee (+ / −)"
+                                  aria-label="Kelola Assignee"
+                                  onclick={(e) => { e.stopPropagation(); openManageAssignee(task.id); }}
+                                >
+                                  <svg class="trigger-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                                    <circle cx="9" cy="7" r="4" />
+                                    <line x1="19" y1="8" x2="19" y2="14" />
+                                    <line x1="16" y1="11" x2="22" y2="11" />
+                                  </svg>
+                                </button>
+                              {/if}
+                            </div>
+                          </td>
                           <td>{task.evidences?.length || '—'}</td>
                           <td>
                             <span class="prog-bar" title="{pct}%">
@@ -1405,12 +1778,15 @@
                           <td>
                             <span class="task-status" style="color: {workflowStatusColor(task.status)}; background: {workflowStatusColor(task.status)}22">{workflowLabel(task.status)}</span>
                             {#if isTaskReturned(task)}
-                              <span class="task-returned-badge" title="Task dikembalikan oleh Admin untuk revisi">↩ Returned</span>
+                              <span class="task-returned-badge" title="Task dikembalikan oleh Admin untuk revisi">Returned</span>
+                            {/if}
+                            {#if task.status_move}
+                              <span class="task-status-req-badge" title="Menunggu approval PM">Minta {workflowLabel(task.status_move.to)}</span>
                             {/if}
                           </td>
                           <td>{formatDate(task.deadline)}</td>
                           <td class="task-actions-col">
-                            {#if isAdminOrManager}
+                            {#if (isAdminOrManager || canDecideApproval(task)) && hasPendingApproval(task)}
                               <div class="task-row-actions">
                                 <button
                                   type="button"
@@ -1418,7 +1794,12 @@
                                   title="Approve / Accept task"
                                   aria-label="Approve task"
                                   onclick={(e) => { e.stopPropagation(); openAcceptModal(task.id); }}
-                                >✓</button>
+                                >
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <polyline points="20 6 9 17 4 12" />
+                                  </svg>
+                                  <span>Approve</span>
+                                </button>
                                 <button
                                   type="button"
                                   class="task-action-btn btn-return"
@@ -1426,47 +1807,30 @@
                                   aria-label="Return task ke tim teknis"
                                   onclick={(e) => { e.stopPropagation(); openReturnModal(task.id); }}
                                 >
-                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                     <polyline points="9 14 4 9 9 4" />
                                     <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
                                   </svg>
+                                  <span>Return</span>
                                 </button>
-                                <button
-                                  type="button"
-                                  class="task-action-btn btn-assignee"
-                                  title="Add assignee"
-                                  aria-label="Add assignee"
-                                  onclick={(e) => { e.stopPropagation(); openAddAssignee(task.id); }}
-                                >+</button>
-                                {#if task.assignees?.length}
-                                  <button
-                                    type="button"
-                                    class="task-action-btn btn-remove-assignee"
-                                    title="Remove assignee"
-                                    aria-label="Remove assignee"
-                                    onclick={(e) => { e.stopPropagation(); openRemoveAssignee(task.id); }}
-                                  >−</button>
-                                {/if}
                               </div>
+                            {:else if isTaskReturned(task)}
+                              <!-- Bagian Tim Teknis / Info: Hanya bisa lihat catatan ketika task di-return -->
+                              <button
+                                type="button"
+                                class="task-action-btn btn-view-return"
+                                title="Lihat Catatan Return dari Admin (Hanya Baca)"
+                                aria-label="Lihat Catatan Return dari Admin"
+                                onclick={(e) => { e.stopPropagation(); readOnlyReturnTaskId = task.id; }}
+                              >
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                  <polyline points="9 14 4 9 9 4" />
+                                  <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+                                </svg>
+                                <span class="btn-return-label">Lihat Return</span>
+                              </button>
                             {:else}
-                              <!-- Bagian Tim Teknis: Hanya bisa lihat saja ketika task di-return -->
-                              {#if isTaskReturned(task)}
-                                <button
-                                  type="button"
-                                  class="task-action-btn btn-view-return"
-                                  title="Lihat Catatan Return dari Admin (Hanya Baca)"
-                                  aria-label="Lihat Catatan Return dari Admin"
-                                  onclick={(e) => { e.stopPropagation(); readOnlyReturnTaskId = task.id; }}
-                                >
-                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                    <polyline points="9 14 4 9 9 4" />
-                                    <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
-                                  </svg>
-                                  <span class="btn-return-label">Lihat Return</span>
-                                </button>
-                              {:else}
-                                <span class="readonly-dash" title="Hanya bisa melihat task">—</span>
-                              {/if}
+                              <span class="readonly-dash" title="Belum ada update pengajuan dari tim teknis">—</span>
                             {/if}
                           </td>
                         </tr>
@@ -1480,11 +1844,11 @@
                                     <div class="task-return-banner">
                                       <div class="return-banner-top">
                                         <div class="return-banner-title">
-                                          <span class="return-banner-badge">⚠️ TASK DIKEMBALIKAN (RETURN) OLEH ADMIN</span>
+                                          <span class="return-banner-badge">TASK DIKEMBALIKAN (RETURN) OLEH ADMIN</span>
                                           <span class="return-banner-meta">Oleh: <strong>{ret.actor}</strong> {ret.at ? `· ${formatDate(ret.at)}` : ''}</span>
                                         </div>
                                         {#if !isAdminOrManager}
-                                          <span class="return-readonly-tag">👁️ Mode Teknis · Hanya Lihat</span>
+                                          <span class="return-readonly-tag">Mode Teknis · Hanya Lihat</span>
                                         {/if}
                                       </div>
                                       <div class="return-banner-body">
@@ -1493,7 +1857,7 @@
                                         {#if ret.evidence_id}
                                           <div class="return-banner-evidence">
                                             <a href="/api/evidences/{ret.evidence_id}/file" target="_blank" rel="noopener noreferrer" class="return-evidence-btn">
-                                              📎 Buka File Lampiran Bukti dari Admin
+                                              Buka File Lampiran Bukti dari Admin
                                             </a>
                                           </div>
                                         {/if}
@@ -1501,149 +1865,505 @@
                                     </div>
                                   {/if}
                                 {/if}
-                                <div class="task-accordion-cols">
-                                  <div class="task-accordion-left">
-                                    <div class="task-approval-outcome">
-                                      <span class="task-accordion-label">Status Approval</span>
-                                      {#if task.status_move}
-                                        <span class="approval-state-badge" data-state="pending">Menunggu Approval</span>
-                                      {:else}
-                                        <span class="approval-state-badge" data-state={task.approval_state}>{approvalLabel(task.approval_state)}</span>
-                                      {/if}
-                                      {#if task.status_move}
-                                        <p class="task-accordion-empty">
-                                          {#if task.status_move.to !== task.status && task.status_move.to_progress_percent !== null}
-                                            Minta pindah {workflowLabel(task.status_move.to)} dengan progress {task.status_move.to_progress_percent}% — menunggu keputusan PIC.
-                                          {:else if task.status_move.to !== task.status}
-                                            Minta pindah ke {workflowLabel(task.status_move.to)} — menunggu keputusan PIC.
-                                          {:else}
-                                            Minta update progress ke {task.status_move.to_progress_percent}% — menunggu keputusan PIC.
+                                {#if isAdminOrManager || canDecideApproval(task)}
+                                  <!-- POV PM: Tampilan informatif status %, posisi lifecycle, file evidence, catatan issue & notes evidence -->
+                                  <div class="pm-task-detail-card">
+                                    <!-- Header: Status % dan Posisi Task di Kanannya -->
+                                    <div class="pm-task-header-row">
+                                      <div class="pm-task-progress-box">
+                                        <span class="pm-metric-label">Status & Progress</span>
+                                        <div class="pm-progress-hero">
+                                          <span class="pm-progress-pct" style="color: {workflowStatusColor(task.status)}">{pct}%</span>
+                                          <div class="pm-progress-bar-track">
+                                            <div class="pm-progress-bar-fill" style="width: {pct}%; background: {workflowStatusColor(task.status)}"></div>
+                                          </div>
+                                        </div>
+                                        <div class="pm-status-pill-wrap">
+                                          <span
+                                            class="task-status"
+                                            style="color: {workflowStatusColor(task.status)}; background: {workflowStatusColor(task.status)}22"
+                                          >
+                                            {workflowLabel(task.status)}
+                                          </span>
+                                          {#if isTaskReturned(task)}
+                                            <span class="task-returned-badge" title="Task dalam status revisi">Returned</span>
                                           {/if}
-                                        </p>
-                                      {:else if hasPendingApproval(task)}
-                                        <p class="task-accordion-empty">Menunggu keputusan — gunakan tombol ✓ (Approve) atau return pada baris task.</p>
-                                      {:else if lastApprovalDecision(task)}
-                                        {@const decision = lastApprovalDecision(task)}
-                                        <p class="task-decision-note">{decision.action}<br /><small>{decision.actor} · {formatDate(decision.at)}</small></p>
-                                      {/if}
-                                    </div>
+                                          {#if task.status_move}
+                                            <span class="task-status-req-badge">Minta {workflowLabel(task.status_move.to)}</span>
+                                          {/if}
+                                        </div>
+                                      </div>
 
-                                    <div class="task-progress-edit">
-                                      <span class="task-accordion-label">Update Progress</span>
-                                      <input
-                                        type="range"
-                                        min="0"
-                                        max="100"
-                                        step="5"
-                                        value={progressDraft}
-                                        oninput={(e) => (progressDraft = Number(e.currentTarget.value))}
-                                        onclick={(e) => e.stopPropagation()}
-                                      />
-                                      <div class="task-progress-readout">
-                                        <b>{progressDraft}%</b>
+                                      <!-- Kanannya sudah di posisi mana: Visual pipeline kanban lifecycle -->
+                                      <div class="pm-task-stage-tracker">
+                                        <div class="pm-stage-header">
+                                          <span class="pm-metric-label">Posisi Task (Kanban Lifecycle)</span>
+                                          <span class="pm-current-pos-txt">Saat ini di: <strong>{workflowLabel(task.status)}</strong></span>
+                                        </div>
+                                        <div class="pm-pipeline-track">
+                                          {#each workflowColumns as col, idx (col.key)}
+                                            {@const isCurrent = task.status === col.key}
+                                            {@const isTarget = task.status_move?.to === col.key}
+                                            {@const currentIdx = workflowColumns.findIndex((c) => c.key === task.status)}
+                                            {@const isPast = idx < currentIdx}
+                                            <div
+                                              class="pm-pipeline-step"
+                                              class:current={isCurrent}
+                                              class:target={isTarget}
+                                              class:past={isPast}
+                                              style="--step-col: {workflowStatusColor(col.key)}"
+                                            >
+                                              <div class="step-marker">
+                                                {#if isCurrent}
+                                                  <span class="marker-dot current"></span>
+                                                {:else if isTarget}
+                                                  <span class="marker-dot target"></span>
+                                                {:else if isPast}
+                                                  <span class="marker-dot past"></span>
+                                                {:else}
+                                                  <span class="marker-dot"></span>
+                                                {/if}
+                                              </div>
+                                              <span class="step-label">{col.label}</span>
+                                              {#if isCurrent}
+                                                <span class="step-sub-badge active">Posisi Sekarang</span>
+                                              {:else if isTarget}
+                                                <span class="step-sub-badge pending">Diajukan</span>
+                                              {/if}
+                                            </div>
+                                            {#if idx < workflowColumns.length - 1}
+                                              <div class="pm-pipeline-connector" class:filled={idx < currentIdx}></div>
+                                            {/if}
+                                          {/each}
+                                        </div>
                                       </div>
                                     </div>
-                                  </div>
 
-                                  <div class="task-accordion-right">
-                                    <div class="task-accordion-desc-wrap">
-                                      <span class="task-accordion-label">Description</span>
-                                      <p class="task-accordion-desc">{task.description || 'No description.'}</p>
+                                    <!-- Deskripsi & Info Task -->
+                                    <div class="pm-task-desc-strip">
+                                      <div class="pm-desc-col">
+                                        <span class="pm-metric-label">Deskripsi Task</span>
+                                        <p class="pm-desc-text">{task.description || 'Tidak ada deskripsi.'}</p>
+                                      </div>
+                                      <div class="pm-meta-grid">
+                                        <div class="meta-item">
+                                          <span class="meta-lbl">Kode Task:</span>
+                                          <strong>{task.code || '—'}</strong>
+                                        </div>
+                                        <div class="meta-item">
+                                          <span class="meta-lbl">Prioritas:</span>
+                                          <span class="prio-tag prio-{task.priority || 'medium'}">{task.priority || 'Medium'}</span>
+                                        </div>
+                                        <div class="meta-item">
+                                          <span class="meta-lbl">Assignee (Teknis):</span>
+                                          <strong>{task.assignees?.length ? task.assignees.join(', ') : '—'}</strong>
+                                        </div>
+                                        <div class="meta-item">
+                                          <span class="meta-lbl">Deadline:</span>
+                                          <strong>{formatDate(task.deadline)}</strong>
+                                        </div>
+                                        <div class="meta-item">
+                                          <span class="meta-lbl">Dibuat Oleh:</span>
+                                          <span>{task.created_by || '—'}</span>
+                                        </div>
+                                      </div>
                                     </div>
 
-                                    <div class="task-accordion-grid">
-                                      <div>
+                                    <!-- Catatan Pengajuan / Issue dari Tim Teknis -->
+                                    {#if task.status_move}
+                                      <div class="pm-issue-box">
+                                        <div class="pm-issue-header">
+                                          <div class="pm-issue-title">
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                              <polyline points="14 2 14 8 20 8"/>
+                                              <line x1="16" y1="13" x2="8" y2="13"/>
+                                              <line x1="16" y1="17" x2="8" y2="17"/>
+                                              <polyline points="10 9 9 9 8 9"/>
+                                            </svg>
+                                            <strong>Catatan Pengajuan / Issue Tim Teknis ({task.status_move.requested_by || 'Teknis'})</strong>
+                                          </div>
+                                          {#if task.status_move.at}
+                                            <span class="pm-issue-time">{formatDate(task.status_move.at)}</span>
+                                          {/if}
+                                        </div>
+                                        <p class="pm-issue-note-text">
+                                          {task.status_move.note || 'Tidak ada catatan issue tambahan dari teknis saat pengajuan.'}
+                                        </p>
+                                        <div class="pm-issue-meta">
+                                          <span>Permintaan: Dari <strong>{workflowLabel(task.status_move.from)}</strong> → pindah ke <strong>{workflowLabel(task.status_move.to)}</strong>
+                                          {#if task.status_move.to_progress_percent !== null}
+                                            dengan progress <strong>{task.status_move.to_progress_percent}%</strong>
+                                          {/if}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    {/if}
+
+                                    <!-- File Evidence & Notes Evidences (PM) -->
+                                    <div class="pm-section-card pm-evidence-fullwidth">
+                                      <div class="pm-section-header">
+                                        <div class="pm-sec-title">
+                                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                                          </svg>
+                                          <span>File Evidence & Notes Evidence</span>
+                                        </div>
+                                        <span class="pm-badge-count">{task.evidences?.length ?? 0} file</span>
+                                      </div>
+
+                                      {#if task.evidences?.length}
+                                        <div class="pm-evidence-list">
+                                          {#each task.evidences as ev (ev.id)}
+                                            <div class="pm-evidence-item">
+                                              <div class="ev-item-main">
+                                                <div class="ev-file-icon">
+                                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                                    <polyline points="14 2 14 8 20 8"/>
+                                                  </svg>
+                                                </div>
+                                                <div class="ev-file-texts">
+                                                  <a href={fileUrl(ev.file_url)} target="_blank" rel="noopener noreferrer" class="ev-filename" title={ev.name}>
+                                                    {ev.name}
+                                                  </a>
+                                                  <span class="ev-uploader">
+                                                    Oleh: <strong>{ev.actor || 'Teknis'}</strong>
+                                                    {#if ev.size} · {formatFileSize(ev.size)}{/if}
+                                                    {#if ev.at} · {formatDate(ev.at)}{/if}
+                                                  </span>
+                                                </div>
+                                                <div class="ev-item-actions">
+                                                  <a href={fileUrl(ev.file_url)} target="_blank" rel="noopener noreferrer" class="ev-btn-view" title="Buka / download lampiran">
+                                                    <span>Buka</span>
+                                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                                                      <polyline points="15 3 21 3 21 9"/>
+                                                      <line x1="10" y1="14" x2="21" y2="3"/>
+                                                    </svg>
+                                                  </a>
+                                                </div>
+                                              </div>
+                                              <!-- Notes evidences (PM) -->
+                                              <div class="ev-note-container" class:empty={!ev.note}>
+                                                <span class="ev-note-badge">Catatan Evidence:</span>
+                                                {#if ev.note}
+                                                  <span class="ev-note-quote">"{ev.note}"</span>
+                                                {:else}
+                                                  <span class="ev-note-quote-empty">Tidak ada catatan untuk file ini.</span>
+                                                {/if}
+                                              </div>
+                                            </div>
+                                          {/each}
+                                        </div>
+                                      {:else}
+                                        <div class="pm-empty-placeholder">
+                                          <p>Belum ada file evidence yang dilampirkan pada task ini.</p>
+                                        </div>
+                                      {/if}
+                                    </div>
+
+                                    <!-- Tombol Action PM di Accordion jika ada permintaan status_move/approval -->
+                                    {#if (isAdminOrManager || canDecideApproval(task)) && task.status_move}
+                                      <div class="pm-accordion-approval-bar">
+                                        <div class="pm-accordion-approval-left">
+                                          <span class="pm-approval-badge-status">Menunggu Approval PM</span>
+                                          <span class="pm-approval-text">
+                                            Teknis mengajukan pindah ke <strong>{workflowLabel(task.status_move.to)}</strong>
+                                            {#if task.status_move.to_progress_percent !== null}
+                                              dengan progress <strong>{task.status_move.to_progress_percent}%</strong>
+                                            {/if}.
+                                          </span>
+                                        </div>
+                                        <div class="pm-accordion-approval-buttons">
+                                          <button
+                                            type="button"
+                                            class="task-action-btn btn-accept"
+                                            title="Approve / Terima Pengajuan"
+                                            onclick={() => openAcceptModal(task.id)}
+                                          >
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                              <polyline points="20 6 9 17 4 12" />
+                                            </svg>
+                                            <span>Approve</span>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            class="task-action-btn btn-return"
+                                            title="Return / Kembalikan Task ke Tim Teknis"
+                                            onclick={() => openReturnModal(task.id)}
+                                          >
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                              <polyline points="9 14 4 9 9 4" />
+                                              <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+                                            </svg>
+                                            <span>Return</span>
+                                          </button>
+                                        </div>
+                                      </div>
+                                    {/if}
+                                    <!-- Row Paling Bawah Accordion PM: Simplified Journey Progress Task -->
+                                    {@render taskJourneySnippet(task)}
+                                  </div>
+                                {:else}
+                                  <!-- POV Tim Teknis: Task Info Strip + Form Pengajuan Progres Baru + Mini kanban + Apply + Journey di Row Paling Bawah -->
+                                  <div class="task-accordion-info-strip">
+                                    <div class="task-info-main">
+                                      <div class="task-status-outcome">
+                                        <span class="task-accordion-label">Status Saat Ini</span>
+                                        <div class="task-status-badge-wrap">
+                                          <span
+                                            class="task-status"
+                                            style="color: {workflowStatusColor(task.status)}; background: {workflowStatusColor(task.status)}22"
+                                          >
+                                            {workflowLabel(task.status)}
+                                          </span>
+                                          {#if isTaskReturned(task)}
+                                            <span class="task-returned-badge" title="Task dikembalikan oleh PIC untuk revisi">Returned</span>
+                                          {/if}
+                                          {#if task.status_move}
+                                            <span class="task-status-req-badge">Minta {workflowLabel(task.status_move.to)} ({task.status_move.to_progress_percent ?? displayProgress(task)}%)</span>
+                                          {/if}
+                                        </div>
+                                        {#if task.status_move}
+                                          <p class="task-accordion-empty">
+                                            {#if task.status_move.to !== task.status && task.status_move.to_progress_percent !== null}
+                                              Tim teknis meminta pindah ke <strong>{workflowLabel(task.status_move.to)}</strong> dengan progress {task.status_move.to_progress_percent}%.
+                                            {:else if task.status_move.to !== task.status}
+                                              Tim teknis meminta pindah ke <strong>{workflowLabel(task.status_move.to)}</strong>.
+                                            {:else}
+                                              Tim teknis meminta update progress ke {task.status_move.to_progress_percent}%.
+                                            {/if}
+                                          </p>
+                                        {/if}
+                                      </div>
+
+                                      <div class="task-accordion-desc-wrap">
+                                        <span class="task-accordion-label">Description</span>
+                                        <p class="task-accordion-desc">{task.description || 'No description.'}</p>
+                                      </div>
+                                    </div>
+
+                                    <div class="task-info-meta">
+                                      <div class="meta-item">
                                         <span class="task-accordion-label">Code</span>
                                         <span>{task.code || '—'}</span>
                                       </div>
-                                      <div>
+                                      <div class="meta-item">
+                                        <span class="task-accordion-label">Priority</span>
+                                        <span class="prio-tag prio-{task.priority || 'medium'}">{task.priority || 'Medium'}</span>
+                                      </div>
+                                      <div class="meta-item">
                                         <span class="task-accordion-label">Created by</span>
                                         <span>{task.created_by || '—'}</span>
                                       </div>
-                                      <div>
-                                        <span class="task-accordion-label">Priority</span>
-                                        <span>{task.priority || '—'}</span>
-                                      </div>
-                                    </div>
-
-                                    <div class="task-accordion-section">
-                                      <span class="task-accordion-label">Attachments / Evidence ({task.evidences?.length ?? 0})</span>
-                                      {#if task.evidences?.length}
-                                        <ul class="task-accordion-list">
-                                          {#each task.evidences as ev (ev.id)}
-                                            <li><a href={fileUrl(ev.file_url)} target="_blank" rel="noopener noreferrer">{ev.name}</a> <small>· {ev.actor}</small></li>
-                                          {/each}
-                                        </ul>
-                                      {:else}
-                                        <p class="task-accordion-empty">No evidence uploaded yet.</p>
+                                      {#if task.deadline}
+                                        <div class="meta-item">
+                                          <span class="task-accordion-label">Deadline</span>
+                                          <span>{formatDate(task.deadline)}</span>
+                                        </div>
                                       {/if}
-                                      <div class="task-evidence-upload">
-                                        <input type="text" class="task-evidence-note" placeholder="Catatan evidence (opsional)" bind:value={evidenceNote} disabled={evidenceUploading} />
-                                        <input type="file" multiple accept="image/*,.pdf" onchange={(e) => pickEvidenceFiles(task, e)} disabled={evidenceUploading} />
-                                        {#if evidenceUploading}<p class="task-evidence-picked">Mengupload...</p>{/if}
-                                        {#if evidenceError}<p class="field-error">{evidenceError}</p>{/if}
-                                      </div>
-                                    </div>
-
-                                    <div class="task-accordion-section">
-                                      <span class="task-accordion-label">Comments ({task.comments?.length ?? 0})</span>
-                                      {#if task.comments?.length}
-                                        <ul class="task-accordion-list">
-                                          {#each task.comments.slice(0, 3) as c (c.id)}
-                                            <li><strong>{c.actor}</strong>: {c.body}</li>
-                                          {/each}
-                                        </ul>
-                                      {:else}
-                                        <p class="task-accordion-empty">No comments yet.</p>
+                                      {#if task.assignees?.length}
+                                        <div class="meta-item">
+                                          <span class="task-accordion-label">Assignee</span>
+                                          <span>{task.assignees.join(', ')}</span>
+                                        </div>
                                       {/if}
-                                      <div class="task-issue-input">
-                                        <input type="text" placeholder="Tulis issue/catatan... (terkirim bareng tombol Apply di bawah)" bind:value={issueText} disabled={progressBusy} />
-                                        {#if issueError}<p class="field-error">{issueError}</p>{/if}
-                                      </div>
                                     </div>
                                   </div>
-                                </div>
 
-                                <div class="task-mini-kanban">
-                                  <span class="task-accordion-label">Kanban — geser card ke kolom tujuan</span>
-                                  <div class="task-mini-kanban-track">
-                                    {#each workflowColumns as col (col.key)}
-                                      <div
-                                        class="task-mini-kanban-col"
-                                        class:current={task.status === col.key}
-                                        style="--col-color: {workflowStatusColor(col.key)}"
-                                        ondragover={onKanbanColDragOver}
-                                        ondrop={(e) => onKanbanColDrop(e, col.key)}
-                                        role="list"
-                                        aria-label={col.label}
-                                      >
-                                        <span class="task-mini-kanban-col-label">{col.label}</span>
-                                        {#if kanbanDraftStatus === col.key}
-                                          <div
-                                            class="task-mini-kanban-card"
-                                            draggable="true"
-                                            ondragstart={onKanbanCardDragStart}
-                                            role="listitem"
-                                          >{task.title}</div>
+                                  {#if !canUpdateTaskProgress(task)}
+                                    <div class="task-readonly-notice">
+                                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <circle cx="12" cy="12" r="10"></circle>
+                                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                                      </svg>
+                                      <span>Mode lihat — Task ini ditugaskan kepada <strong>{task.assignee || 'rekan teknis lain'}</strong>. Anda dapat melihat progres dan riwayat pekerjaan di bawah, namun tidak dapat mengupdate progres task rekan teknis Anda.</span>
+                                    </div>
+                                  {:else}
+                                    <div class="task-new-submission-box">
+                                      <div class="submission-box-header">
+                                        <div class="submission-title-wrap">
+                                          <span class="submission-title">Pengajuan Progres Task</span>
+                                          <span class="submission-target-pill">Target: {progressDraft}% ({workflowLabel(statusForProgress(progressDraft))})</span>
+                                        </div>
+                                      </div>
+
+                                      <div class="submission-box-grid">
+                                        <!-- Kiri: Slider Target Progres -->
+                                        <div class="task-form-field submission-slider-col">
+                                          <span class="field-title">Geser Target Progres:</span>
+                                          <input
+                                            type="range"
+                                            min="0"
+                                            max="100"
+                                            step="5"
+                                            value={progressDraft}
+                                            oninput={(e) => (progressDraft = Number(e.currentTarget.value))}
+                                            onclick={(e) => e.stopPropagation()}
+                                          />
+                                          <div class="task-progress-readout">
+                                            <b>{progressDraft}%</b>
+                                            <span class="task-progress-hint">Approval terakhir PM: <strong>{displayProgress(task)}% ({workflowLabel(task.status)})</strong></span>
+                                          </div>
+                                        </div>
+
+                                        <!-- Kanan: Upload Evidence untuk Progres Ini -->
+                                        <div class="task-form-field submission-evidence-col">
+                                          <span class="field-title">Upload Evidence untuk Progres {progressDraft}%:</span>
+                                          {#if pickedEvidenceFiles.length > 0}
+                                            <div class="task-evidence-staged-box">
+                                              <span class="staged-box-label">File Dipilih ({pickedEvidenceFiles.length}):</span>
+                                              <div class="staged-file-chips">
+                                                {#each pickedEvidenceFiles as file, idx}
+                                                  <span class="staged-chip">
+                                                    <span class="chip-name" title={file.name}>{file.name}</span>
+                                                    <span class="chip-size">({formatFileSize(file.size)})</span>
+                                                    <button
+                                                      type="button"
+                                                      class="btn-remove-staged"
+                                                      onclick={() => removePickedEvidenceFile(idx)}
+                                                      title="Hapus file ini"
+                                                      style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:13px; font-weight:700; padding:0 2px; line-height:1;"
+                                                    >×</button>
+                                                  </span>
+                                                {/each}
+                                              </div>
+                                            </div>
+                                          {/if}
+
+                                          <div class="task-evidence-bar">
+                                            <input
+                                              type="text"
+                                              class="task-evidence-note"
+                                              placeholder={pickedEvidenceFiles.length > 0 ? "Catatan untuk file evidence ini..." : `Catatan evidence untuk ${progressDraft}% (opsional)...`}
+                                              bind:value={evidenceNote}
+                                              disabled={evidenceUploading}
+                                            />
+                                            <label class="task-evidence-file-btn" class:has-files={pickedEvidenceFiles.length > 0}>
+                                              <input
+                                                type="file"
+                                                multiple
+                                                accept="image/*,.pdf"
+                                                onchange={onSelectEvidenceFiles}
+                                                disabled={evidenceUploading}
+                                              />
+                                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                                              </svg>
+                                              <span>{pickedEvidenceFiles.length > 0 ? '+ Tambah File' : 'Pilih File Evidence'}</span>
+                                            </label>
+
+                                            {#if pickedEvidenceFiles.length > 0}
+                                              <button
+                                                type="button"
+                                                class="task-evidence-btn-upload"
+                                                disabled={evidenceUploading}
+                                                onclick={() => submitEvidenceFiles(task)}
+                                                title="Upload file evidence beserta catatannya"
+                                              >
+                                                {#if evidenceUploading}
+                                                  <span class="btn-spinner sm"></span>
+                                                  <span>Mengupload...</span>
+                                                {:else}
+                                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                                    <polyline points="17 8 12 3 7 8"/>
+                                                    <line x1="12" y1="3" x2="12" y2="15"/>
+                                                  </svg>
+                                                  <span>Upload Evidence</span>
+                                                {/if}
+                                              </button>
+
+                                              <button
+                                                type="button"
+                                                class="task-evidence-btn-cancel"
+                                                disabled={evidenceUploading}
+                                                onclick={cancelPickedEvidence}
+                                                title="Batal pilih file"
+                                              >
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                                                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                                                </svg>
+                                                <span>Batal</span>
+                                              </button>
+                                            {/if}
+                                          </div>
+                                          {#if evidenceUploading}<p class="task-evidence-picked">Mengupload file evidence untuk {progressDraft}%...</p>{/if}
+                                          {#if evidenceError}<p class="field-error">{evidenceError}</p>{/if}
+
+                                          {#if evidencesForProgress(task, progressDraft).length > 0}
+                                            <div class="task-draft-ev-list">
+                                              {#each evidencesForProgress(task, progressDraft) as ev (ev.id)}
+                                                <span class="task-draft-ev-item">
+                                                  <a href={fileUrl(ev.file_url)} target="_blank" rel="noopener noreferrer">{ev.name}</a>
+                                                  {#if ev.note}<small>("{ev.note}")</small>{/if}
+                                                </span>
+                                              {/each}
+                                            </div>
+                                          {:else}
+                                            <p class="task-draft-ev-empty">Belum ada file evidence khusus untuk milestone {progressDraft}% ini.</p>
+                                          {/if}
+                                        </div>
+                                      </div>
+
+                                      <!-- Mini Kanban Track -->
+                                      <div class="task-mini-kanban">
+                                        <span class="task-accordion-label">Kanban — geser card ke kolom tujuan</span>
+                                        <div class="task-mini-kanban-track">
+                                          {#each workflowColumns as col (col.key)}
+                                            {@const isCardHere = (kanbanDraftStatus || task.status) === col.key}
+                                            <div
+                                              class="task-mini-kanban-col"
+                                              class:current={task.status === col.key}
+                                              class:has-card={isCardHere}
+                                              style="--col-color: {workflowStatusColor(col.key)}; cursor: pointer;"
+                                              ondragover={onKanbanColDragOver}
+                                              ondrop={(e) => onKanbanColDrop(e, col.key)}
+                                              onclick={(e) => { e.stopPropagation(); kanbanDraftStatus = col.key; }}
+                                              role="list"
+                                              aria-label={col.label}
+                                            >
+                                              <span class="task-mini-kanban-col-label">{col.label}</span>
+                                              {#if isCardHere}
+                                                <div
+                                                  class="task-mini-kanban-card"
+                                                  draggable="true"
+                                                  ondragstart={onKanbanCardDragStart}
+                                                  onclick={(e) => e.stopPropagation()}
+                                                  role="listitem"
+                                                >{task.title}</div>
+                                              {/if}
+                                            </div>
+                                          {/each}
+                                        </div>
+                                        {#if (progressDraft !== displayProgress(task) || (Boolean(kanbanDraftStatus) && kanbanDraftStatus !== task.status)) && !canApplyProgress}
+                                          <p class="field-error">Samakan dulu posisi slider progress dengan kolom kanban yang digeser sebelum Apply.</p>
                                         {/if}
+                                        {#if progressError}<p class="field-error">{progressError}</p>{/if}
+                                        <div class="task-kanban-actions">
+                                          <button
+                                            type="button"
+                                            class="task-action-btn task-progress-apply"
+                                            disabled={progressBusy || !canApplyProgress}
+                                            title="Terapkan perubahan progress dan status task"
+                                            onclick={(e) => { e.stopPropagation(); applyProgress(task); }}
+                                          >
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                              <polyline points="20 6 9 17 4 12" />
+                                            </svg>
+                                            <span>{progressBusy ? 'Menerapkan...' : 'Apply'}</span>
+                                          </button>
+                                        </div>
                                       </div>
-                                    {/each}
-                                  </div>
-                                  {#if !canApplyProgress}
-                                    <p class="field-error">Samakan dulu posisi slider progress dengan kolom kanban yang digeser sebelum Apply.</p>
+                                    </div>
                                   {/if}
-                                  {#if progressError}<p class="field-error">{progressError}</p>{/if}
-                                  <button
-                                    type="button"
-                                    class="task-action-btn task-progress-apply"
-                                    disabled={progressBusy || !canApplyProgress}
-                                    onclick={(e) => { e.stopPropagation(); applyProgress(task); }}
-                                  >{progressBusy ? 'Menerapkan...' : 'Apply'}</button>
-                                </div>
 
-                                <button type="button" class="task-accordion-open" onclick={(e) => { e.stopPropagation(); openTask(task.id, 'requirement'); }}>
-                                  Open Full Task Detail →
-                                </button>
+                                  <!-- Row Paling Bawah Accordion: Simplified Journey Progress Task -->
+                                  {@render taskJourneySnippet(task)}
+                                {/if}
                               </div>
                             </td>
                           </tr>
@@ -1710,10 +2430,10 @@
           </div>
           {#if task.status_move}
             <p class="approval-row-note">Permintaan pindah status ke <strong>{workflowLabel(task.status_move.to)}</strong> akan disetujui (Approved).</p>
-          {:else if task.approval_state === 'pending'}
-            <p class="approval-row-note">Pengajuan task baru akan disetujui (Approved) dan masuk ke Backlog.</p>
+          {:else if isTaskReturned(task)}
+            <p class="approval-row-note">Task yang sebelumnya dikembalikan akan disetujui kembali (Approved) oleh PIC.</p>
           {:else}
-            <p class="approval-row-note">Task akan disetujui (Accept override oleh Admin).</p>
+            <p class="approval-row-note">Task ini disetujui oleh PIC/Admin.</p>
           {/if}
 
           <label class="approval-note-field">
@@ -1771,8 +2491,6 @@
           </div>
           {#if task.status_move}
             <p class="approval-row-note">Permintaan pindah status ke <strong>{workflowLabel(task.status_move.to)}</strong> akan dikembalikan (Return) untuk direvisi.</p>
-          {:else if task.approval_state === 'pending'}
-            <p class="approval-row-note">Task akan dikembalikan ke status revisi untuk diperbaiki oleh tim teknis.</p>
           {:else}
             <p class="approval-row-note">Task akan dikembalikan ke tim teknis untuk revisi / perbaikan.</p>
           {/if}
@@ -1814,63 +2532,114 @@
   {/if}
 {/if}
 
-{#if addAssigneePopupKey}
-  {@const task = versionTasks.find((t) => t.id === addAssigneePopupKey)}
+{#if manageAssigneeTaskId}
+  {@const task = versionTasks.find((t) => t.id === manageAssigneeTaskId)}
   {#if task}
-    <div class="req-detail-backdrop" use:portal role="presentation" onclick={closeAddAssignee}></div>
-    <form class="attach-pop" use:portal aria-label="Add assignee" onsubmit={(e) => { e.preventDefault(); submitAddAssignee(task); }}>
+    <div class="req-detail-backdrop" use:portal role="presentation" onclick={closeManageAssignee}></div>
+    <div class="attach-pop manage-assignee-modal" use:portal role="dialog" aria-modal="true" aria-label="Kelola Assignee">
       <header>
         <div>
-          <p>Add Assignee</p>
+          <p class="pop-eyebrow">Penugasan Task (Assignment)</p>
           <h3>{task.title}</h3>
         </div>
-        <button type="button" onclick={closeAddAssignee} aria-label="Close">×</button>
+        <button type="button" onclick={closeManageAssignee} aria-label="Close">×</button>
       </header>
-      <label class="add-assignee-field">
-        <span>Tim Teknis</span>
-        <select bind:value={newAssigneeName}>
-          <option value="">Pilih assignee...</option>
-          {#each requirementTeamRoster().filter((m) => !(task.assignees || []).includes(m.name)) as member (member.name)}
-            <option value={member.name}>{member.name}</option>
-          {/each}
-        </select>
-      </label>
-      {#if addAssigneeError}<p class="attach-empty">{addAssigneeError}</p>{/if}
-      <div class="approval-row-actions">
-        <button type="button" class="approval-reject" onclick={closeAddAssignee}>Cancel</button>
-        <button type="submit" class="approval-accept" disabled={addingAssignee}>{addingAssignee ? 'Saving...' : 'Add'}</button>
-      </div>
-    </form>
-  {/if}
-{/if}
 
-{#if removeAssigneePopupKey}
-  {@const task = versionTasks.find((t) => t.id === removeAssigneePopupKey)}
-  {#if task}
-    <div class="req-detail-backdrop" use:portal role="presentation" onclick={closeRemoveAssignee}></div>
-    <form class="attach-pop" use:portal aria-label="Remove assignee" onsubmit={(e) => { e.preventDefault(); submitRemoveAssignee(task); }}>
-      <header>
-        <div>
-          <p>Remove Assignee</p>
-          <h3>{task.title}</h3>
-        </div>
-        <button type="button" onclick={closeRemoveAssignee} aria-label="Close">×</button>
-      </header>
-      <label class="add-assignee-field">
-        <span>Assignee saat ini</span>
-        <select bind:value={removeAssigneeName}>
-          <option value="">Pilih yang mau dihapus...</option>
-          {#each task.assignees || [] as name (name)}
-            <option value={name}>{name}</option>
-          {/each}
-        </select>
-      </label>
-      {#if removeAssigneeError}<p class="attach-empty">{removeAssigneeError}</p>{/if}
-      <div class="approval-row-actions">
-        <button type="button" class="approval-reject" onclick={closeRemoveAssignee}>Cancel</button>
-        <button type="submit" class="approval-accept" disabled={removingAssignee}>{removingAssignee ? 'Removing...' : 'Remove'}</button>
+      <div class="assignee-tabs">
+        <button
+          type="button"
+          class="assignee-tab"
+          class:active={assigneeModalTab === 'add'}
+          onclick={() => { assigneeModalTab = 'add'; addAssigneeError = ''; }}
+        >
+          <span class="tab-badge-icon add">+</span>
+          <span>Tambah Assignee</span>
+        </button>
+        <button
+          type="button"
+          class="assignee-tab"
+          class:active={assigneeModalTab === 'remove'}
+          onclick={() => { assigneeModalTab = 'remove'; removeAssigneeError = ''; }}
+        >
+          <span class="tab-badge-icon remove">−</span>
+          <span>Hapus Assignee ({task.assignees?.length || 0})</span>
+        </button>
       </div>
-    </form>
+
+      {#if assigneeModalTab === 'add'}
+        <form onsubmit={(e) => { e.preventDefault(); submitAddAssignee(task); }} class="assignee-tab-panel">
+          <label class="add-assignee-field">
+            <span>Pilih Anggota Tim Teknis</span>
+            <select bind:value={newAssigneeName}>
+              <option value="">Pilih teknis untuk ditugaskan...</option>
+              {#each requirementTeamRoster().filter((m) => !(task.assignees || []).includes(m.name)) as member (member.name)}
+                <option value={member.name}>{member.name}</option>
+              {/each}
+            </select>
+          </label>
+          {#if addAssigneeError}<p class="attach-empty error-text">{addAssigneeError}</p>{/if}
+
+          {#if task.assignees?.length}
+            <div class="current-assignees-summary">
+              <span class="sub-label">Assignee saat ini:</span>
+              <div class="assignee-chip-list">
+                {#each task.assignees as name (name)}
+                  <span class="assignee-chip">
+                    <i class="chip-avatar">{initials(name)}</i>
+                    {name}
+                  </span>
+                {/each}
+              </div>
+            </div>
+          {/if}
+
+          <div class="approval-row-actions">
+            <button type="button" class="approval-reject" onclick={closeManageAssignee}>Tutup</button>
+            <button type="submit" class="approval-accept btn-add-submit" disabled={!newAssigneeName || addingAssignee}>
+              {addingAssignee ? 'Menambahkan...' : '+ Tambah Assignee'}
+            </button>
+          </div>
+        </form>
+      {:else}
+        <div class="assignee-tab-panel">
+          {#if !task.assignees?.length}
+            <div class="empty-assignee-state">
+              <p>Belum ada assignee pada task ini.</p>
+              <button type="button" class="btn-switch-add" onclick={() => (assigneeModalTab = 'add')}>
+                + Tambah Assignee Sekarang
+              </button>
+            </div>
+          {:else}
+            <p class="sub-label">Pilih assignee yang ingin dihapus dari task ini:</p>
+            <div class="remove-assignee-list">
+              {#each task.assignees as name (name)}
+                <div class="remove-assignee-item">
+                  <div class="user-info">
+                    <span class="chip-avatar">{initials(name)}</span>
+                    <strong class="user-name">{name}</strong>
+                  </div>
+                  <button
+                    type="button"
+                    class="btn-delete-row"
+                    title={`Hapus ${name} dari task`}
+                    disabled={removingAssignee}
+                    onclick={() => deleteSpecificAssignee(task, name)}
+                  >
+                    <span class="minus-sign">−</span>
+                    <span>Hapus</span>
+                  </button>
+                </div>
+              {/each}
+            </div>
+          {/if}
+          {#if removeAssigneeError}<p class="attach-empty error-text">{removeAssigneeError}</p>{/if}
+
+          <div class="approval-row-actions">
+            <button type="button" class="approval-reject" onclick={closeManageAssignee}>Selesai</button>
+          </div>
+        </div>
+      {/if}
+    </div>
   {/if}
 {/if}
 
@@ -1909,13 +2678,13 @@
             <div class="readonly-evidence-section">
               <span class="readonly-evidence-label">Lampiran Bukti dari Admin:</span>
               <a href="/api/evidences/{ret.evidence_id}/file" target="_blank" rel="noopener noreferrer" class="btn-evidence-link">
-                📎 Buka File Lampiran Bukti
+                Buka File Lampiran Bukti
               </a>
             </div>
           {/if}
 
           <div class="readonly-info-footer">
-            <span>👁️ <strong>Mode Tim Teknis (Hanya Lihat):</strong> Task ini dikembalikan oleh Admin. Silakan periksa instruksi perbaikan di atas dan perbarui pekerjaan Anda.</span>
+            <span><strong>Mode Tim Teknis (Hanya Lihat):</strong> Task ini dikembalikan oleh Admin. Silakan periksa instruksi perbaikan di atas dan perbarui pekerjaan Anda.</span>
           </div>
 
           <div class="approval-modal-actions">
@@ -1968,7 +2737,17 @@
     {#if versionError}<p>{versionError}</p>{/if}
     <div class="req-create-actions">
       <button type="button" onclick={closeVersionCreate}>Cancel</button>
-      <button type="submit" disabled={versionSaving}>{versionSaving ? 'Saving…' : 'Create Version'}</button>
+      <button type="submit" disabled={versionSaving} style="display:inline-flex;align-items:center;gap:7px;">
+        {#if versionSaving}
+          <span class="btn-spinner sm"></span>
+          <span>Saving…</span>
+        {:else}
+          <span>Create Version</span>
+        {/if}
+      </button>
     </div>
   </form>
 {/if}
+
+<RegistryEditModal bind:editOpen bind:dashboard={selectedDetail} />
+

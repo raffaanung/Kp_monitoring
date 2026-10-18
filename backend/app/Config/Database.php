@@ -40,9 +40,10 @@ class Database extends Config
         'encrypt'      => false,
         'compress'     => false,
         'strictOn'     => false,
-        'failover'     => [],
-        'port'         => 3306,
-        'numberNative' => false,
+        'failover'        => [],
+        'port'            => 3306,
+        'connect_timeout' => 5,
+        'numberNative'    => false,
         'foundRows'    => false,
         'dateFormat'   => [
             'date'     => 'Y-m-d',

@@ -8,25 +8,26 @@ import { setBoardDashboard } from './taskModuleStore.svelte.js'
  *   overdue?: string,
  *   aktif?: string,
  *   q?: string,
+ *   taskId?: string | number,
  * }} [filters]
  * @param {'list' | 'board'} [view]
  */
 export function pushTaskFilters(filters = {}, view = 'list') {
-  if (view === 'board') {
-    if (filters.dashboard) setBoardDashboard(filters.dashboard)
-    goto('/tasks/board')
+  if (filters.taskId) {
+    goto(`/registry/list?focusTask=${filters.taskId}`)
     return
   }
 
-  const params = new URLSearchParams()
-  for (const [key, value] of Object.entries(filters)) {
-    if (value != null && String(value).trim() !== '') params.set(key, String(value))
+  if (filters.dashboard) {
+    setBoardDashboard(filters.dashboard)
+    goto(`/registry/list?dashboard=${encodeURIComponent(filters.dashboard)}`)
+    return
   }
-  const query = params.toString()
-  goto(query ? `/tasks/list?${query}` : '/tasks/list')
+
+  goto('/registry/list')
 }
 
-/** Parse filters from spa-router hash: `#/tasks/list?status=backlog` */
+/** Parse filters from spa-router hash */
 export function readHashTaskFilters() {
   const hash = typeof window !== 'undefined' ? window.location.hash : ''
   const qIndex = hash.indexOf('?')

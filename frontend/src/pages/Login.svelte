@@ -1,16 +1,9 @@
 <script>
-  import { fade, fly } from 'svelte/transition'
-  import { push } from 'svelte-spa-router'
-  import logoFull from '../assets/edm-logo.png'
-  import logoLight from '../assets/edm-logo-white.png'
-  import { login } from '../lib/authStore.svelte.js'
-  import { loadAppData } from '../lib/loadAppData.js'
-
-  const FEATURES = [
-    { label: 'Real-time', color: '#7c8cf8' },
-    { label: 'Analytics', color: '#34d399' },
-    { label: 'Terintegrasi', color: '#f59e0b' },
-  ]
+  import { fade } from 'svelte/transition'
+  import { goto } from '$app/navigation'
+  import logoWhite from '$lib/assets/edm-logo-white.png'
+  import { login } from '$lib/authStore.svelte.js'
+  import { loadAppData, startAutoRefresh } from '$lib/loadAppData.js'
 
   let username = $state('')
   let password = $state('')
@@ -27,7 +20,8 @@
     try {
       await login(username.trim(), password)
       loadAppData()
-      push('/')
+      startAutoRefresh()
+      goto('/')
     } catch (err) {
       error = err instanceof Error ? err.message : String(err)
     } finally {
@@ -36,820 +30,668 @@
   }
 </script>
 
-<div class="login-page" in:fade={{ duration: 320 }}>
-  <div class="login-frame" in:fly={{ y: 18, duration: 420 }}>
-    <!-- ── Left brand panel ── -->
-    <aside class="brand-panel" aria-label="EDM Task Monitoring">
-      <div class="brand-glow" aria-hidden="true"></div>
-      <div class="brand-glow-2" aria-hidden="true"></div>
-      <div class="brand-glow-3" aria-hidden="true"></div>
-      <div class="brand-edge-line" aria-hidden="true"></div>
-      <div class="brand-watermark" aria-hidden="true">
-        <img src={logoLight} alt="" />
+<div class="login-wrapper" in:fade={{ duration: 250 }}>
+  <!-- ── Left Brand Card ── -->
+  <aside class="brand-card" aria-label="EDM Task Monitoring">
+    <div class="glow-bg" aria-hidden="true"></div>
+    <div class="glow-spot-1" aria-hidden="true"></div>
+    <div class="glow-spot-2" aria-hidden="true"></div>
+
+    <!-- Header: Logo + System Online -->
+    <div class="brand-top">
+      <div class="brand-logo">
+        <img src={logoWhite} alt="EDM Task Monitoring" class="brand-logo-img" />
       </div>
-      <div class="brand-ring" aria-hidden="true"></div>
-      <div class="brand-diamond" aria-hidden="true"></div>
 
-      <div class="brand-top"></div>
+      <div class="system-status">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span class="status-label">System online</span>
+      </div>
+    </div>
 
-      <div class="brand-copy">
-        <span class="live-badge">
-          <span class="live-dot" aria-hidden="true"></span>
-          Operation Monitoring <span class="dot-sep">•</span> Live
-        </span>
-        <h1 class="brand-title">Kelola Tugas,<br />Tingkatkan Produktivitas</h1>
-        <p class="brand-sub">
-          Pantau, kelola, dan capai target tim Anda dalam satu platform yang terintegrasi secara
-          real-time.
-        </p>
+    <!-- Center: Main Hero Slogan -->
+    <div class="brand-hero">
+      <h1 class="hero-title">
+        <span class="hero-line">Manage tasks.</span>
+        <span class="gradient-text">Boost productivity.</span>
+      </h1>
+      <p class="hero-desc">
+        Track, manage, and achieve your team's goals in one integrated, real-time platform.
+      </p>
+    </div>
 
-        <div class="brand-tags" role="list">
-          {#each FEATURES as f}
-            <span class="feature-pill" role="listitem">
-              <span class="feature-dot" style="background:{f.color}" aria-hidden="true"></span>
-              {f.label}
+    <!-- Footer: Copyright & Features -->
+    <div class="brand-footer">
+      <span class="copyright">© {new Date().getFullYear()} EDM Task Monitor</span>
+      <div class="footer-tags">
+        <span>Real-time</span>
+        <span>Analytics</span>
+        <span>Integrated</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── Right Form Area ── -->
+  <main class="form-area">
+    <div class="form-box">
+      <header class="form-header">
+        <span class="tagline">TASK MONITORING DASHBOARD</span>
+        <h2 class="welcome-heading">Welcome back</h2>
+        <p class="welcome-sub">Sign in to your EDM Task Monitoring account to continue.</p>
+      </header>
+
+      <form class="auth-form" onsubmit={handleLogin} novalidate>
+        <!-- Username Field -->
+        <div class="input-group" class:is-focused={focused === 'username'}>
+          <label for="username">Username</label>
+          <div class="input-container">
+            <span class="field-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="8" r="4" />
+                <path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" />
+              </svg>
             </span>
-          {/each}
+            <input
+              id="username"
+              type="text"
+              placeholder="10000001"
+              autocomplete="username"
+              bind:value={username}
+              onfocus={() => (focused = 'username')}
+              onblur={() => (focused = null)}
+            />
+          </div>
         </div>
-      </div>
 
-      <footer class="brand-foot">
-        <span class="foot-icon">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <circle cx="9" cy="8.5" r="2.6" stroke="currentColor" stroke-width="1.6" />
-            <path
-              d="M4.5 18c.6-2.6 2.3-4 4.5-4s3.9 1.4 4.5 4M15 9.2c1.5.2 2.6 1.1 3 3.3"
-              stroke="currentColor"
-              stroke-width="1.6"
-              stroke-linecap="round"
-            />
-          </svg>
-        </span>
-        <span class="foot-icon">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path
-              d="M3 12h3.5l2-5 4 10 2-7 1.5 2H21"
-              stroke="currentColor"
-              stroke-width="1.6"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-        </span>
-        <span class="foot-text">COPYRIGHT EDM TASK MONITOR &ndash; {new Date().getFullYear()}</span>
-        <span class="foot-line" aria-hidden="true"></span>
-      </footer>
-    </aside>
-
-    <!-- ── Right form panel ── -->
-    <section class="form-panel">
-      <div class="form-inner">
-        <header class="form-head">
-          <img src={logoFull} alt="EDM Task Monitoring" class="form-logo" />
-          <h2 class="form-title">Selamat datang kembali</h2>
-          <p class="form-sub">Masuk ke akun EDM Task Monitoring Anda</p>
-        </header>
-
-        <span class="dash-tag">
-          <span class="dash-dot" aria-hidden="true"></span>
-          Task Monitoring Dashboard
-        </span>
-
-        <form class="form" onsubmit={handleLogin} novalidate>
-          <div class="field" class:on={focused === 'username'}>
-            <label for="username">Username</label>
-            <div class="input-shell">
-              <span class="input-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none">
-                  <circle cx="12" cy="8.5" r="3.2" stroke="currentColor" stroke-width="1.7" />
-                  <path
-                    d="M6.5 19.5c.8-3.2 3-5 5.5-5s4.7 1.8 5.5 5"
-                    stroke="currentColor"
-                    stroke-width="1.7"
-                    stroke-linecap="round"
-                  />
-                </svg>
-              </span>
-              <input
-                id="username"
-                type="text"
-                inputmode="numeric"
-                pattern={'[0-9]{8}'}
-                maxlength="8"
-                placeholder="10000001"
-                autocomplete="username"
-                bind:value={username}
-                onfocus={() => {
-                  focused = 'username'
-                }}
-                onblur={() => {
-                  focused = null
-                }}
-              />
-            </div>
-          </div>
-
-          <div class="field" class:on={focused === 'password'}>
+        <!-- Password Field -->
+        <div class="input-group" class:is-focused={focused === 'password'}>
+          <div class="label-row">
             <label for="password">Password</label>
-            <div class="input-shell">
-              <span class="input-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none">
-                  <rect x="5" y="11" width="14" height="10" rx="2.2" stroke="currentColor" stroke-width="1.7" />
-                  <path
-                    d="M8.5 11V8a3.5 3.5 0 0 1 7 0v3"
-                    stroke="currentColor"
-                    stroke-width="1.7"
-                    stroke-linecap="round"
-                  />
+            <button type="button" class="forgot-btn" onclick={() => alert('Silakan hubungi administrator untuk mereset password.')}>
+              Forgot password?
+            </button>
+          </div>
+          <div class="input-container">
+            <span class="field-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="5" y="11" width="14" height="10" rx="2" />
+                <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+              </svg>
+            </span>
+            <input
+              id="password"
+              type={showPassword ? 'text' : 'password'}
+              placeholder="Enter your password"
+              autocomplete="current-password"
+              bind:value={password}
+              onfocus={() => (focused = 'password')}
+              onblur={() => (focused = null)}
+            />
+            <button
+              type="button"
+              class="toggle-eye"
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              onclick={() => (showPassword = !showPassword)}
+              tabindex="-1"
+            >
+              {#if showPassword}
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                  <circle cx="12" cy="12" r="3" />
                 </svg>
-              </span>
-              <input
-                id="password"
-                type={showPassword ? 'text' : 'password'}
-                placeholder="Masukkan password"
-                autocomplete="current-password"
-                bind:value={password}
-                onfocus={() => {
-                  focused = 'password'
-                }}
-                onblur={() => {
-                  focused = null
-                }}
-              />
-              <button
-                type="button"
-                class="eye"
-                aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}
-                onclick={() => {
-                  showPassword = !showPassword
-                }}
-                tabindex="-1"
-              >
-                {#if showPassword}
-                  <svg viewBox="0 0 24 24" fill="none">
-                    <path
-                      d="M3 12s3.6-6 9-6 9 6 9 6-3.6 6-9 6-9-6-9-6Z"
-                      stroke="currentColor"
-                      stroke-width="1.7"
-                      stroke-linejoin="round"
-                    />
-                    <circle cx="12" cy="12" r="2.2" stroke="currentColor" stroke-width="1.7" />
-                  </svg>
-                {:else}
-                  <svg viewBox="0 0 24 24" fill="none">
-                    <path
-                      d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-5.4 0-9-6-9-6a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c5.4 0 9 6 9 6a18.5 18.5 0 0 1-2.16 3.19M3 3l18 18"
-                      stroke="currentColor"
-                      stroke-width="1.7"
-                      stroke-linecap="round"
-                    />
-                  </svg>
-                {/if}
-              </button>
-            </div>
+              {:else}
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+                  <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+                  <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+                  <line x1="2" x2="22" y1="2" y2="22" />
+                </svg>
+              {/if}
+            </button>
           </div>
+        </div>
 
-          <div class="form-row">
-            <label class="check">
-              <input type="checkbox" bind:checked={remember} />
-              <span>Ingat saya</span>
-            </label>
-            <button type="button" class="link-quiet">Lupa password?</button>
-          </div>
+        <!-- Remember me -->
+        <div class="checkbox-row">
+          <label class="remember-label">
+            <input type="checkbox" bind:checked={remember} class="checkbox-input" />
+            <span>Remember me</span>
+          </label>
+        </div>
 
-          {#if error}
-            <p class="form-error" role="alert">{error}</p>
-          {/if}
-
-          <button type="submit" class="btn-primary" disabled={submitting}>
-            {submitting ? 'Memeriksa…' : 'Masuk'}
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path
-                d="M5 12h14M13 6l6 6-6 6"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
+        {#if error}
+          <div class="alert-error" role="alert">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" x2="12" y1="8" y2="12" />
+              <line x1="12" x2="12.01" y1="16" y2="16" />
             </svg>
-          </button>
-        </form>
+            <span>{error}</span>
+          </div>
+        {/if}
 
-        <div class="divider"><span>EDM</span></div>
+        <!-- Submit Button -->
+        <button type="submit" class="submit-btn" disabled={submitting}>
+          {#if submitting}
+            <span class="btn-spinner" aria-hidden="true"></span>
+            <span>Signing in…</span>
+          {:else}
+            <span>Sign in</span>
+          {/if}
+        </button>
+      </form>
 
-        <p class="form-foot">
-          Task Monitoring System <br />Hubungi admin untuk bantuan akses.
+      <!-- Admin Help Box -->
+      <div class="support-card">
+        <span class="info-icon" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 16v-4" />
+            <path d="M12 8h.01" />
+          </svg>
+        </span>
+        <p class="support-text">
+          Don't have access? Contact your system administrator for account assistance.
         </p>
       </div>
-    </section>
-  </div>
+    </div>
+  </main>
 </div>
 
 <style>
-  .login-page {
-    min-height: 100vh;
+  :global(body) {
+    margin: 0;
+    padding: 0;
+    background: #ffffff;
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  .login-wrapper {
     display: grid;
+    grid-template-columns: 1.15fr 1fr;
+    min-height: 100vh;
     box-sizing: border-box;
-    font-family: 'Plus Jakarta Sans', ui-sans-serif, sans-serif;
-    color: #1a1a1a;
-  }
-
-  .login-frame {
-    display: grid;
-    grid-template-columns: 1.05fr 1fr;
-    width: 100%;
-    min-height: 100vh;
-    overflow: hidden;
-    background: #fff;
-  }
-
-  /* ── Brand panel ── */
-  .brand-panel {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    gap: 28px;
-    padding: 32px 30px 28px;
-    overflow: hidden;
-    color: #fff;
-    background:
-      radial-gradient(ellipse 70% 60% at 12% 90%, rgba(88, 40, 160, 0.28), transparent 55%),
-      linear-gradient(160deg, #12142a 0%, #0b0d1e 55%, #05060f 100%);
-  }
-
-  .brand-watermark {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 58%;
-    aspect-ratio: 1.03;
-    transform: translate(-50%, -50%);
-    overflow: hidden;
-    opacity: 0.05;
-    pointer-events: none;
-    z-index: 0;
-    -webkit-mask-image: radial-gradient(ellipse 75% 75% at 40% 45%, #000 55%, transparent 90%);
-    mask-image: radial-gradient(ellipse 75% 75% at 40% 45%, #000 55%, transparent 90%);
-  }
-
-  .brand-watermark img {
-    position: absolute;
-    top: 0;
-    left: 0;
-    height: 100%;
-    width: auto;
-    max-width: none;
-  }
-
-  .brand-glow {
-    position: absolute;
-    width: 280px;
-    height: 280px;
-    top: -60px;
-    right: -40px;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(124, 58, 237, 0.18), transparent 68%);
-    pointer-events: none;
-    animation: drift 16s ease-in-out infinite alternate;
-  }
-
-  .brand-glow-2 {
-    position: absolute;
-    width: 220px;
-    height: 220px;
-    bottom: 10%;
-    left: -50px;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(59, 130, 246, 0.2), transparent 70%);
-    pointer-events: none;
-    animation: drift 20s ease-in-out infinite alternate-reverse;
-  }
-
-  .brand-glow-3 {
-    position: absolute;
-    width: 240px;
-    height: 340px;
-    right: -90px;
-    top: 26%;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(217, 70, 239, 0.4), transparent 72%);
-    filter: blur(6px);
-    pointer-events: none;
-  }
-
-  .brand-edge-line {
-    position: absolute;
-    right: 0;
-    top: 14%;
-    bottom: 30%;
-    width: 1px;
-    background: linear-gradient(180deg, transparent, rgba(217, 70, 239, 0.55), rgba(129, 140, 248, 0.35), transparent);
-    pointer-events: none;
-  }
-
-  @keyframes drift {
-    from {
-      transform: translate(0, 0);
-    }
-    to {
-      transform: translate(18px, 12px);
-    }
-  }
-
-  .brand-ring {
-    position: absolute;
-    width: 460px;
-    height: 460px;
-    right: -160px;
-    bottom: -170px;
-    border-radius: 50%;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    pointer-events: none;
-  }
-
-  .brand-diamond {
-    position: absolute;
-    width: 320px;
-    height: 320px;
-    right: -80px;
-    bottom: -120px;
-    border-radius: 64px;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    transform: rotate(20deg);
-    pointer-events: none;
-  }
-
-  .brand-top,
-  .brand-copy,
-  .brand-foot {
-    position: relative;
-    z-index: 1;
-  }
-
-  .live-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    width: fit-content;
-    padding: 6px 12px;
-    border-radius: 999px;
-    font-size: 0.72rem;
-    font-weight: 650;
-    letter-spacing: 0.01em;
-    color: rgba(255, 255, 255, 0.95);
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.16);
-    backdrop-filter: blur(8px);
-  }
-
-  .live-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #34d399;
-    box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.25);
-    animation: pulse 1.8s ease-in-out infinite;
-  }
-
-  @keyframes pulse {
-    0%,
-    100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.4;
-    }
-  }
-
-  .dot-sep {
-    color: rgba(255, 255, 255, 0.4);
-  }
-
-  .brand-copy {
-    display: flex;
-    flex-direction: column;
-    gap: 22px;
-    max-width: 560px;
-    margin-left: clamp(20px, 9vw, 100px);
-  }
-
-  .brand-copy .live-badge {
-    margin-bottom: -8px;
-  }
-
-  .brand-title {
-    margin: 0;
-    font-size: clamp(2.4rem, 4.4vw, 3.6rem);
-    font-weight: 780;
-    letter-spacing: -0.04em;
-    line-height: 1.1;
-  }
-
-  .brand-sub {
-    margin: 0;
-    font-size: 1.15rem;
-    font-weight: 500;
-    line-height: 1.6;
-    color: rgba(255, 255, 255, 0.66);
-    max-width: 500px;
-  }
-
-  .brand-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .feature-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    padding: 6px 12px;
-    border-radius: 999px;
-    font-size: 0.74rem;
-    font-weight: 650;
-    color: rgba(255, 255, 255, 0.85);
-    background: rgba(255, 255, 255, 0.07);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-  }
-
-  .feature-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-
-  .brand-foot {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .foot-icon {
-    display: grid;
-    place-items: center;
-    width: 26px;
-    height: 26px;
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    color: rgba(255, 255, 255, 0.75);
-    flex-shrink: 0;
-  }
-
-  .foot-icon svg {
-    width: 13px;
-    height: 13px;
-  }
-
-  .foot-text {
-    font-size: 0.68rem;
-    font-weight: 650;
-    letter-spacing: 0.03em;
-    color: rgba(255, 255, 255, 0.5);
-    white-space: nowrap;
-  }
-
-  .foot-line {
-    flex: 1;
-    height: 1px;
-    background: linear-gradient(90deg, rgba(255, 255, 255, 0.18), transparent);
-  }
-
-  /* ── Form panel ── */
-  .form-panel {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 36px 40px;
-    background: #f4f5f7;
-  }
-
-  .form-inner {
-    width: 100%;
-    max-width: 380px;
-    display: flex;
-    flex-direction: column;
+    padding: 16px;
+    background: #ffffff;
     gap: 16px;
   }
 
-  .form-head {
+  /* ── Left Dark Card ── */
+  .brand-card {
+    position: relative;
+    border-radius: 28px;
+    padding: 40px 48px;
     display: flex;
     flex-direction: column;
+    justify-content: space-between;
+    overflow: hidden;
+    color: #ffffff;
+    box-sizing: border-box;
+    background: #090a14;
+    min-height: calc(100vh - 32px);
+  }
+
+  .glow-bg {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 65% 55% at 95% 45%, rgba(139, 92, 246, 0.22), transparent 70%),
+      radial-gradient(ellipse 60% 60% at 10% 90%, rgba(59, 130, 246, 0.12), transparent 70%),
+      linear-gradient(150deg, #080911 0%, #0c0e1b 45%, #141026 80%, #1a102f 100%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .glow-spot-1 {
+    position: absolute;
+    top: 25%;
+    right: -60px;
+    width: 280px;
+    height: 380px;
+    background: radial-gradient(circle, rgba(168, 85, 247, 0.18), transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+    filter: blur(20px);
+  }
+
+  .glow-spot-2 {
+    position: absolute;
+    bottom: -40px;
+    left: 20%;
+    width: 300px;
+    height: 200px;
+    background: radial-gradient(circle, rgba(56, 189, 248, 0.08), transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .brand-top,
+  .brand-hero,
+  .brand-footer {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Logo */
+  .brand-top {
+    display: flex;
     align-items: center;
-    text-align: center;
-    gap: 8px;
+    justify-content: space-between;
+    gap: 16px;
   }
 
-  .form-logo {
-    height: 36px;
+  .brand-logo {
+    display: flex;
+    align-items: center;
+  }
+
+  .brand-logo-img {
+    display: block;
+    height: 38px;
     width: auto;
+    max-width: 170px;
     object-fit: contain;
-    margin-bottom: 6px;
+    image-rendering: -webkit-optimize-contrast;
   }
 
-  .form-title {
-    margin: 0;
-    font-size: 1.35rem;
-    font-weight: 760;
-    letter-spacing: -0.03em;
-    color: #1a1a1a;
-  }
-
-  .form-sub {
-    margin: 0;
-    font-size: 0.84rem;
-    font-weight: 500;
-    color: #8e8e93;
-    line-height: 1.4;
-  }
-
-  .dash-tag {
+  /* System Online Badge */
+  .system-status {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
-    width: fit-content;
-    margin: 2px auto 0;
-    font-size: 0.68rem;
-    font-weight: 750;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: #4a4a4e;
+    gap: 8px;
+    padding: 6px 14px;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(10px);
   }
 
-  .dash-dot {
-    width: 5px;
-    height: 5px;
+  .status-dot {
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
-    background: #1a1a1a;
+    background: #10b981;
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
   }
 
-  .form {
+  .status-label {
+    font-size: 0.74rem;
+    font-weight: 500;
+    color: #cbd5e1;
+    letter-spacing: 0.01em;
+  }
+
+  /* Hero Content */
+  .brand-hero {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 18px;
+    max-width: none;
+    width: 100%;
+    margin: 40px 0;
   }
 
-  .field {
+  .hero-title {
+    margin: 0;
+    font-size: clamp(2.4rem, 4.4vw, 3.6rem);
+    font-weight: 800;
+    line-height: 1.12;
+    letter-spacing: -0.04em;
+    color: #ffffff;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
   }
 
-  .field label {
-    font-size: 0.76rem;
+  .hero-line {
+    white-space: nowrap;
+  }
+
+  .gradient-text {
+    white-space: nowrap;
+    background: linear-gradient(90deg, #38bdf8 0%, #60a5fa 32%, #a855f7 72%, #c084fc 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .hero-desc {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 450;
+    line-height: 1.6;
+    color: rgba(255, 255, 255, 0.62);
+    max-width: 460px;
+  }
+
+  /* Brand Footer */
+  .brand-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    color: rgba(255, 255, 255, 0.42);
+    padding-top: 10px;
+  }
+
+  .copyright {
+    letter-spacing: 0.01em;
+  }
+
+  .footer-tags {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    font-weight: 450;
+  }
+
+  /* ── Right Form Area ── */
+  .form-area {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 48px;
+    background: #ffffff;
+    box-sizing: border-box;
+  }
+
+  .form-box {
+    width: 100%;
+    max-width: 410px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .form-header {
+    margin-bottom: 26px;
+  }
+
+  .tagline {
+    display: block;
+    color: #2563eb;
+    font-size: 0.72rem;
     font-weight: 700;
-    color: #5a5a5e;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
   }
 
-  .field.on label {
-    color: #1a1a1a;
+  .welcome-heading {
+    margin: 0 0 8px 0;
+    font-size: 2.15rem;
+    font-weight: 780;
+    letter-spacing: -0.035em;
+    color: #0f172a;
+    line-height: 1.15;
   }
 
-  .input-shell {
+  .welcome-sub {
+    margin: 0;
+    font-size: 0.88rem;
+    font-weight: 450;
+    color: #64748b;
+    line-height: 1.45;
+  }
+
+  /* Auth Form */
+  .auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .input-group label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #1e293b;
+  }
+
+  .label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .forgot-btn {
+    border: none;
+    background: none;
+    padding: 0;
+    font-family: inherit;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #2563eb;
+    cursor: pointer;
+    transition: color 0.15s ease;
+  }
+
+  .forgot-btn:hover {
+    color: #1d4ed8;
+    text-decoration: underline;
+  }
+
+  .input-container {
     position: relative;
     display: flex;
     align-items: center;
   }
 
-  .input-icon {
+  .field-icon {
     position: absolute;
-    left: 13px;
-    width: 16px;
-    height: 16px;
-    color: #aeaeb2;
-    pointer-events: none;
-    display: grid;
-    place-items: center;
-    z-index: 1;
-  }
-
-  .input-icon svg {
-    width: 15px;
-    height: 15px;
-  }
-
-  .field.on .input-icon {
-    color: #5a5a5e;
-  }
-
-  .input-shell input {
-    width: 100%;
-    height: 48px;
-    padding: 0 42px 0 40px;
-    border: 1px solid #ececef;
-    border-radius: 12px;
-    background: #fff;
-    color: #1a1a1a;
-    font-size: 0.9rem;
-    font-weight: 500;
-    outline: none;
-    font-family: inherit;
-    transition:
-      background 0.2s ease,
-      border-color 0.2s ease,
-      box-shadow 0.2s ease;
-  }
-
-  .input-shell input::placeholder {
-    color: #b0b0b5;
-    font-weight: 450;
-  }
-
-  .field.on .input-shell input {
-    background: #fff;
-    border-color: rgba(26, 26, 26, 0.18);
-    box-shadow: 0 0 0 3px rgba(26, 26, 26, 0.06);
-  }
-
-  .eye {
-    position: absolute;
-    right: 8px;
-    width: 32px;
-    height: 32px;
-    display: grid;
-    place-items: center;
-    border: none;
-    border-radius: 8px;
-    background: transparent;
-    color: #aeaeb2;
-    cursor: pointer;
-    padding: 0;
-  }
-
-  .eye:hover {
-    color: #3a3a3a;
-    background: rgba(0, 0, 0, 0.05);
-  }
-
-  .eye svg {
-    width: 16px;
-    height: 16px;
-  }
-
-  .form-row {
+    left: 14px;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 12px;
+    justify-content: center;
+    color: #94a3b8;
+    pointer-events: none;
+    transition: color 0.15s ease;
+  }
+
+  .input-container input {
+    width: 100%;
+    height: 48px;
+    padding: 0 42px 0 42px;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 12px;
+    background: #ffffff;
+    color: #0f172a;
+    font-family: inherit;
+    font-size: 0.92rem;
+    font-weight: 450;
+    outline: none;
+    box-sizing: border-box;
+    transition: all 0.2s ease;
+  }
+
+  .input-container input::placeholder {
+    color: #94a3b8;
+    font-weight: 400;
+  }
+
+  .input-group.is-focused .input-container input {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  }
+
+  .input-group.is-focused .field-icon {
+    color: #2563eb;
+  }
+
+  .toggle-eye {
+    position: absolute;
+    right: 10px;
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: transparent;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #94a3b8;
+    cursor: pointer;
+    transition: color 0.15s ease, background 0.15s ease;
+  }
+
+  .toggle-eye:hover {
+    color: #475569;
+    background: #f1f5f9;
+  }
+
+  /* Checkbox */
+  .checkbox-row {
+    display: flex;
+    align-items: center;
     margin-top: -2px;
   }
 
-  .check {
-    display: flex;
+  .remember-label {
+    display: inline-flex;
     align-items: center;
-    gap: 8px;
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: #5a5a5e;
+    gap: 9px;
+    font-size: 0.86rem;
+    font-weight: 500;
+    color: #334155;
     cursor: pointer;
     user-select: none;
   }
 
-  .check input {
-    width: 15px;
-    height: 15px;
-    accent-color: #1a1a1a;
+  .checkbox-input {
+    width: 17px;
+    height: 17px;
+    border-radius: 4px;
+    accent-color: #2563eb;
     cursor: pointer;
   }
 
-  .link-quiet {
-    border: none;
-    background: none;
-    padding: 0;
-    font: inherit;
-    font-size: 0.8rem;
-    font-weight: 650;
-    color: #6b6b6b;
-    cursor: pointer;
-  }
-
-  .link-quiet:hover:not(:disabled) {
-    color: #1a1a1a;
-  }
-
-  .link-quiet:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .form-error {
-    margin: -4px 0 0;
-    padding: 10px 12px;
+  /* Alert Error */
+  .alert-error {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
     border-radius: 10px;
-    background: rgba(239, 68, 68, 0.1);
-    border: 1px solid rgba(239, 68, 68, 0.25);
-    color: #b91c1c;
-    font-size: 0.8rem;
-    font-weight: 600;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #dc2626;
+    font-size: 0.82rem;
+    font-weight: 550;
   }
 
-  .btn-primary {
+  .alert-error svg {
+    flex-shrink: 0;
+  }
+
+  /* Submit button */
+  .submit-btn {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
     width: 100%;
     height: 48px;
-    margin-top: 2px;
     border: none;
     border-radius: 12px;
-    background: #1a1a1a;
-    color: #fff;
-    font-size: 0.92rem;
-    font-weight: 700;
-    letter-spacing: -0.01em;
+    background: #1d4ed8;
+    color: #ffffff;
+    font-family: inherit;
+    font-size: 0.94rem;
+    font-weight: 600;
     cursor: pointer;
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
-    transition:
-      background 0.2s ease,
-      transform 0.15s ease,
-      box-shadow 0.2s ease,
-      opacity 0.2s ease;
+    box-shadow: 0 6px 18px -2px rgba(29, 78, 216, 0.38);
+    transition: all 0.2s ease;
+    box-sizing: border-box;
   }
 
-  .btn-primary svg {
-    width: 17px;
-    height: 17px;
+  .btn-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.35);
+    border-top-color: #ffffff;
+    border-radius: 50%;
+    animation: btn-spin 0.6s linear infinite;
+    display: inline-block;
+    flex-shrink: 0;
   }
 
-  .btn-primary:not(:disabled):hover {
-    background: #2c2c2c;
+  @keyframes btn-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .submit-btn:hover:not(:disabled) {
+    background: #1e40af;
     transform: translateY(-1px);
-    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 10px 22px -3px rgba(29, 78, 216, 0.44);
   }
 
-  .btn-primary:not(:disabled):active {
+  .submit-btn:active:not(:disabled) {
     transform: translateY(0);
   }
 
-  .btn-primary:disabled {
-    opacity: 0.42;
+  .submit-btn:disabled {
+    opacity: 0.6;
     cursor: not-allowed;
     box-shadow: none;
   }
 
-  .divider {
+  /* Support Card */
+  .support-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-top: 24px;
+    padding: 14px 18px;
+    border-radius: 14px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    box-sizing: border-box;
+  }
+
+  .info-icon {
     display: flex;
     align-items: center;
-    gap: 12px;
-    color: #aeaeb2;
-    font-size: 0.72rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
+    justify-content: center;
+    color: #64748b;
+    flex-shrink: 0;
+    margin-top: 1px;
   }
 
-  .divider::before,
-  .divider::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: #e2e2e6;
-  }
-
-  .form-foot {
+  .support-text {
     margin: 0;
-    text-align: center;
-    font-size: 0.7rem;
-    font-weight: 500;
-    line-height: 1.5;
-    color: #a8a8ad;
+    font-size: 0.78rem;
+    font-weight: 450;
+    line-height: 1.45;
+    color: #64748b;
   }
 
   /* ── Responsive ── */
-  @media (max-width: 860px) {
-    .login-frame {
+  @media (max-width: 900px) {
+    .login-wrapper {
       grid-template-columns: 1fr;
-      min-height: 100vh;
+      padding: 12px;
     }
 
-    .brand-panel {
-      min-height: 280px;
-      padding: 24px 22px 20px;
-      gap: 20px;
+    .brand-card {
+      min-height: auto;
+      padding: 32px 24px;
     }
 
-    .brand-copy {
-      margin-left: 0;
-      max-width: none;
+    .brand-hero {
+      margin: 32px 0;
     }
 
-    .brand-title {
-      font-size: 2.2rem;
+    .hero-title {
+      font-size: 2.3rem;
     }
 
-    .brand-sub {
-      font-size: 1rem;
-    }
-
-    .brand-tags {
-      display: none;
-    }
-
-    .form-panel {
-      padding: 28px 22px 24px;
+    .form-area {
+      padding: 24px 16px;
     }
   }
 </style>

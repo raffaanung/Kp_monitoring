@@ -40,12 +40,13 @@ class ModuleTasks extends BaseController
         $rows      = $taskModel->listRich(array_filter($filters));
         $taskIds   = array_column($rows, 'id');
 
-        // 1 query buat semua pending move + 1 query buat semua assignee, bukan per task (hindari N+1).
+        // 1 query buat semua pending move + 1 query buat semua assignee + 1 query buat evidences, bukan per task (hindari N+1).
         $moveMap      = (new TaskStatusMoveModel())->pendingForTasks($taskIds);
         $assigneesMap = $taskModel->assigneesForTasks($taskIds);
+        $evidencesMap = (new TaskEvidenceModel())->forTasks($taskIds);
 
         return $this->jsonOk(array_map(
-            fn ($r) => $this->shapeListRow($r, $moveMap[$r['id']] ?? null, $assigneesMap[$r['id']] ?? []),
+            fn ($r) => $this->shapeListRow($r, $moveMap[$r['id']] ?? null, $assigneesMap[$r['id']] ?? [], $evidencesMap[$r['id']] ?? []),
             $rows,
         ));
     }
@@ -115,9 +116,9 @@ class ModuleTasks extends BaseController
         if ($requirement === null) {
             return $this->jsonError('Requirement not found', 422);
         }
-        // Owner requirement = task langsung approved. Selain owner (misal assignee) = menunggu approval owner dulu.
-        $isOwner       = TaskPolicy::isRequirementOwner($user, $requirement);
-        $approvalState = $isOwner ? 'approved' : 'pending';
+        // PIC sudah di-assign oleh manajer dan berhak mengatur task & tim teknis.
+        // Task yang dibuat langsung berstatus approved (aktif di Backlog).
+        $approvalState = 'approved';
 
         $taskModel = new TaskModel();
         $taskId    = Id::new();
@@ -138,13 +139,14 @@ class ModuleTasks extends BaseController
             'deadline'         => $deadline ?: null,
         ], false);
         $taskModel->syncAssignees($taskId, $assigneeIds);
+        if ($requirementId) {
+            (new RequirementModel())->syncStatusFromTasks($requirementId);
+        }
 
         (new ActivityLogModel())->log([
             'actor_id'     => $user['id'],
             'actor_name'   => $user['name'],
-            'action'       => $isOwner
-                ? 'Task dibuat dari requirement · Backlog'
-                : 'Task dibuat, menunggu approval owner requirement',
+            'action'       => 'Task dibuat dari requirement · Backlog',
             'action_type'  => 'create',
             'object_type'  => 'task',
             'object_id'    => $taskId,
@@ -165,21 +167,10 @@ class ModuleTasks extends BaseController
             }
         }
 
-        if (! $isOwner && $requirement['created_by'] && $requirement['created_by'] !== $user['id']) {
-            (new NotificationModel())->notify(
-                'approval_request',
-                'Task menunggu approval',
-                "{$user['name']} membuat task \"{$title}\" dan menunggu persetujuan Anda",
-                $requirement['created_by'],
-                $taskId,
-                $dashboard['id'],
-            );
-        }
-
         return $this->jsonOk($this->shapeDetailRow((new TaskModel())->findRichById($taskId)));
     }
 
-    /** Owner requirement menyetujui task yang baru dibuat assignee, masuk Backlog. */
+    /** Menyetujui task / pengajuan status move oleh PIC atau Admin/Manager. */
     public function approve(string $id = '0'): ResponseInterface
     {
         $taskId    = $id;
@@ -189,14 +180,22 @@ class ModuleTasks extends BaseController
         if ($task === null) {
             return $this->jsonError('Task not found', 404);
         }
-        $requirement = $task['requirement_id'] ? (new RequirementModel())->find($task['requirement_id']) : null;
-        $isOwner     = $requirement !== null && TaskPolicy::isRequirementOwner($user, $requirement);
-        if (! $isOwner && ! TaskPolicy::isAdmin($user)) {
-            return $this->jsonError('Only the requirement owner can approve this task', 403);
+        $isAdmin = TaskPolicy::isAdmin($user);
+        if (! $isAdmin) {
+            $dashboard   = $task['dashboard_id'] ? (new DashboardModel())->find($task['dashboard_id']) : null;
+            $requirement = $task['requirement_id'] ? (new RequirementModel())->find($task['requirement_id']) : null;
+            $isPm        = $dashboard !== null && TaskPolicy::isPmOfDashboard($user, $dashboard);
+            $isOwner     = $requirement !== null && TaskPolicy::isRequirementOwner($user, $requirement);
+            if (! $isPm && ! $isOwner) {
+                return $this->jsonError('Only the PIC (PM) or Admin/Manager can approve this task', 403);
+            }
         }
-        // Admin/Manager boleh force-approve walau belum ada yang pending (override), owner biasa tetap hanya bisa saat genuinely pending.
-        if ($task['approval_state'] !== 'pending' && ! TaskPolicy::isAdmin($user)) {
-            return $this->jsonError('This task is not waiting for approval', 422);
+
+        // Jika ada status_move yang pending, approve sekalian status_move-nya
+        $moveModel = new TaskStatusMoveModel();
+        $move      = $moveModel->pendingForTask($taskId);
+        if ($move !== null) {
+            return $this->resolveMove($taskId, true);
         }
 
         $note       = trim((string) ($this->request->getJsonVar('note') ?? ''));
@@ -208,21 +207,26 @@ class ModuleTasks extends BaseController
         }
         (new ActivityLogModel())->log([
             'actor_id' => $user['id'], 'actor_name' => $user['name'],
-            'action' => "Task disetujui masuk Backlog. {$note}", 'action_type' => 'approval',
+            'action' => trim("Task disetujui oleh PIC/Admin. {$note}"), 'action_type' => 'approval',
             'object_type' => 'task', 'object_id' => $taskId, 'object_label' => $task['title'],
             'dashboard_id' => $task['dashboard_id'], 'evidence_id' => $evidenceId,
         ]);
-        if ($task['created_by'] && $task['created_by'] !== $user['id']) {
-            (new NotificationModel())->notify(
-                'approved', 'Task disetujui', "\"{$task['title']}\" disetujui masuk Backlog",
-                $task['created_by'], $taskId, $task['dashboard_id'],
+        $assigneeRows = $taskModel->assigneesForTasks([$taskId])[$taskId] ?? [];
+        $targetRecipients = array_values(array_filter(
+            array_column($assigneeRows, 'id'),
+            fn ($uid) => $uid !== $user['id']
+        ));
+        if ($targetRecipients !== []) {
+            (new NotificationModel())->notifyMany(
+                'approved', 'Task disetujui', "\"{$task['title']}\" disetujui oleh PIC",
+                $targetRecipients, $taskId, $task['dashboard_id'],
             );
         }
 
-        return $this->jsonOk(['result' => 'approved', 'task' => $this->shapeDetailRow($taskModel->findRichById($taskId))]);
+        return $this->jsonOk(['result' => 'approved', 'task' => $this->shapeDetailRow($taskModel->findRichById($taskId), $assigneeRows, true, null)]);
     }
 
-    /** Owner requirement minta revisi task yang baru dibuat assignee, belum masuk Backlog. */
+    /** PIC atau Admin/Manager mengembalikan (return) task ke tim teknis untuk revisi. */
     public function requestRevision(string $id = '0'): ResponseInterface
     {
         $taskId    = $id;
@@ -232,14 +236,19 @@ class ModuleTasks extends BaseController
         if ($task === null) {
             return $this->jsonError('Task not found', 404);
         }
+        $dashboard   = $task['dashboard_id'] ? (new DashboardModel())->find($task['dashboard_id']) : null;
         $requirement = $task['requirement_id'] ? (new RequirementModel())->find($task['requirement_id']) : null;
+        $isPm        = $dashboard !== null && TaskPolicy::isPmOfDashboard($user, $dashboard);
         $isOwner     = $requirement !== null && TaskPolicy::isRequirementOwner($user, $requirement);
-        if (! $isOwner && ! TaskPolicy::isAdmin($user)) {
-            return $this->jsonError('Only the requirement owner can request a revision', 403);
+        if (! $isPm && ! $isOwner && ! TaskPolicy::isAdmin($user)) {
+            return $this->jsonError('Only the PIC (PM) or Admin/Manager can return this task', 403);
         }
-        // Admin/Manager boleh force-return walau belum ada yang pending (override), owner biasa tetap hanya bisa saat genuinely pending.
-        if ($task['approval_state'] !== 'pending' && ! TaskPolicy::isAdmin($user)) {
-            return $this->jsonError('This task is not waiting for approval', 422);
+
+        // Jika ada status_move yang pending, return status move-nya
+        $moveModel = new TaskStatusMoveModel();
+        $move      = $moveModel->pendingForTask($taskId);
+        if ($move !== null) {
+            return $this->resolveMove($taskId, false);
         }
 
         $note       = trim((string) ($this->request->getJsonVar('note') ?? '')) ?: 'Perlu revisi.';
@@ -251,7 +260,7 @@ class ModuleTasks extends BaseController
         }
         (new ActivityLogModel())->log([
             'actor_id' => $user['id'], 'actor_name' => $user['name'],
-            'action' => "Owner minta revisi. {$note}", 'action_type' => 'approval',
+            'action' => "Task dikembalikan oleh PIC. {$note}", 'action_type' => 'approval',
             'object_type' => 'task', 'object_id' => $taskId, 'object_label' => $task['title'],
             'dashboard_id' => $task['dashboard_id'], 'evidence_id' => $evidenceId, 'reason' => $note,
         ]);
@@ -367,6 +376,9 @@ class ModuleTasks extends BaseController
 
         if ($patch !== []) {
             $taskModel->update($taskId, $patch);
+            if (!empty($task['requirement_id'])) {
+                (new RequirementModel())->syncStatusFromTasks($task['requirement_id']);
+            }
         }
         if ($syncedIds !== null) {
             $taskModel->syncAssignees($taskId, $syncedIds);
@@ -446,11 +458,15 @@ class ModuleTasks extends BaseController
             return $this->jsonError('Task not found', 404);
         }
         $requirement = $task['requirement_id'] ? (new RequirementModel())->find($task['requirement_id']) : null;
+        $dashboard   = $task['dashboard_id'] ? (new DashboardModel())->find($task['dashboard_id']) : null;
+        $assigneeIds = $taskModel->assigneeIdsFor($taskId);
+
+        if (! TaskPolicy::canUpdateTaskProgress($user, $task, $assigneeIds, $dashboard, $requirement)) {
+            return $this->jsonError('Anda hanya dapat mengubah progress/status task yang ditugaskan kepada Anda', 403);
+        }
+
         // Owner requirement boleh geser langsung, apa pun role-nya (termasuk Admin) — sama seperti PM.
         $isOwner = $requirement !== null && TaskPolicy::isRequirementOwner($user, $requirement);
-        if (! TaskPolicy::canUpdateBoard($user) && ! $isOwner) {
-            return $this->jsonError("You are not allowed to change this task's status", 403);
-        }
 
         $statusChanged   = $task['status'] !== $status;
         $progressChanged = $progressPercent !== null && $progressPercent !== (int) ($task['progress_percent'] ?? 0);
@@ -485,6 +501,9 @@ class ModuleTasks extends BaseController
                 $patch['progress_percent'] = $progressPercent;
             }
             $taskModel->update($taskId, $patch);
+            if (!empty($task['requirement_id'])) {
+                (new RequirementModel())->syncStatusFromTasks($task['requirement_id']);
+            }
             if ($evidenceId) {
                 (new TaskEvidenceModel())->update($evidenceId, ['kind' => 'pm_approve']);
             }
@@ -551,12 +570,15 @@ class ModuleTasks extends BaseController
         if ($task === null) {
             return $this->jsonError('Task not found', 404);
         }
-        $dashboard   = $task['dashboard_id'] ? (new DashboardModel())->find($task['dashboard_id']) : null;
-        $requirement = $task['requirement_id'] ? (new RequirementModel())->find($task['requirement_id']) : null;
-        $isPm        = $dashboard !== null && TaskPolicy::isPmOfDashboard($user, $dashboard);
-        $isOwner     = $requirement !== null && TaskPolicy::isRequirementOwner($user, $requirement);
-        if (! $isPm && ! $isOwner && ! TaskPolicy::isAdmin($user)) {
-            return $this->jsonError("Only this dashboard's PM or the requirement owner can decide", 403);
+        $isAdmin = TaskPolicy::isAdmin($user);
+        if (! $isAdmin) {
+            $dashboard   = $task['dashboard_id'] ? (new DashboardModel())->find($task['dashboard_id']) : null;
+            $requirement = $task['requirement_id'] ? (new RequirementModel())->find($task['requirement_id']) : null;
+            $isPm        = $dashboard !== null && TaskPolicy::isPmOfDashboard($user, $dashboard);
+            $isOwner     = $requirement !== null && TaskPolicy::isRequirementOwner($user, $requirement);
+            if (! $isPm && ! $isOwner) {
+                return $this->jsonError("Only this dashboard's PM or the requirement owner can decide", 403);
+            }
         }
 
         $moveModel = new TaskStatusMoveModel();
@@ -574,11 +596,14 @@ class ModuleTasks extends BaseController
             $moveStatusChanged = $move['from_status'] !== $move['to_status'];
             $moveProgressGiven = $move['to_progress_percent'] !== null;
 
-            $patch = ['status' => $move['to_status']];
+            $patch = ['status' => $move['to_status'], 'approval_state' => 'approved'];
             if ($moveProgressGiven) {
                 $patch['progress_percent'] = (int) $move['to_progress_percent'];
             }
             $taskModel->update($taskId, $patch);
+            if (!empty($task['requirement_id'])) {
+                (new RequirementModel())->syncStatusFromTasks($task['requirement_id']);
+            }
 
             $verb = $moveStatusChanged ? 'pindah' : 'update progress';
             if ($moveStatusChanged && $moveProgressGiven) {
@@ -609,14 +634,15 @@ class ModuleTasks extends BaseController
 
         $assigneeRows = (new TaskModel())->assigneesForTasks([$taskId])[$taskId] ?? [];
         $assigneeUserIds = array_column($assigneeRows, 'id');
-        $targetRecipients = array_unique(array_filter(array_merge([$move['requested_by'] ?? null, $task['created_by']], $assigneeUserIds)));
-        foreach ($targetRecipients as $recipientId) {
-            if ($recipientId !== $user['id']) {
-                (new NotificationModel())->notify($notifType, $notifTitle, "\"{$task['title']}\": {$notifBody}", $recipientId, $taskId, $task['dashboard_id']);
-            }
+        $targetRecipients = array_values(array_filter(
+            array_unique(array_filter(array_merge([$move['requested_by'] ?? null, $task['created_by']], $assigneeUserIds))),
+            fn ($uid) => $uid !== $user['id']
+        ));
+        if ($targetRecipients !== []) {
+            (new NotificationModel())->notifyMany($notifType, $notifTitle, "\"{$task['title']}\": {$notifBody}", $targetRecipients, $taskId, $task['dashboard_id']);
         }
 
-        return $this->jsonOk($this->shapeDetailRow($taskModel->findRichById($taskId)));
+        return $this->jsonOk($this->shapeDetailRow($taskModel->findRichById($taskId), $assigneeRows, true, null));
     }
 
     public function addComment(string $id = '0'): ResponseInterface
@@ -671,40 +697,67 @@ class ModuleTasks extends BaseController
         return $this->jsonOk($this->shapeDetailRow($taskModel->findRichById($taskId)));
     }
 
-    /** @param array<string, mixed> $row @param array<string, mixed>|null $move */
-    /** @param array<string, mixed> $row @param array<string, mixed>|null $move @param list<array{id:string,name:string}> $assignees */
-    private function shapeListRow(array $row, ?array $move = null, array $assignees = []): array
+    /** @param array<string, mixed> $row @param array<string, mixed>|null $move @param list<array{id:string,name:string}> $assignees @param list<array<string, mixed>> $evidences */
+    private function shapeListRow(array $row, ?array $move = null, array $assignees = [], array $evidences = []): array
     {
         $shaped = $this->baseShape($row, $assignees);
         $shaped['status_move'] = $this->shapeMove($move);
+        $shaped['evidences']   = $evidences;
 
         return $shaped;
     }
 
-    /** @param array<string, mixed>|null $row */
-    private function shapeDetailRow(?array $row): ?array
+    /**
+     * @param array<string, mixed>|null $row
+     * @param list<array{id:string,name:string}>|null $preloadedAssignees
+     * @param bool $hasPreloadedMove
+     * @param array<string, mixed>|null $preloadedMove
+     */
+    private function shapeDetailRow(?array $row, ?array $preloadedAssignees = null, bool $hasPreloadedMove = false, ?array $preloadedMove = null): ?array
     {
         if ($row === null) {
             return null;
         }
         $taskId    = $row['id'];
-        $assignees = (new TaskModel())->assigneesForTasks([$taskId])[$taskId] ?? [];
+        $assignees = $preloadedAssignees ?? ((new TaskModel())->assigneesForTasks([$taskId])[$taskId] ?? []);
         $shaped    = $this->baseShape($row, $assignees);
-        $shaped['status_move'] = $this->shapeMove((new TaskStatusMoveModel())->pendingForTask($taskId));
+        $shaped['status_move'] = $hasPreloadedMove ? $this->shapeMove($preloadedMove) : $this->shapeMove((new TaskStatusMoveModel())->pendingForTask($taskId));
         $shaped['comments']    = array_map(fn ($c) => [
             'id' => $c['id'], 'at' => $c['created_at'], 'actor' => $c['actor_name'] ?? '',
             'body' => $c['body'], 'evidence_id' => $c['evidence_id'] ?: null,
         ], (new CommentModel())->forTask($taskId));
         $shaped['activity'] = array_map(fn ($a) => [
-            'id' => $a['id'], 'at' => $a['created_at'], 'actor' => $a['actor_name'],
-            'action' => $a['action'], 'action_type' => $a['action_type'] ?? null,
+            'id'          => $a['id'],
+            'at'          => $a['created_at'],
+            'actor'       => $a['actor_name'],
+            'action'      => $a['action'],
+            'action_type' => $a['action_type'] ?? null,
             'evidence_id' => $a['evidence_id'] ?: null,
+            'reason'      => $a['reason'] ?? null,
         ], (new ActivityLogModel())->forObject('task', $taskId));
         $shaped['evidences'] = array_map(fn ($e) => [
-            'id' => $e['id'], 'at' => $e['created_at'], 'actor' => $e['actor_name'] ?? '',
-            'kind' => $e['kind'], 'name' => $e['file_name'], 'mime' => $e['file_mime'],
-            'size' => (int) $e['file_size'], 'file_url' => "/api/evidences/{$e['id']}/file", 'note' => $e['note'],
+            'id'               => $e['id'],
+            'at'               => $e['created_at'],
+            'actor'            => $e['actor_name'] ?? '',
+            'kind'             => $e['kind'],
+            'name'             => $e['file_name'],
+            'mime'             => $e['file_mime'],
+            'size'             => (int) $e['file_size'],
+            'file_url'         => "/api/evidences/{$e['id']}/file",
+            'note'             => $e['note'] ?? '',
+            'progress_percent' => $e['progress_percent'] !== null ? (int) $e['progress_percent'] : null,
         ], (new TaskEvidenceModel())->forTask($taskId));
+        $shaped['status_moves'] = array_map(fn ($m) => [
+            'id'                  => $m['id'],
+            'from'                => $m['from_status'],
+            'to'                  => $m['to_status'],
+            'to_progress_percent' => $m['to_progress_percent'] !== null ? (int) $m['to_progress_percent'] : null,
+            'requested_by'        => $m['requested_by_name'] ?? '',
+            'note'                => $m['note'] ?? '',
+            'status'              => $m['status'],
+            'at'                  => $m['created_at'],
+            'evidence_id'         => $m['evidence_id'] ?: null,
+        ], (new TaskStatusMoveModel())->allForTask($taskId));
 
         return $shaped;
     }
@@ -738,9 +791,8 @@ class ModuleTasks extends BaseController
             'created_at'       => $row['created_at'],
             'updated_at'       => $row['updated_at'],
             'last_return'      => $this->getLastReturnInfo($row['id'], $row['approval_state'] ?? ''),
-            // List/board tidak ikut query comments (biar ringan). Default kosong supaya
-            // frontend tidak crash baca task.comments.length; shapeDetailRow() menimpa ini
-            // dengan comments sungguhan untuk halaman detail.
+            // Default kosong supaya frontend tidak crash baca task.comments/evidences
+            'evidences'        => [],
             'comments'         => [],
         ];
     }

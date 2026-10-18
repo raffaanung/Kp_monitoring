@@ -44,7 +44,7 @@
 
   /** @param {import('../lib/activityLogStore.svelte.js').ObjectType} type @param {number} id */
   function objectLink(type, id) {
-    return type === 'task' ? '/tasks/list' : `/registry/${id}`
+    return type === 'task' ? (id ? `/registry/list?focusTask=${id}` : '/registry/list') : `/registry/${id}`
   }
 </script>
 

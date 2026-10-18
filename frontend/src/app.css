@@ -62,3 +62,40 @@ select {
   height: 100%;
   min-height: 100vh;
 }
+
+/* ── Modern Minimalist Button Spinner (Blue Accent) ── */
+.btn-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: btn-spin-anim 0.6s linear infinite;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.btn-spinner.blue {
+  border-color: rgba(37, 99, 235, 0.22);
+  border-top-color: #2563eb;
+}
+
+.btn-spinner.sm {
+  width: 12px;
+  height: 12px;
+  border-width: 1.5px;
+}
+
+.btn-spinner.lg {
+  width: 18px;
+  height: 18px;
+  border-width: 2.2px;
+}
+
+@keyframes btn-spin-anim {
+  to {
+    transform: rotate(360deg);
+  }
+}
+

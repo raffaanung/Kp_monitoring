@@ -305,7 +305,14 @@
             <button type="button" class="ghost danger" onclick={onClearPhoto} disabled={busy}>Hapus foto</button>
           {/if}
           <button type="button" class="ghost" onclick={closePhoto}>Batal</button>
-          <button type="submit" class="primary" disabled={busy}>{busy ? 'Menyimpan…' : 'Simpan foto'}</button>
+          <button type="submit" class="primary" disabled={busy} style="display:inline-flex;align-items:center;gap:7px;">
+            {#if busy}
+              <span class="btn-spinner sm"></span>
+              <span>Menyimpan…</span>
+            {:else}
+              <span>Simpan foto</span>
+            {/if}
+          </button>
         </div>
       </form>
     </div>
@@ -349,7 +356,14 @@
 
         <div class="actions">
           <button type="button" class="ghost" onclick={closeInfo}>Batal</button>
-          <button type="submit" class="primary" disabled={busy}>{busy ? 'Menyimpan…' : 'Simpan info'}</button>
+          <button type="submit" class="primary" disabled={busy} style="display:inline-flex;align-items:center;gap:7px;">
+            {#if busy}
+              <span class="btn-spinner sm"></span>
+              <span>Menyimpan…</span>
+            {:else}
+              <span>Simpan info</span>
+            {/if}
+          </button>
         </div>
       </form>
     </div>
@@ -398,7 +412,14 @@
 
         <div class="actions">
           <button type="button" class="ghost" onclick={closePassword}>Batal</button>
-          <button type="submit" class="primary" disabled={busy}>{busy ? 'Menyimpan…' : 'Simpan password'}</button>
+          <button type="submit" class="primary" disabled={busy} style="display:inline-flex;align-items:center;gap:7px;">
+            {#if busy}
+              <span class="btn-spinner sm"></span>
+              <span>Menyimpan…</span>
+            {:else}
+              <span>Simpan password</span>
+            {/if}
+          </button>
         </div>
       </form>
     </div>

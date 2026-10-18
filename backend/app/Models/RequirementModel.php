@@ -17,9 +17,73 @@ class RequirementModel extends Model
         'version_no', 'version_root_id',
     ];
 
+    /**
+     * Sinkronisasi status requirement berdasarkan progress task di dalamnya:
+     * - Belum ada task atau semua task masih backlog -> 'open'
+     * - Minimal 1 task sudah aktif/dikerjakan (development, testing, uat, to_production, selesai) tapi belum semua selesai -> 'in_progress'
+     * - Semua task sudah berstatus 'selesai' (dan minimal ada 1 task) -> 'done'
+     */
+    public function syncStatusFromTasks(?string $requirementId = null): void
+    {
+        $db = db_connect();
+        $builder = $db->table('tasks')
+            ->select('requirement_id, status')
+            ->where('deleted_at', null)
+            ->where('requirement_id IS NOT NULL');
+
+        if ($requirementId !== null) {
+            $builder->where('requirement_id', $requirementId);
+        }
+
+        $tasks = $builder->get()->getResultArray();
+        $byReq = [];
+        foreach ($tasks as $t) {
+            $rId = $t['requirement_id'];
+            if ($rId) {
+                $byReq[$rId][] = $t['status'];
+            }
+        }
+
+        $reqBuilder = $this->select('id, status');
+        if ($requirementId !== null) {
+            $reqBuilder->where('id', $requirementId);
+        }
+        $reqs = $reqBuilder->findAll();
+
+        foreach ($reqs as $r) {
+            $id = $r['id'];
+            $taskStatuses = $byReq[$id] ?? [];
+            $total = count($taskStatuses);
+            $doneCount = 0;
+            $activeCount = 0;
+
+            foreach ($taskStatuses as $st) {
+                if ($st === 'selesai') {
+                    $doneCount++;
+                    $activeCount++;
+                } elseif ($st !== 'backlog') {
+                    $activeCount++;
+                }
+            }
+
+            $computedStatus = 'open';
+            if ($total > 0 && $doneCount === $total) {
+                $computedStatus = 'done';
+            } elseif ($activeCount > 0) {
+                $computedStatus = 'in_progress';
+            }
+
+            if ($r['status'] !== $computedStatus) {
+                $this->update($id, ['status' => $computedStatus]);
+            }
+        }
+    }
+
     /** @return list<array<string, mixed>> */
     public function listWithDetails(): array
     {
+        $this->syncStatusFromTasks();
+
         $rows = $this->select('requirements.*, dashboards.name AS dashboard_name, creator.name AS created_by_name')
             ->join('dashboards', 'dashboards.id = requirements.dashboard_id', 'left')
             ->join('users AS creator', 'creator.id = requirements.created_by', 'left')

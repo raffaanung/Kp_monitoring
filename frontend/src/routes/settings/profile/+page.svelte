@@ -305,7 +305,14 @@
             <button type="button" class="ghost danger" onclick={onClearPhoto} disabled={busy}>Remove photo</button>
           {/if}
           <button type="button" class="ghost" onclick={closePhoto}>Cancel</button>
-          <button type="submit" class="primary" disabled={busy}>{busy ? 'Saving…' : 'Save photo'}</button>
+          <button type="submit" class="primary" disabled={busy} style="display:inline-flex;align-items:center;gap:7px;">
+            {#if busy}
+              <span class="btn-spinner sm"></span>
+              <span>Saving…</span>
+            {:else}
+              <span>Save photo</span>
+            {/if}
+          </button>
         </div>
       </form>
     </div>
@@ -349,7 +356,14 @@
 
         <div class="actions">
           <button type="button" class="ghost" onclick={closeInfo}>Cancel</button>
-          <button type="submit" class="primary" disabled={busy}>{busy ? 'Saving…' : 'Save info'}</button>
+          <button type="submit" class="primary" disabled={busy} style="display:inline-flex;align-items:center;gap:7px;">
+            {#if busy}
+              <span class="btn-spinner sm"></span>
+              <span>Saving…</span>
+            {:else}
+              <span>Save info</span>
+            {/if}
+          </button>
         </div>
       </form>
     </div>
@@ -398,7 +412,14 @@
 
         <div class="actions">
           <button type="button" class="ghost" onclick={closePassword}>Cancel</button>
-          <button type="submit" class="primary" disabled={busy}>{busy ? 'Saving…' : 'Save password'}</button>
+          <button type="submit" class="primary" disabled={busy} style="display:inline-flex;align-items:center;gap:7px;">
+            {#if busy}
+              <span class="btn-spinner sm"></span>
+              <span>Saving…</span>
+            {:else}
+              <span>Save password</span>
+            {/if}
+          </button>
         </div>
       </form>
     </div>

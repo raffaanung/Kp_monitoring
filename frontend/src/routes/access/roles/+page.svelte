@@ -45,14 +45,21 @@
     confirm = null
   }
 
+  let deleteSubmitting = $state(false)
+
   async function onConfirmDelete() {
-    if (!confirm) return
-    const result = await deleteRole(confirm.id)
-    if (!result.ok) {
-      confirmError = result.reason
-      return
+    if (!confirm || deleteSubmitting) return
+    deleteSubmitting = true
+    try {
+      const result = await deleteRole(confirm.id)
+      if (!result.ok) {
+        confirmError = result.reason
+        return
+      }
+      confirm = null
+    } finally {
+      deleteSubmitting = false
     }
-    confirm = null
   }
 
   let editOpen = $state(false)
@@ -81,16 +88,24 @@
     editPerms = { ...editPerms, [key]: !editPerms[key] }
   }
 
+  let editSubmitting = $state(false)
+  let addSubmitting = $state(false)
+
   /** @param {SubmitEvent} event */
   async function onEditSubmit(event) {
     event.preventDefault()
-    if (editRoleId == null) return
-    const result = await updateRole(editRoleId, { name: editName, description: editDescription, permissions: editPerms })
-    if (!result.ok) {
-      editError = result.reason
-      return
+    if (editRoleId == null || editSubmitting) return
+    editSubmitting = true
+    try {
+      const result = await updateRole(editRoleId, { name: editName, description: editDescription, permissions: editPerms })
+      if (!result.ok) {
+        editError = result.reason
+        return
+      }
+      editOpen = false
+    } finally {
+      editSubmitting = false
     }
-    editOpen = false
   }
 
   /** @param {string} key */
@@ -111,11 +126,14 @@
       error = 'That role name is already in use'
       return
     }
+    addSubmitting = true
     try {
       await createRole({ name: clean, description, permissions: newPerms })
       addOpen = false
     } catch (err) {
       error = err instanceof Error ? err.message : String(err)
+    } finally {
+      addSubmitting = false
     }
   }
 
@@ -315,7 +333,14 @@
 
         <div class="actions">
           <button type="button" class="ghost" onclick={closeAdd}>Cancel</button>
-          <button type="submit" class="primary">Save role</button>
+          <button type="submit" class="primary" disabled={addSubmitting} style="display:inline-flex;align-items:center;gap:7px;">
+            {#if addSubmitting}
+              <span class="btn-spinner sm"></span>
+              <span>Saving…</span>
+            {:else}
+              <span>Save role</span>
+            {/if}
+          </button>
         </div>
       </form>
     </div>
@@ -374,7 +399,14 @@
 
         <div class="actions">
           <button type="button" class="ghost" onclick={closeEdit}>Cancel</button>
-          <button type="submit" class="primary">Save changes</button>
+          <button type="submit" class="primary" disabled={editSubmitting} style="display:inline-flex;align-items:center;gap:7px;">
+            {#if editSubmitting}
+              <span class="btn-spinner sm"></span>
+              <span>Saving…</span>
+            {:else}
+              <span>Save changes</span>
+            {/if}
+          </button>
         </div>
       </form>
     </div>
@@ -412,7 +444,14 @@
             <button type="button" class="primary" onclick={closeConfirm}>Mengerti</button>
           {:else}
             <button type="button" class="ghost" onclick={closeConfirm}>Cancel</button>
-            <button type="button" class="danger" onclick={onConfirmDelete}>Delete</button>
+            <button type="button" class="danger" onclick={onConfirmDelete} disabled={deleteSubmitting} style="display:inline-flex;align-items:center;gap:7px;">
+              {#if deleteSubmitting}
+                <span class="btn-spinner sm"></span>
+                <span>Deleting…</span>
+              {:else}
+                <span>Delete</span>
+              {/if}
+            </button>
           {/if}
         </div>
       </div>

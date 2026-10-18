@@ -1,8 +1,8 @@
-﻿<script>
+<script>
   import { goto } from '$app/navigation'
 
   $effect(() => {
-    goto('/tasks/list')
+    goto('/registry/list')
   })
 </script>
 

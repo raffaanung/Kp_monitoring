@@ -1,397 +1,525 @@
 <script>
+  import { untrack } from 'svelte';
   import { portal } from '$lib/portal.js';
   import { updateDashboard } from '$lib/registryStore.svelte.js';
   import { listUsers } from '$lib/accessStore.svelte.js';
+  import {
+    listRequirements,
+    createRequirement,
+    updateRequirement,
+    requirementTeamRoster,
+  } from '$lib/requirementStore.svelte.js';
+  import { addAttachments } from '$lib/attachmentStore.svelte.js';
 
-  let { editOpen = $bindable(false), dashboard = $bindable(null) } = $props();
+  let {
+    editOpen = $bindable(false),
+    dashboard = $bindable(null),
+    pmOptions: customPmOptions = null
+  } = $props();
 
-  const pmOptions = $derived(listUsers({ role: 3, status: "active" }));
-  const userOptions = $derived(listUsers({ status: "active" }));
-
-  let formName = $state("");
-  let formCode = $state("");
-  let formPlatform = $state("");
-  let formDescription = $state("");
-  let formPm = $state("");
-  let formUser = $state("");
-  let formCategory = $state("");
-  let formPriority = $state("medium");
-  let formUrl = $state("");
-
-  $effect(() => {
-    if (editOpen && dashboard) {
-      formName = dashboard.name || "";
-      formCode = dashboard.code || "";
-      formPlatform = dashboard.platform || "";
-      formDescription = dashboard.description || "";
-      formPm = dashboard.pm || "";
-      formUser = dashboard.owner || "";
-      formCategory = dashboard.category || "";
-      formPriority = dashboard.criticality || "medium";
-      formUrl = dashboard.url || "";
-    }
+  const teknisRoster = $derived(requirementTeamRoster());
+  const allActiveUsers = $derived(listUsers({ status: 'active' }));
+  const activePmUsers = $derived(listUsers({ role: 3, status: 'active' }));
+  const effectivePmOptions = $derived.by(() => {
+    if (customPmOptions && customPmOptions.length > 0) return customPmOptions;
+    if (activePmUsers && activePmUsers.length > 0) return activePmUsers;
+    return allActiveUsers;
   });
+
+  const steps = [
+    { title: 'Identitas', desc: 'Name, unit & PIC' },
+    { title: 'Teknologi', desc: 'Framework, backend, front end' },
+    { title: 'Infrastructure', desc: 'Development & production' },
+    { title: 'First Requirement', desc: 'Name, description & due date' },
+  ];
+
+  const profileSpec = [
+    { key: 'framework', label: 'Framework', placeholder: 'Contoh: SvelteKit' },
+    { key: 'framework_version', label: 'Framework Version', placeholder: 'Contoh: 2.5' },
+    { key: 'backend', label: 'Backend', placeholder: 'Contoh: CodeIgniter' },
+    { key: 'backend_version', label: 'Backend Version', placeholder: 'Contoh: 4.5' },
+    { key: 'frontend', label: 'Front End', placeholder: 'Contoh: Svelte' },
+  ];
+
+  const envSpec = [
+    { key: 'db', label: 'Database Engine', placeholder: 'Contoh: PostgreSQL' },
+    { key: 'ip', label: 'IP Address', placeholder: 'Contoh: 10.0.0.12' },
+    { key: 'db_name', label: 'Database Name', placeholder: 'Database name' },
+    { key: 'db_user', label: 'Database Username', placeholder: 'Database username' },
+    { key: 'db_pass', label: 'Password', placeholder: 'Database password', secret: true },
+  ];
+
+  const envs = [
+    { key: 'development', label: 'Development' },
+    { key: 'production', label: 'Production' },
+  ];
+
+  let currentStep = $state(1);
+  let formName = $state("");
+  let formDescription = $state("");
+  let formCategory = $state("");
+  let formPic = $state("");
+  let formPriority = $state("medium");
+  /** @type {Record<string, string>} */
+  let formMeta = $state({});
+  let formError = $state("");
+  let saving = $state(false);
+
+  let targetReqId = $state(null);
+  let reqTitle = $state("");
+  let reqDescription = $state("");
+  let reqDueDate = $state("");
+  /** @type {string[]} */
+  let reqAssignTo = $state([]);
+  /** @type {FileList | null} */
+  let reqFiles = $state(null);
+
+  let initializedDashId = $state(null);
 
   function closeEdit() {
     editOpen = false;
+    initializedDashId = null;
+    currentStep = 1;
+    formError = "";
+    reqFiles = null;
   }
 
-  function onSave(event) {
-    event.preventDefault();
-    if (!dashboard) return;
+  $effect(() => {
+    if (!editOpen) {
+      initializedDashId = null;
+      return;
+    }
 
+    if (dashboard && initializedDashId !== dashboard.id) {
+      initializedDashId = dashboard.id;
+      currentStep = 1;
+      formError = "";
+      formName = dashboard.name || "";
+      formDescription = dashboard.description || "";
+      formCategory = dashboard.category || "";
+      formPic = dashboard.pm || dashboard.owner || "";
+      formPriority = dashboard.criticality || dashboard.priority || "medium";
+      formMeta = { ...(dashboard.metadata || {}) };
+
+      untrack(() => {
+        // Cari requirement pertama/utama milik dashboard ini tanpa membuat reactive subscription
+        const existingReqs = listRequirements({ dashboard: dashboard.name });
+        const sorted = existingReqs.slice().sort((a, b) => {
+          return (a.created_at || '').localeCompare(b.created_at || '') || ((a.version_no || 1) - (b.version_no || 1));
+        });
+        const firstReq = sorted[0] || null;
+
+        if (firstReq) {
+          targetReqId = firstReq.id;
+          reqTitle = firstReq.title || "";
+          reqDescription = firstReq.description || "";
+          reqDueDate = firstReq.due_date || "";
+          reqAssignTo = Array.isArray(firstReq.team) ? [...firstReq.team] : [];
+        } else {
+          targetReqId = null;
+          reqTitle = "";
+          reqDescription = "";
+          reqDueDate = "";
+          reqAssignTo = [];
+        }
+        reqFiles = null;
+      });
+    }
+  });
+
+  function toggleReqAssignee(name) {
+    reqAssignTo = reqAssignTo.includes(name)
+      ? reqAssignTo.filter((n) => n !== name)
+      : [...reqAssignTo, name];
+  }
+
+  function nextStep() {
+    formError = "";
+    if (currentStep === 1 && (!formName.trim() || !formPic.trim())) {
+      formError = "Application name and PIC are required.";
+      return;
+    }
+    if (currentStep < steps.length) currentStep += 1;
+  }
+
+  function prevStep() {
+    formError = "";
+    if (currentStep > 1) currentStep -= 1;
+  }
+
+  function goToStep(step) {
+    formError = "";
+    currentStep = step;
+  }
+
+  async function onSave(event) {
+    event.preventDefault();
+    if (currentStep < steps.length) {
+      nextStep();
+      return;
+    }
+
+    const name = formName.trim();
+    const pic = formPic.trim();
+    if (!name || !pic) {
+      formError = "Application name and PIC are required before saving.";
+      currentStep = 1;
+      return;
+    }
+
+    /** @type {Record<string, string>} */
+    const metadata = {};
+    for (const [key, value] of Object.entries(formMeta)) {
+      const trimmed = String(value ?? '').trim();
+      metadata[key] = trimmed;
+    }
+
+    saving = true;
     const patch = {
-      name: formName.trim(),
-      code: formCode.trim(),
-      platform: formPlatform.trim(),
+      name,
       description: formDescription.trim(),
-      pm: formPm.trim(),
-      owner: formUser.trim(),
       category: formCategory,
       criticality: formPriority,
-      url: formUrl.trim(),
+      priority: formPriority,
+      owner: pic,
+      pm: pic,
+      metadata,
     };
 
-    updateDashboard(dashboard.id, patch);
-    
-    // Update local state directly so it reflects on UI immediately
-    Object.assign(dashboard, patch);
+    const ok = await updateDashboard(dashboard.id, patch);
+    if (!ok) {
+      saving = false;
+      formError = "Could not update application. Please try again.";
+      return;
+    }
 
-    editOpen = false;
+    // Update local dashboard object langsung agar tampilan otomatis ter-refresh
+    Object.assign(dashboard, patch);
+    if (!dashboard.metadata) dashboard.metadata = {};
+    Object.assign(dashboard.metadata, metadata);
+
+    // Simpan perubahan requirement Step 4 jika diisi
+    const reqTitleTrimmed = reqTitle.trim();
+    if (targetReqId) {
+      if (reqTitleTrimmed) {
+        await updateRequirement(targetReqId, {
+          title: reqTitleTrimmed,
+          description: reqDescription.trim(),
+          due_date: reqDueDate,
+          team: reqAssignTo,
+        });
+        if (reqFiles && reqFiles.length) {
+          await addAttachments('requirement', targetReqId, reqFiles);
+        }
+      }
+    } else if (reqTitleTrimmed) {
+      const createdReq = await createRequirement({
+        dashboard: name,
+        title: reqTitleTrimmed,
+        description: reqDescription.trim(),
+        due_date: reqDueDate,
+        team: reqAssignTo,
+      });
+      if (createdReq && reqFiles && reqFiles.length) {
+        await addAttachments('requirement', createdReq.id, reqFiles);
+      }
+    }
+
+    saving = false;
+    closeEdit();
   }
 </script>
 
-{#if editOpen}
+{#if editOpen && dashboard}
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <div class="dash-backdrop" use:portal role="presentation" onclick={closeEdit}></div>
-  
-  <form class="dash-modal edit-modal-premium" use:portal role="dialog" aria-modal="true" onclick={(e) => e.stopPropagation()} onsubmit={onSave}>
-    
-    <header class="edit-header">
-      <div class="header-content">
-        <div class="header-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-          </svg>
-        </div>
-        <div class="header-text">
-          <h3>Edit General Information</h3>
-          <p>Perbarui identitas dan detail utama aplikasi ini.</p>
-        </div>
+  <div
+    class="dash-backdrop"
+    use:portal
+    role="presentation"
+    onclick={closeEdit}
+  ></div>
+  <form
+    class="dash-modal wizard-split"
+    use:portal
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="edit-dashboard-title"
+    onclick={(e) => e.stopPropagation()}
+    onsubmit={onSave}
+    onkeydown={(e) => {
+      if (e.key === 'Enter' && e.target instanceof HTMLInputElement && e.target.type !== 'submit') {
+        e.preventDefault();
+      }
+    }}
+  >
+    <div class="wizard-left">
+      <div class="left-header">
+        <h2 id="edit-dashboard-title">Edit Project</h2>
+        <p>
+          Perbarui identitas, teknologi, infrastruktur, dan first requirement dashboard ini.
+        </p>
       </div>
-      <button type="button" class="dash-close close-btn-premium" onclick={closeEdit} aria-label="Close">
-        <svg viewBox="0 0 24 24" fill="none"><path d="M7 7l10 10M17 7 7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-      </button>
-    </header>
-    
-    <div class="wizard-body-scroll edit-body">
-      <div class="form-group-premium">
-        <label>
-          <span>Application / Dashboard Name <span class="req">*</span></span>
-          <input class="input-premium" bind:value={formName} required maxlength="80" placeholder="Contoh: Operation Dashboard" />
-        </label>
-      </div>
-      
-      <div class="grid-2">
-        <div class="form-group-premium">
-          <label>
-            <span>Kode Aplikasi</span>
-            <input class="input-premium" bind:value={formCode} maxlength="6" placeholder="Misal: EDM" />
-          </label>
-        </div>
-        <div class="form-group-premium">
-          <label>
-            <span>Platform</span>
-            <input class="input-premium" bind:value={formPlatform} maxlength="80" placeholder="Contoh: Web, Android" />
-          </label>
-        </div>
-      </div>
-      
-      <div class="form-group-premium">
-        <label>
-          <span>Application scope</span>
-          <textarea class="input-premium textarea-premium" rows="3" bind:value={formDescription} maxlength="600" placeholder="Briefly describe what this application does..."></textarea>
-        </label>
-      </div>
-      
-      <div class="grid-2">
-        <div class="form-group-premium">
-          <label>
-            <span>Kategori</span>
-            <div class="select-wrapper">
-              <select class="input-premium" bind:value={formCategory}>
-                <option value="">Select a category...</option>
-                <option value="Finance">Finance</option>
-                <option value="HR">HR</option>
-                <option value="Operations">Operations</option>
-                <option value="Sales">Sales</option>
-                <option value="Marketing">Marketing</option>
-                <option value="IT">IT</option>
-                <option value="Legal">Legal</option>
-                <option value="General">Other / General</option>
-              </select>
+
+      <div class="wizard-steps-v">
+        {#each steps as step, index}
+          {@const number = index + 1}
+          {#if index > 0}
+            <div class="v-line" class:active={currentStep > index}></div>
+          {/if}
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div
+            class="step-v"
+            class:active={currentStep === number}
+            class:done={currentStep > number}
+            onclick={() => goToStep(number)}
+          >
+            <div class="v-circle">
+              {#if currentStep > number}
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="3"><polyline points="20 6 9 17 4 12" /></svg
+                >
+              {:else}
+                {number}
+              {/if}
             </div>
-          </label>
-        </div>
-        <div class="form-group-premium">
-          <label>
-            <span>Work priority</span>
-            <div class="select-wrapper">
-              <select class="input-premium" bind:value={formPriority}>
-                <option value="high">Tinggi (High)</option>
-                <option value="medium">Sedang (Medium)</option>
-                <option value="low">Rendah (Low)</option>
-              </select>
+            <div class="v-info">
+              <span class="v-title">{step.title}</span>
+              <span class="v-desc">{step.desc}</span>
             </div>
-          </label>
-        </div>
-      </div>
-      
-      <div class="grid-2">
-        <div class="form-group-premium">
-          <label>
-            <span>PIC / Pemohon</span>
-            <input class="input-premium" bind:value={formUser} list="edit-user-options" placeholder="Select or type a PIC..." />
-            <datalist id="edit-user-options">
-              {#each userOptions as user}
-                <option value={user.name}></option>
-              {/each}
-            </datalist>
-          </label>
-        </div>
-        <div class="form-group-premium">
-          <label>
-            <span>URL / Tautan</span>
-            <input class="input-premium" bind:value={formUrl} placeholder="https://..." />
-          </label>
-        </div>
+          </div>
+        {/each}
       </div>
     </div>
-    
-    <footer class="edit-footer">
-      <button type="button" class="btn-cancel-premium" onclick={closeEdit}>Cancel</button>
-      <button type="submit" class="btn-save-premium">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-          <polyline points="17 21 17 13 7 13 7 21"></polyline>
-          <polyline points="7 3 7 8 15 8"></polyline>
-        </svg>
-        Save Changes
-      </button>
-    </footer>
+
+    <div class="wizard-right">
+      <header class="wizard-right-head">
+        <button
+          type="button"
+          class="dash-close"
+          aria-label="Close"
+          onclick={closeEdit}
+        >
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M7 7l10 10M17 7 7 17"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+            />
+          </svg>
+        </button>
+      </header>
+
+      <div class="wizard-body-scroll">
+        {#if currentStep === 1}
+          <div class="wizard-pane">
+            <div class="pane-title-wrap">
+              <h4 class="pane-title">Dashboard Identity</h4>
+              <p class="pane-sub">
+                General information shown at the top of the dashboard detail.
+              </p>
+            </div>
+
+            <label>
+              <span>Application / Dashboard Name <span class="req">*</span></span>
+              <input
+                bind:value={formName}
+                maxlength="80"
+                placeholder="Contoh: Operation Dashboard"
+                required
+              />
+            </label>
+            <label>
+              Description
+              <textarea
+                rows="3"
+                maxlength="600"
+                bind:value={formDescription}
+                placeholder="Describe what this application does..."
+              ></textarea>
+            </label>
+            <label>
+              Unit
+              <input
+                type="text"
+                bind:value={formCategory}
+                placeholder="Contoh: Finance, Operasional, IT..."
+              />
+            </label>
+            <label>
+              <span>PIC <span class="req">*</span></span>
+              <select bind:value={formPic} required>
+                <option value="">Select a PIC...</option>
+                {#each effectivePmOptions as user (user.id || user.name)}
+                  <option value={user.name}>{user.name}</option>
+                {/each}
+                {#if formPic && !effectivePmOptions.some((u) => u.name === formPic)}
+                  <option value={formPic}>{formPic}</option>
+                {/if}
+              </select>
+            </label>
+            <label>
+              Priority
+              <select bind:value={formPriority}>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </label>
+          </div>
+        {:else if currentStep === 2}
+          <div class="wizard-pane">
+            <div class="pane-title-wrap">
+              <h4 class="pane-title">Teknologi</h4>
+              <p class="pane-sub">
+                Framework and stack used by this application.
+              </p>
+            </div>
+
+            <div class="grid-2">
+              {#each profileSpec as field (field.key)}
+                <label>
+                  {field.label}
+                  <input
+                    bind:value={formMeta[field.key]}
+                    maxlength="200"
+                    placeholder={field.placeholder}
+                  />
+                </label>
+              {/each}
+            </div>
+          </div>
+        {:else if currentStep === 3}
+          <div class="wizard-pane">
+            <div class="pane-title-wrap">
+              <h4 class="pane-title">Infrastructure</h4>
+              <p class="pane-sub">
+                Links and database access for each environment.
+              </p>
+            </div>
+
+            {#each envs as env (env.key)}
+              <div class="wizard-env">
+                <h5 class="wizard-env-title">{env.label}</h5>
+                <label>
+                  Link {env.label}
+                  <input
+                    bind:value={formMeta[`${env.key}_link`]}
+                    maxlength="500"
+                    placeholder="https://..."
+                  />
+                </label>
+                <div class="grid-2">
+                  {#each envSpec as field (field.key)}
+                    <label>
+                      {field.label}
+                      <input
+                        type={field.secret ? 'password' : 'text'}
+                        autocomplete={field.secret ? 'new-password' : 'off'}
+                        bind:value={formMeta[`${env.key}_${field.key}`]}
+                        maxlength="200"
+                        placeholder={field.placeholder}
+                      />
+                    </label>
+                  {/each}
+                </div>
+              </div>
+            {/each}
+          </div>
+        {:else}
+          <div class="wizard-pane">
+            <div class="pane-title-wrap">
+              <h4 class="pane-title">First Requirement</h4>
+              <p class="pane-sub">
+                {targetReqId ? 'Perbarui requirement utama/pertama untuk aplikasi ini.' : 'Optional — add the first requirement for this application now, or skip and add it later.'}
+              </p>
+            </div>
+
+            <label>
+              Requirement Name
+              <input
+                bind:value={reqTitle}
+                maxlength="150"
+                placeholder="Contoh: Login page revamp"
+              />
+            </label>
+            <label>
+              Description
+              <textarea
+                rows="3"
+                maxlength="600"
+                bind:value={reqDescription}
+                placeholder="Describe this requirement..."
+              ></textarea>
+            </label>
+            <div class="grid-2">
+              <label>
+                Due Date
+                <input type="date" bind:value={reqDueDate} />
+              </label>
+              <label>
+                Attachment
+                <input type="file" multiple bind:files={reqFiles} />
+              </label>
+            </div>
+            <div class="wizard-field">
+              <span class="wizard-field-label">
+                Assign To <span class="input-hint">(optional — Tim Teknis)</span>
+              </span>
+              {#if teknisRoster.length === 0}
+                <span class="input-hint">No Tim Teknis members available yet.</span>
+              {:else}
+                <div class="assign-grid">
+                  {#each teknisRoster as member (member.name)}
+                    {@const isChecked = reqAssignTo.includes(member.name)}
+                    <label class="assign-checkbox-card" class:checked={isChecked}>
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onchange={() => toggleReqAssignee(member.name)}
+                      />
+                      <span class="assign-name">{member.name}</span>
+                    </label>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          </div>
+        {/if}
+      </div>
+
+      {#if formError}
+        <div class="dash-modal-body-error">
+          <p class="dash-error">{formError}</p>
+        </div>
+      {/if}
+
+      <footer class="wizard-foot">
+        {#if currentStep === 1}
+          <button type="button" class="dash-cancel" onclick={closeEdit}
+            >Cancel</button
+          >
+        {:else}
+          <button type="button" class="dash-cancel" onclick={prevStep}
+            >Back</button
+          >
+        {/if}
+        {#if currentStep < steps.length}
+          <button type="button" class="dash-save wizard-btn" onclick={nextStep}>Next</button>
+        {:else}
+          <button type="submit" class="dash-save wizard-btn finish" disabled={saving}>
+            {saving ? 'Saving...' : 'Save Changes'}
+          </button>
+        {/if}
+      </footer>
+    </div>
   </form>
 {/if}
-
-<style>
-  /* Premium Edit Modal Styles */
-  .edit-modal-premium {
-    max-width: 650px !important;
-    flex-direction: column !important;
-    border-radius: 16px !important;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05) !important;
-    background: #fff !important;
-    overflow: hidden !important;
-  }
-
-  .edit-header {
-    background: linear-gradient(to right, #f8fafc, #f1f5f9);
-    padding: 20px 28px;
-    border-bottom: 1px solid #e2e8f0;
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-  }
-
-  .header-content {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-  }
-
-  .header-icon {
-    width: 42px;
-    height: 42px;
-    background: #e0f2fe;
-    color: #0284c7;
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 4px 10px rgba(2, 132, 199, 0.15);
-  }
-
-  .header-icon svg {
-    width: 22px;
-    height: 22px;
-  }
-
-  .header-text h3 {
-    margin: 0 0 4px 0;
-    font-size: 1.15rem;
-    font-weight: 700;
-    color: #0f172a;
-    letter-spacing: -0.01em;
-  }
-
-  .header-text p {
-    margin: 0;
-    font-size: 0.8rem;
-    color: #64748b;
-  }
-
-  .close-btn-premium {
-    background: transparent;
-    border: none;
-    color: #94a3b8;
-    cursor: pointer;
-    padding: 6px;
-    border-radius: 8px;
-    transition: all 0.2s;
-  }
-
-  .close-btn-premium:hover {
-    background: #e2e8f0;
-    color: #0f172a;
-  }
-
-  .close-btn-premium svg {
-    width: 20px;
-    height: 20px;
-  }
-
-  .edit-body {
-    padding: 28px;
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-  }
-
-  .form-group-premium label {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin: 0; /* Reset global label margin */
-  }
-
-  .form-group-premium label span {
-    font-size: 0.82rem;
-    font-weight: 600;
-    color: #334155;
-  }
-
-  .req {
-    color: #ef4444;
-  }
-
-  .input-premium {
-    width: 100%;
-    box-sizing: border-box;
-    padding: 10px 14px;
-    border: 1px solid #cbd5e1;
-    border-radius: 8px;
-    font-size: 0.9rem;
-    color: #0f172a;
-    background: #fff;
-    transition: all 0.2s ease;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
-    height: auto; /* Reset global height if any */
-  }
-
-  .input-premium:focus {
-    outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
-  }
-
-  .input-premium::placeholder {
-    color: #94a3b8;
-  }
-
-  .textarea-premium {
-    resize: vertical;
-    min-height: 80px;
-    font-family: inherit;
-  }
-
-  .select-wrapper {
-    position: relative;
-  }
-
-  .select-wrapper::after {
-    content: "";
-    position: absolute;
-    right: 14px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 10px;
-    height: 10px;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
-    background-size: contain;
-    background-repeat: no-repeat;
-    pointer-events: none;
-  }
-  
-  .select-wrapper select {
-    appearance: none;
-    -webkit-appearance: none;
-    padding-right: 32px;
-  }
-
-  .edit-footer {
-    padding: 20px 28px;
-    background: #f8fafc;
-    border-top: 1px solid #e2e8f0;
-    display: flex;
-    justify-content: flex-end;
-    gap: 12px;
-  }
-
-  .btn-cancel-premium {
-    padding: 10px 20px;
-    background: white;
-    border: 1px solid #cbd5e1;
-    border-radius: 8px;
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: #475569;
-    cursor: pointer;
-    transition: all 0.2s;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
-    height: auto;
-  }
-
-  .btn-cancel-premium:hover {
-    background: #f1f5f9;
-    color: #0f172a;
-    border-color: #94a3b8;
-  }
-
-  .btn-save-premium {
-    padding: 10px 20px;
-    background: #0f172a;
-    border: none;
-    border-radius: 8px;
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: white;
-    cursor: pointer;
-    transition: all 0.2s;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2);
-    height: auto;
-  }
-
-  .btn-save-premium:hover {
-    background: #1e293b;
-    transform: translateY(-1px);
-    box-shadow: 0 6px 14px rgba(15, 23, 42, 0.25);
-  }
-
-  .btn-save-premium:active {
-    transform: translateY(0);
-  }
-</style>

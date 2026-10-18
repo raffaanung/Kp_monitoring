@@ -36,6 +36,9 @@ $routes->group('api', ['filter' => 'auth'], static function ($routes) use ($uuid
 
     $routes->get('dashboards', 'Dashboards::index');
     $routes->post('dashboards', 'Dashboards::create');
+    $routes->get('dashboards/form-schema', 'Dashboards::getFormSchema');
+    $routes->put('dashboards/form-schema', 'Dashboards::saveFormSchema');
+    $routes->post('dashboards/form-schema/reset', 'Dashboards::resetFormSchema');
     $routes->put("dashboards/{$uuid}", 'Dashboards::update/$1');
     $routes->delete("dashboards/{$uuid}", 'Dashboards::delete/$1');
     $routes->put("dashboards/{$uuid}/status", 'Dashboards::changeStatus/$1');

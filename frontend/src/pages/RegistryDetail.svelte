@@ -233,7 +233,7 @@
                 <div><dt>Code</dt><dd>{item.code}</dd></div>
                 <div><dt>Owner</dt><dd>{item.owner}</dd></div>
                 <div><dt>Platform</dt><dd>{item.platform}</dd></div>
-                <div><dt>Category</dt><dd>{item.category}</dd></div>
+                <div><dt>Unit</dt><dd>{item.category || '—'}</dd></div>
                 <div><dt>Version</dt><dd>{item.version}</dd></div>
                 <div><dt>URL</dt><dd>{item.url || '—'}</dd></div>
                 <div><dt>Created</dt><dd>{formatDate(item.created_at)}</dd></div>
@@ -374,8 +374,8 @@
                 </div>
                 <div class="row2">
                   <label>
-                    <span>Category</span>
-                    <input bind:value={editCategory} />
+                    <span>Unit</span>
+                    <input bind:value={editCategory} placeholder="Contoh: Operations, Finance, IT..." maxlength="100" />
                   </label>
                   <label>
                     <span>Version</span>

@@ -20,7 +20,7 @@
           <h3>SOP - ${selectedSopItem.name}</h3>
           <div class="meta">
             <p><strong>Platform:</strong> ${selectedSopItem.platform}</p>
-            <p><strong>Kategori:</strong> ${selectedSopItem.category}</p>
+            <p><strong>Unit:</strong> ${selectedSopItem.category}</p>
             <p><strong>Owner (PIC):</strong> ${selectedSopItem.owner}</p>
           </div>
           <script>
@@ -42,7 +42,7 @@
       </div>
       <div class="sop-modal-body">
         <p><strong>Platform:</strong> {selectedSopItem.platform}</p>
-        <p><strong>Kategori:</strong> {selectedSopItem.category}</p>
+        <p><strong>Unit:</strong> {selectedSopItem.category}</p>
         <p><strong>Owner (PIC):</strong> {selectedSopItem.owner}</p>
       </div>
       <div class="sop-modal-footer" style="gap: 10px;">
