@@ -155,18 +155,7 @@ RUN if [ ! -f /var/www/html/.htaccess ]; then \
             '<FilesMatch "\.(env|sql|bak|log|key|pem|sh|ini|conf)$">' \
             '    Require all denied' \
             '</FilesMatch>' \
-            '<IfModule mod_rewrite.c>' \
-            '    RewriteEngine On' \
-            '    Options -Indexes' \
-            '    RewriteCond %{REQUEST_METHOD} !^(GET|POST|HEAD|OPTIONS)$ [NC]' \
-            '    RewriteRule .* - [F,L]' \
-            '    RewriteCond %{REQUEST_FILENAME} !-d' \
-            '    RewriteCond %{REQUEST_FILENAME} !-f' \
-            '    RewriteRule ^(.*)$ index.php/$1 [QSA,L]' \
-            '</IfModule>' \
-            '<IfModule !mod_rewrite.c>' \
-            '    ErrorDocument 404 /index.php' \
-            '</IfModule>' \
+            'Options -Indexes' \
             > /var/www/html/.htaccess; \
     fi \
     && sed -i 's#RewriteBase /edm_task/backend/#RewriteBase /backend/#' /var/www/html/backend/.htaccess \

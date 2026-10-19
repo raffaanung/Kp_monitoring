@@ -1,0 +1,6 @@
+# Document root of the OpenShift image is this folder.
+# The CodeIgniter front controller is backend/index.php.
+# Do not rewrite missing URLs to a root index.php: that file does not
+# exist, Apache loops, and every /backend/api/* request returns 500.
+# Requests under backend/ are handled by backend/.htaccess.
+Options -Indexes
