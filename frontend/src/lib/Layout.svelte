@@ -643,7 +643,7 @@
     flex-direction: column;
     overflow-y: auto;
     overflow-x: hidden;
-    gap: 20px;
+    gap: 14px;
   }
 
   .section-head {
@@ -652,7 +652,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    padding: 4px 2px 10px;
+    padding: 2px 2px;
     min-height: 0;
   }
 

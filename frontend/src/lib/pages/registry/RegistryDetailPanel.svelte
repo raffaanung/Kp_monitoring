@@ -3,7 +3,6 @@
   import { fileUrl } from '$lib/api.js';
   import { goto } from '$app/navigation';
   import TaskList from '$lib/pages/tasks/TaskList.svelte';
-  import TaskBoard from '$lib/pages/tasks/TaskBoard.svelte';
   import { getDashboard, registryStatusLabel, updateDashboard } from '$lib/registryStore.svelte.js';
   import {
     addTaskComment,
@@ -177,6 +176,16 @@
   function cancelEdit() {
     editingKey = '';
     saveError = '';
+  }
+
+  /** @param {HTMLElement} node */
+  function autoFocusSelect(node) {
+    requestAnimationFrame(() => {
+      node.focus();
+      if (node instanceof HTMLInputElement) {
+        node.select();
+      }
+    });
   }
 
   /** @param {SubmitEvent} event */
@@ -1123,8 +1132,6 @@
 
   const kanbanTotal = $derived(kanbanCols.reduce((sum, col) => sum + col.count, 0));
   const kanbanMax = $derived(Math.max(...kanbanCols.map((col) => col.count), 1));
-  /** @type {'grid' | 'kanban'} */
-  let taskLayout = $state('grid');
 
   /** @param {string} status */
   function taskProgress(status) {
@@ -1213,9 +1220,14 @@
         <div class="sheet-pair">
           {#if editingKey === field.id}
             <form class="fact-edit" onsubmit={saveEdit}>
-              <span class="sheet-k">{field.label}</span>
+              <div class="fact-header">
+                <span class="fact-label">{field.label}</span>
+                <span class="fact-badge">Editing</span>
+              </div>
               <input
                 class="fact-input"
+                use:autoFocusSelect
+                onkeydown={(e) => { if (e.key === 'Escape') cancelEdit(); }}
                 type={field.kind === 'secret' ? 'password' : 'text'}
                 bind:value={draftValue}
                 placeholder={field.kind === 'secret' ? 'Password' : 'Nilai'}
@@ -1223,8 +1235,23 @@
                 autocomplete="off"
               />
               <div class="fact-actions">
-                <button type="submit" class="fact-icon edit" disabled={saving}>Save</button>
-                <button type="button" class="fact-icon" onclick={cancelEdit}>Cancel</button>
+                <button type="submit" class="fact-btn fact-btn-save" disabled={saving}>
+                  {#if saving}
+                    <span class="fact-spin"></span>
+                  {:else}
+                    <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="2.5 8 6.5 12 13.5 4" />
+                    </svg>
+                  {/if}
+                  <span>Save</span>
+                </button>
+                <button type="button" class="fact-btn fact-btn-cancel" onclick={cancelEdit}>
+                  <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="3" x2="13" y2="13" />
+                    <line x1="13" y1="3" x2="3" y2="13" />
+                  </svg>
+                  <span>Cancel</span>
+                </button>
               </div>
             </form>
           {:else}
@@ -1494,10 +1521,36 @@
               <span>PIC</span>
               {#if ownerField && editingKey === ownerField.id}
                 <form class="fact-edit" onsubmit={saveEdit}>
-                  <input class="fact-input" bind:value={draftValue} placeholder="PIC name" maxlength="200" />
+                  <div class="fact-header">
+                    <span class="fact-label">PIC (Owner)</span>
+                    <span class="fact-badge">Editing</span>
+                  </div>
+                  <input
+                    class="fact-input"
+                    use:autoFocusSelect
+                    onkeydown={(e) => { if (e.key === 'Escape') cancelEdit(); }}
+                    bind:value={draftValue}
+                    placeholder="PIC name"
+                    maxlength="200"
+                  />
                   <div class="fact-actions">
-                    <button type="submit" class="fact-icon edit" disabled={saving}>Save</button>
-                    <button type="button" class="fact-icon" onclick={cancelEdit}>Cancel</button>
+                    <button type="submit" class="fact-btn fact-btn-save" disabled={saving}>
+                      {#if saving}
+                        <span class="fact-spin"></span>
+                      {:else}
+                        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                          <polyline points="2.5 8 6.5 12 13.5 4" />
+                        </svg>
+                      {/if}
+                      <span>Save</span>
+                    </button>
+                    <button type="button" class="fact-btn fact-btn-cancel" onclick={cancelEdit}>
+                      <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="3" y1="3" x2="13" y2="13" />
+                        <line x1="13" y1="3" x2="3" y2="13" />
+                      </svg>
+                      <span>Cancel</span>
+                    </button>
                   </div>
                 </form>
               {:else}
@@ -1534,11 +1587,36 @@
               <div class="sheet-sub-item">
                 {#if editingKey === field.id}
                   <form class="fact-edit" onsubmit={saveEdit}>
-                    <span>{field.label}</span>
-                    <input class="fact-input" bind:value={draftValue} placeholder="Nilai" maxlength="200" />
+                    <div class="fact-header">
+                      <span class="fact-label">{field.label}</span>
+                      <span class="fact-badge">Editing</span>
+                    </div>
+                    <input
+                      class="fact-input"
+                      use:autoFocusSelect
+                      onkeydown={(e) => { if (e.key === 'Escape') cancelEdit(); }}
+                      bind:value={draftValue}
+                      placeholder="Nilai"
+                      maxlength="200"
+                    />
                     <div class="fact-actions">
-                      <button type="submit" class="fact-icon edit" disabled={saving}>Save</button>
-                      <button type="button" class="fact-icon" onclick={cancelEdit}>Cancel</button>
+                      <button type="submit" class="fact-btn fact-btn-save" disabled={saving}>
+                        {#if saving}
+                          <span class="fact-spin"></span>
+                        {:else}
+                          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="2.5 8 6.5 12 13.5 4" />
+                          </svg>
+                        {/if}
+                        <span>Save</span>
+                      </button>
+                      <button type="button" class="fact-btn fact-btn-cancel" onclick={cancelEdit}>
+                        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                          <line x1="3" y1="3" x2="13" y2="13" />
+                          <line x1="13" y1="3" x2="3" y2="13" />
+                        </svg>
+                        <span>Cancel</span>
+                      </button>
                     </div>
                   </form>
                 {:else}
@@ -1563,10 +1641,36 @@
                 <h4>Development</h4>
                 {#if editingKey === 'link:development'}
                   <form class="fact-edit" onsubmit={(event) => saveLink(event, 'development_link')}>
-                    <input class="fact-input" bind:value={draftValue} placeholder="https://..." maxlength="500" />
+                    <div class="fact-header">
+                      <span class="fact-label">Development Link</span>
+                      <span class="fact-badge">Editing</span>
+                    </div>
+                    <input
+                      class="fact-input"
+                      use:autoFocusSelect
+                      onkeydown={(e) => { if (e.key === 'Escape') cancelEdit(); }}
+                      bind:value={draftValue}
+                      placeholder="https://..."
+                      maxlength="500"
+                    />
                     <div class="fact-actions">
-                      <button type="submit" class="fact-icon edit" disabled={saving}>Save</button>
-                      <button type="button" class="fact-icon" onclick={cancelEdit}>Cancel</button>
+                      <button type="submit" class="fact-btn fact-btn-save" disabled={saving}>
+                        {#if saving}
+                          <span class="fact-spin"></span>
+                        {:else}
+                          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="2.5 8 6.5 12 13.5 4" />
+                          </svg>
+                        {/if}
+                        <span>Save</span>
+                      </button>
+                      <button type="button" class="fact-btn fact-btn-cancel" onclick={cancelEdit}>
+                        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                          <line x1="3" y1="3" x2="13" y2="13" />
+                          <line x1="13" y1="3" x2="3" y2="13" />
+                        </svg>
+                        <span>Cancel</span>
+                      </button>
                     </div>
                   </form>
                 {:else}
@@ -1591,10 +1695,36 @@
                 <h4>Production</h4>
                 {#if editingKey === 'link:production'}
                   <form class="fact-edit" onsubmit={(event) => saveLink(event, 'production_link')}>
-                    <input class="fact-input" bind:value={draftValue} placeholder="https://..." maxlength="500" />
+                    <div class="fact-header">
+                      <span class="fact-label">Production Link</span>
+                      <span class="fact-badge">Editing</span>
+                    </div>
+                    <input
+                      class="fact-input"
+                      use:autoFocusSelect
+                      onkeydown={(e) => { if (e.key === 'Escape') cancelEdit(); }}
+                      bind:value={draftValue}
+                      placeholder="https://..."
+                      maxlength="500"
+                    />
                     <div class="fact-actions">
-                      <button type="submit" class="fact-icon edit" disabled={saving}>Save</button>
-                      <button type="button" class="fact-icon" onclick={cancelEdit}>Cancel</button>
+                      <button type="submit" class="fact-btn fact-btn-save" disabled={saving}>
+                        {#if saving}
+                          <span class="fact-spin"></span>
+                        {:else}
+                          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="2.5 8 6.5 12 13.5 4" />
+                          </svg>
+                        {/if}
+                        <span>Save</span>
+                      </button>
+                      <button type="button" class="fact-btn fact-btn-cancel" onclick={cancelEdit}>
+                        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                          <line x1="3" y1="3" x2="13" y2="13" />
+                          <line x1="13" y1="3" x2="3" y2="13" />
+                        </svg>
+                        <span>Cancel</span>
+                      </button>
                     </div>
                   </form>
                 {:else}
@@ -1693,26 +1823,12 @@
               </article>
 
               <header class="sheet-head sheet-task-head">
-                <h3>Task · V{activeVersion.version_no}</h3>
-                <div class="sheet-switch" role="group" aria-label="Task view">
-                  <button type="button" class:on={taskLayout === 'grid'} onclick={() => (taskLayout = 'grid')}>List Task</button>
-                  <span>/</span>
-                  <button type="button" class:on={taskLayout === 'kanban'} onclick={() => (taskLayout = 'kanban')}>Kanban</button>
+                <div class="sheet-task-head-left">
+                  <h3>Task · V{activeVersion.version_no}</h3>
+                  <span class="sheet-task-count-badge">{versionTasks.length} Task</span>
                 </div>
               </header>
-              {#if taskLayout === 'kanban'}
-                <div class="sheet-kanban">
-                  {#key activeVersion.id}
-                    <TaskBoard
-                      lockedDashboard={dashName}
-                      initialRequirement={String(activeVersion.id)}
-                      embedded
-                      flow
-                      onOpenTask={(id) => openTask(id, 'tasks')}
-                    />
-                  {/key}
-                </div>
-              {:else if versionTasks.length === 0}
+              {#if versionTasks.length === 0}
                 <p class="sheet-empty">This version has no tasks yet.</p>
               {:else}
                 <div class="req-scroll">
@@ -2648,50 +2764,98 @@
   {#if task}
     {@const ret = getReturnInfo(task)}
     <div class="req-detail-backdrop" use:portal role="presentation" onclick={() => (readOnlyReturnTaskId = '')}></div>
-    <div class="attach-pop approval-pop-modal" use:portal role="dialog" aria-modal="true" aria-label="Catatan Return dari Admin">
-      <header>
-        <div>
-          <p class="pop-eyebrow pop-eyebrow-return">Catatan Pengembalian (Return) dari Admin</p>
-          <h3>{task.title}</h3>
-        </div>
-        <button type="button" onclick={() => (readOnlyReturnTaskId = '')} aria-label="Close">×</button>
-      </header>
-      <div class="approval-list">
-        <div class="approval-row">
-          <div class="approval-row-head">
-            <strong>Tim Teknis: {task.assignees?.length ? task.assignees.join(', ') : '—'}</strong>
-            <span class="task-status" style="color: #dc2626; background: #dc262618">Needs Revision</span>
+    <div class="attach-pop approval-pop-modal readonly-return-pop" use:portal role="dialog" aria-modal="true" aria-label="Catatan Return dari Admin">
+      <header class="return-modal-head">
+        <div class="return-head-left">
+          <div class="return-badge-pill">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+              <path d="M3 3v5h5"/>
+            </svg>
+            <span>Catatan Pengembalian (Return)</span>
           </div>
-          <div class="readonly-return-meta">
-            <span>Dikembalikan oleh: <strong>{ret?.actor || 'Admin'}</strong></span>
+          <h3 class="return-modal-title">{task.title}</h3>
+        </div>
+        <button type="button" class="return-modal-close" onclick={() => (readOnlyReturnTaskId = '')} aria-label="Close">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </header>
+
+      <div class="return-modal-body">
+        <div class="return-meta-card">
+          <div class="return-meta-top">
+            <div class="return-assignee">
+              <span class="meta-label">Tim Teknis:</span>
+              <strong class="meta-value">{task.assignees?.length ? task.assignees.join(', ') : '—'}</strong>
+            </div>
+            <span class="return-status-badge">
+              <span class="status-dot"></span>
+              Needs Revision
+            </span>
+          </div>
+          <div class="return-meta-bottom">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+            <span>Dikembalikan oleh <strong>{ret?.actor || 'Admin'}</strong></span>
             {#if ret?.at}<span>· {formatDate(ret.at)}</span>{/if}
           </div>
+        </div>
 
-          <div class="approval-note-field">
-            <span>Deskripsi / Catatan Perbaikan untuk Tim Teknis:</span>
-            <div class="readonly-note-box">
-              <p>{ret?.note || 'Tidak ada catatan tertulis.'}</p>
-            </div>
+        <div class="return-note-section">
+          <span class="return-section-label">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+            Catatan Perbaikan untuk Tim Teknis:
+          </span>
+          <div class="return-note-box">
+            <p>{ret?.note || 'Tidak ada catatan tertulis.'}</p>
           </div>
+        </div>
 
-          {#if ret?.evidence_id}
-            <div class="readonly-evidence-section">
-              <span class="readonly-evidence-label">Lampiran Bukti dari Admin:</span>
-              <a href="/api/evidences/{ret.evidence_id}/file" target="_blank" rel="noopener noreferrer" class="btn-evidence-link">
-                Buka File Lampiran Bukti
-              </a>
+        {#if ret?.evidence_id}
+          <div class="return-evidence-card">
+            <div class="evidence-icon-wrap">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+              </svg>
             </div>
-          {/if}
-
-          <div class="readonly-info-footer">
-            <span><strong>Mode Tim Teknis (Hanya Lihat):</strong> Task ini dikembalikan oleh Admin. Silakan periksa instruksi perbaikan di atas dan perbarui pekerjaan Anda.</span>
+            <div class="evidence-info">
+              <span class="evidence-title">Lampiran Bukti dari Admin</span>
+              <span class="evidence-sub">File bukti/screenshot hasil review</span>
+            </div>
+            <a href="/api/evidences/{ret.evidence_id}/file" target="_blank" rel="noopener noreferrer" class="btn-evidence-view">
+              Buka File ↗
+            </a>
           </div>
+        {/if}
 
-          <div class="approval-modal-actions">
-            <button type="button" class="btn-confirm-accept" onclick={() => (readOnlyReturnTaskId = '')}>Tutup</button>
+        <div class="return-guidance-callout">
+          <svg class="guidance-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="16" x2="12" y2="12"></line>
+            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+          </svg>
+          <div class="guidance-content">
+            <strong>Mode Tim Teknis (Hanya Lihat):</strong>
+            <span>Task ini dikembalikan untuk revisi. Silakan periksa instruksi di atas dan perbarui pekerjaan Anda.</span>
           </div>
         </div>
       </div>
+
+      <footer class="return-modal-footer">
+        <button type="button" class="btn-return-dismiss" onclick={() => (readOnlyReturnTaskId = '')}>
+          Tutup
+        </button>
+      </footer>
     </div>
   {/if}
 {/if}
