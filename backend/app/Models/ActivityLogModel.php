@@ -25,6 +25,30 @@ class ActivityLogModel extends Model
             ->findAll();
     }
 
+    /**
+     * Log untuk banyak object sekaligus (object_type sama), 1 query (hindari N+1 saat render list).
+     * @param list<string> $objectIds
+     * @return array<string, list<array<string, mixed>>> map object_id => log-nya, urut terbaru-lama
+     */
+    public function forObjects(string $objectType, array $objectIds): array
+    {
+        if ($objectIds === []) {
+            return [];
+        }
+
+        $rows = $this->where('object_type', $objectType)
+            ->whereIn('object_id', $objectIds)
+            ->orderBy('created_at', 'DESC')
+            ->findAll();
+
+        $map = [];
+        foreach ($rows as $row) {
+            $map[$row['object_id']][] = $row;
+        }
+
+        return $map;
+    }
+
     /** @return list<array<string, mixed>> */
     public function listAll(array $filters = []): array
     {

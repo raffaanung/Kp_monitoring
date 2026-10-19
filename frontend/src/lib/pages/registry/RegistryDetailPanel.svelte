@@ -1,7 +1,6 @@
 <script>
   import GlassPanel from '$lib/GlassPanel.svelte';
   import { fileUrl } from '$lib/api.js';
-  import { goto } from '$app/navigation';
   import TaskList from '$lib/pages/tasks/TaskList.svelte';
   import { getDashboard, registryStatusLabel, updateDashboard } from '$lib/registryStore.svelte.js';
   import {
@@ -24,6 +23,7 @@
     readEvidenceFile,
     rejectStatusMove,
     requestRevisionModuleTask,
+    resubmitModuleTask,
     statusForProgress,
     tasksForRequirement,
     taskModuleStore,
@@ -38,7 +38,6 @@
     groupByVersionRoot,
     listRequirements,
     requirementTeamRoster,
-    rememberDetailId as rememberRequirementId,
     requirementStore,
   } from '$lib/requirementStore.svelte.js';
   import { formatDate } from '$lib/format.js';
@@ -295,12 +294,6 @@
     autoFocusHandledFor = autoFocusTaskId;
   });
 
-  /** @param {number | string} id */
-  function openRequirement(id) {
-    rememberRequirementId(id);
-    goto(`/requirements/${id}`);
-  }
-
   /**
    * @param {number | string} id
    * @param {'kanban' | 'tasks' | 'requirement'} [from]
@@ -450,6 +443,22 @@
     return false;
   });
   const isAdminOrManager = $derived(isPicOrManager);
+
+  /** Pembuat task, pemilik requirement, PIC dashboard, atau assignee task itu berhak ajukan ulang task yang diminta revisi. @param {any} task */
+  function canResubmit(task) {
+    if (canDecideApproval(task)) return true;
+    const name = taskModuleStore.session.name || '';
+    if (task.created_by === name) return true;
+    if (task.requirement_owner === name) return true;
+    const userId = String(taskModuleStore.session.id || '');
+    if (Array.isArray(task.assignee_ids) && userId && task.assignee_ids.map(String).includes(userId)) return true;
+    return false;
+  }
+
+  /** @param {string} taskId */
+  async function onResubmitTask(taskId) {
+    await resubmitModuleTask(taskId);
+  }
 
 
   /** Modal Read-Only Return untuk Tim Teknis */
@@ -865,12 +874,20 @@
 
       let feedback = null;
       if (m.status !== 'pending') {
-        const feedbackAct = activities.find((a) => {
-          if (!m.at) return false;
-          const actTime = new Date(a.at).getTime();
-          const moveTime = new Date(m.at).getTime();
-          return actTime >= moveTime - 5000;
-        }) || activities[0];
+        // Tiap move dicariin respon PIC-nya sendiri — dibatasi antara waktu move ini dibuat
+        // sampai move berikutnya dibuat (atau sekarang kalau ini move terakhir), supaya respon
+        // yang lebih baru buat move lain gak ikut "nempel" ke riwayat yang sudah lama.
+        const moveTime = m.at ? new Date(m.at).getTime() : null;
+        const nextMoveAt = moves[idx + 1]?.at;
+        const windowEnd = nextMoveAt ? new Date(nextMoveAt).getTime() : Infinity;
+        const feedbackAct = moveTime === null
+          ? null
+          : activities
+              .filter((a) => {
+                const actTime = new Date(a.at).getTime();
+                return actTime >= moveTime - 5000 && actTime < windowEnd;
+              })
+              .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())[0];
 
         if (feedbackAct) {
           feedback = {
@@ -1798,7 +1815,7 @@
               {/if}
               <article class="req-sheet">
                 <div class="req-sheet-main">
-                  <button type="button" class="req-sheet-title" onclick={() => openRequirement(activeVersion.id)}>{activeVersion.title}</button>
+                  <h4 class="req-sheet-title">{activeVersion.title}</h4>
                   <p>{activeVersion.description || '—'}</p>
                   <div class="req-meta">
                     <span><em>Created</em> {formatDate(activeVersion.created_at)}</span>
@@ -1928,6 +1945,34 @@
                                     <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
                                   </svg>
                                   <span>Return</span>
+                                </button>
+                              </div>
+                            {:else if task.approval_state === 'revision' && canResubmit(task)}
+                              <div class="task-row-actions">
+                                <button
+                                  type="button"
+                                  class="task-action-btn btn-ghost-view icon-only"
+                                  title="Lihat Catatan Return"
+                                  aria-label="Lihat Catatan Return"
+                                  onclick={(e) => { e.stopPropagation(); readOnlyReturnTaskId = task.id; }}
+                                >
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <polyline points="9 14 4 9 9 4" />
+                                    <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+                                  </svg>
+                                </button>
+                                <button
+                                  type="button"
+                                  class="task-action-btn btn-resubmit"
+                                  title="Ajukan ulang task ini"
+                                  aria-label="Ajukan ulang task ini"
+                                  onclick={(e) => { e.stopPropagation(); onResubmitTask(task.id); }}
+                                >
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M3 12a9 9 0 1 0 3-6.7" />
+                                    <polyline points="3 4 3 9 8 9" />
+                                  </svg>
+                                  <span>Ajukan ulang</span>
                                 </button>
                               </div>
                             {:else if isTaskReturned(task)}

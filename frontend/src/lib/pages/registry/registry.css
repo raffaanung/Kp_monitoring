@@ -5278,6 +5278,7 @@
   }
 
   .registry-page .req-sheet-title {
+    margin: 0;
     height: auto;
     padding: 0;
     border: 0;
@@ -5286,11 +5287,6 @@
     font-size: 0.78rem;
     font-weight: 750;
     text-align: left;
-    cursor: pointer;
-  }
-
-  .registry-page .req-sheet-title:hover {
-    color: #065fc6;
   }
 
   .req-sheet-main p {
@@ -5847,9 +5843,44 @@
     box-shadow: 0 2px 8px rgba(192, 57, 43, 0.2);
   }
 
+  .task-action-btn.btn-resubmit {
+    background: #eaf2fd;
+    border-color: #cfe2fa;
+    color: #065fc6;
+  }
+
+  .task-action-btn.btn-resubmit:hover {
+    background: #d8e9fb;
+    border-color: #b3d4f5;
+    color: #054fa3;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(6, 95, 198, 0.2);
+  }
+
+  .task-action-btn.btn-ghost-view {
+    background: #f1f5f9;
+    border-color: #e2e8f0;
+    color: #475569;
+  }
+
+  .task-action-btn.btn-ghost-view:hover {
+    background: #e2e8f0;
+    border-color: #cbd5e1;
+    color: #1e293b;
+    transform: translateY(-1px);
+  }
+
   .task-action-btn svg {
     display: block;
     pointer-events: none;
+    flex-shrink: 0;
+  }
+
+  .task-action-btn.icon-only {
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border-radius: 50%;
     flex-shrink: 0;
   }
 

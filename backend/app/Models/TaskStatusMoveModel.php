@@ -60,4 +60,29 @@ class TaskStatusMoveModel extends Model
 
         return $map;
     }
+
+    /**
+     * Semua move (riwayat lengkap) untuk banyak task sekaligus, 1 query (hindari N+1 saat render list task).
+     * @param list<string> $taskIds
+     * @return array<string, list<array<string, mixed>>> map task_id => semua move-nya, urut lama ke baru
+     */
+    public function allForTasks(array $taskIds): array
+    {
+        if ($taskIds === []) {
+            return [];
+        }
+
+        $rows = $this->select('task_status_moves.*, requester.name AS requested_by_name')
+            ->join('users AS requester', 'requester.id = task_status_moves.requested_by', 'left')
+            ->whereIn('task_status_moves.task_id', $taskIds)
+            ->orderBy('task_status_moves.created_at', 'ASC')
+            ->findAll();
+
+        $map = [];
+        foreach ($rows as $row) {
+            $map[$row['task_id']][] = $row;
+        }
+
+        return $map;
+    }
 }

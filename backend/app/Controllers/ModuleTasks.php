@@ -40,13 +40,22 @@ class ModuleTasks extends BaseController
         $rows      = $taskModel->listRich(array_filter($filters));
         $taskIds   = array_column($rows, 'id');
 
-        // 1 query buat semua pending move + 1 query buat semua assignee + 1 query buat evidences, bukan per task (hindari N+1).
+        // 1 query per jenis data buat semua task sekaligus, bukan per task (hindari N+1).
         $moveMap      = (new TaskStatusMoveModel())->pendingForTasks($taskIds);
         $assigneesMap = $taskModel->assigneesForTasks($taskIds);
         $evidencesMap = (new TaskEvidenceModel())->forTasks($taskIds);
+        $activityMap  = (new ActivityLogModel())->forObjects('task', $taskIds);
+        $movesMap     = (new TaskStatusMoveModel())->allForTasks($taskIds);
 
         return $this->jsonOk(array_map(
-            fn ($r) => $this->shapeListRow($r, $moveMap[$r['id']] ?? null, $assigneesMap[$r['id']] ?? [], $evidencesMap[$r['id']] ?? []),
+            fn ($r) => $this->shapeListRow(
+                $r,
+                $moveMap[$r['id']] ?? null,
+                $assigneesMap[$r['id']] ?? [],
+                $evidencesMap[$r['id']] ?? [],
+                $activityMap[$r['id']] ?? [],
+                $movesMap[$r['id']] ?? [],
+            ),
             $rows,
         ));
     }
@@ -289,11 +298,14 @@ class ModuleTasks extends BaseController
         if ($task === null) {
             return $this->jsonError('Task not found', 404);
         }
+        $dashboard   = $task['dashboard_id'] ? (new DashboardModel())->find($task['dashboard_id']) : null;
         $requirement = $task['requirement_id'] ? (new RequirementModel())->find($task['requirement_id']) : null;
         $isCreator   = (string) ($task['created_by'] ?? '') === (string) $user['id'];
         $isOwner     = $requirement !== null && TaskPolicy::isRequirementOwner($user, $requirement);
-        if (! $isCreator && ! $isOwner) {
-            return $this->jsonError('Only the creator or the requirement owner can resubmit this task', 403);
+        $isPm        = $dashboard !== null && TaskPolicy::isPmOfDashboard($user, $dashboard);
+        $isAssignee  = in_array((string) $user['id'], $taskModel->assigneeIdsFor($taskId), true);
+        if (! $isCreator && ! $isOwner && ! $isPm && ! $isAssignee && ! TaskPolicy::isAdmin($user)) {
+            return $this->jsonError('Only the creator, the requirement owner, the PIC, or the assignee can resubmit this task', 403);
         }
         if ($task['approval_state'] !== 'revision') {
             return $this->jsonError('This task is not in revision', 422);
@@ -302,14 +314,35 @@ class ModuleTasks extends BaseController
         $taskModel->update($taskId, ['approval_state' => 'pending']);
         (new ActivityLogModel())->log([
             'actor_id' => $user['id'], 'actor_name' => $user['name'],
-            'action' => 'Task diajukan ulang, menunggu approval owner', 'action_type' => 'approval',
+            'action' => 'Task diajukan ulang, menunggu approval owner', 'action_type' => 'status_change',
             'object_type' => 'task', 'object_id' => $taskId, 'object_label' => $task['title'],
             'dashboard_id' => $task['dashboard_id'],
         ]);
+        // Baris move baru (status 'pending') supaya riwayat return yang lama tetap kelihatan
+        // (gak ketimpa), dan resubmit-nya sendiri tampil sebagai step kuning tersendiri di Journey.
+        (new TaskStatusMoveModel())->insert([
+            'id'                  => Id::new(),
+            'task_id'             => $taskId,
+            'from_status'         => $task['status'],
+            'to_status'           => $task['status'],
+            'to_progress_percent' => $task['progress_percent'],
+            'requested_by'        => $user['id'],
+            'note'                => 'Diajukan ulang untuk ditinjau kembali.',
+            'status'              => 'pending',
+        ], false);
+        $notified = [];
         if ($requirement !== null && $requirement['created_by'] && $requirement['created_by'] !== $user['id']) {
             (new NotificationModel())->notify(
                 'approval_request', 'Task diajukan ulang', "\"{$task['title']}\" diajukan ulang dan menunggu persetujuan Anda",
                 $requirement['created_by'], $taskId, $task['dashboard_id'],
+            );
+            $notified[] = $requirement['created_by'];
+        }
+        // PIC dashboard juga perlu tahu — biasanya dialah yang minta revisi duluan, bukan cuma pemilik requirement.
+        if ($dashboard !== null && $dashboard['pm_id'] && $dashboard['pm_id'] !== $user['id'] && ! in_array($dashboard['pm_id'], $notified, true)) {
+            (new NotificationModel())->notify(
+                'approval_request', 'Task diajukan ulang', "\"{$task['title']}\" diajukan ulang dan menunggu persetujuan Anda",
+                $dashboard['pm_id'], $taskId, $task['dashboard_id'],
             );
         }
 
@@ -698,11 +731,37 @@ class ModuleTasks extends BaseController
     }
 
     /** @param array<string, mixed> $row @param array<string, mixed>|null $move @param list<array{id:string,name:string}> $assignees @param list<array<string, mixed>> $evidences */
-    private function shapeListRow(array $row, ?array $move = null, array $assignees = [], array $evidences = []): array
+    /**
+     * @param list<array<string, mixed>> $activity
+     * @param list<array<string, mixed>> $moves
+     */
+    private function shapeListRow(array $row, ?array $move = null, array $assignees = [], array $evidences = [], array $activity = [], array $moves = []): array
     {
         $shaped = $this->baseShape($row, $assignees);
         $shaped['status_move'] = $this->shapeMove($move);
         $shaped['evidences']   = $evidences;
+        // Journey & riwayat return di accordion Dashboard Detail butuh dua ini — tanpanya
+        // getTaskJourney() di frontend selalu jatuh ke ringkasan sederhana (seolah gak ada riwayat).
+        $shaped['activity'] = array_map(fn ($a) => [
+            'id'          => $a['id'],
+            'at'          => $a['created_at'],
+            'actor'       => $a['actor_name'],
+            'action'      => $a['action'],
+            'action_type' => $a['action_type'] ?? null,
+            'evidence_id' => $a['evidence_id'] ?: null,
+            'reason'      => $a['reason'] ?? null,
+        ], $activity);
+        $shaped['status_moves'] = array_map(fn ($m) => [
+            'id'                  => $m['id'],
+            'from'                => $m['from_status'],
+            'to'                  => $m['to_status'],
+            'to_progress_percent' => $m['to_progress_percent'] !== null ? (int) $m['to_progress_percent'] : null,
+            'requested_by'        => $m['requested_by_name'] ?? '',
+            'note'                => $m['note'] ?? '',
+            'status'              => $m['status'],
+            'at'                  => $m['created_at'],
+            'evidence_id'         => $m['evidence_id'] ?: null,
+        ], $moves);
 
         return $shaped;
     }

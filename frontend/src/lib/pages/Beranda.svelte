@@ -552,9 +552,9 @@
     return 'Open'
   }
 
-  /** @param {{ id: number, status: string }} item */
+  /** @param {{ id: number, status: string, meta?: string }} item */
   function openWeekItem(item) {
-    if (boardView === 'requirement') goto(`/requirements/${item.id}`)
+    if (boardView === 'requirement') goto(`/registry/list?dashboard=${encodeURIComponent(item.meta || '')}`)
     else pushTaskFilters({ taskId: item.id })
   }
 
@@ -1087,7 +1087,7 @@
                       <tr>
                         <td class="col-task">
                           {#if row.isReq}
-                            <button type="button" class="task-link" onclick={() => goto(`/requirements/${row.id}`)}>
+                            <button type="button" class="task-link" onclick={() => goto(`/registry/list?dashboard=${encodeURIComponent(row.dashboard || '')}`)}>
                               {row.title}
                               {#if row.dashboard}<span class="dash-tag">{row.dashboard}</span>{/if}
                             </button>
@@ -1138,7 +1138,7 @@
                       <tr>
                         <td class="col-task">
                           {#if row.isReq}
-                            <button type="button" class="task-link" onclick={() => goto(`/requirements/${row.id}`)}>
+                            <button type="button" class="task-link" onclick={() => goto(`/registry/list?dashboard=${encodeURIComponent(row.dashboard || '')}`)}>
                               {row.title}
                               {#if row.dashboard}<span class="dash-tag">{row.dashboard}</span>{/if}
                             </button>

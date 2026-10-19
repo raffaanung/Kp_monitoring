@@ -81,6 +81,13 @@
     return task ? task.requirement_owner === currentUserName() : false
   })
 
+  /** Assignee task ini (yang beneran ngerjain) — berhak ajukan ulang task yang diminta revisi. */
+  const isAssignee = $derived.by(() => {
+    void taskModuleStore.session
+    const userId = String(taskModuleStore.session.id || '')
+    return task?.assignee_ids && userId ? task.assignee_ids.map(String).includes(userId) : false
+  })
+
   /** User hanya boleh ubah/request status task jika berhak mengupdate progress task ini. */
   const canBoard = $derived.by(() => {
     void taskModuleStore.session
@@ -529,7 +536,7 @@
                   {/if}
                   <span>Request revision</span>
                 </button>
-              {:else if task.approval_state === 'revision' && (task.created_by === currentUserName() || asRequirementOwner) && canBoard}
+              {:else if task.approval_state === 'revision' && (task.created_by === currentUserName() || asRequirementOwner || asPm || isAssignee) && canBoard}
                 <button type="button" class="ghost-btn" onclick={onResubmitTask} disabled={!!actionLoading} style="display:inline-flex;align-items:center;gap:6px;">
                   {#if actionLoading === 'resubmit'}
                     <span class="btn-spinner blue sm"></span>
