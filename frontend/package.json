@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:openshift": "vite build",
+    "build:openshift": "VITE_BASE_PATH=/backend/spa VITE_API_BASE=/backend vite build",
     "preview": "vite preview"
   },
   "devDependencies": {

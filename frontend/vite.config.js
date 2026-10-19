@@ -37,6 +37,11 @@ async function refreshBackendPort() {
 refreshBackendPort();
 setInterval(refreshBackendPort, 2000);
 
+// URL prefix baked into the SPA at build time. Local XAMPP keeps the folder
+// path; `npm run build:openshift` sets VITE_BASE_PATH=/backend/spa.
+const spaBase = process.env.VITE_BASE_PATH
+	?? (process.env.NODE_ENV === 'production' ? '/edm-task-monitoring/backend/spa' : '');
+
 export default defineConfig({
 	plugins: [
 		sveltekit({
@@ -48,7 +53,7 @@ export default defineConfig({
 				strict: false
 			}),
 			paths: {
-				base: process.env.NODE_ENV === 'production' ? '/edm-task-monitoring/backend/spa' : ''
+				base: spaBase
 			},
 			alias: {
 				'$lib': 'src/lib'

@@ -169,6 +169,7 @@ RUN if [ ! -f /var/www/html/.htaccess ]; then \
             '</IfModule>' \
             > /var/www/html/.htaccess; \
     fi \
+    && sed -i 's#RewriteBase /edm_task/backend/#RewriteBase /backend/#' /var/www/html/backend/.htaccess \
     && chown -R 1001:0 /var/www/html \
     && chmod -R g+rwX /var/www/html \
     && rm -f /var/www/html/Dockerfile /var/www/html/Dockerfile.openssl-base \

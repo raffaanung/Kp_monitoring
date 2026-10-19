@@ -1,1 +1,0 @@
-import{t as e}from"../chunks/BgGLuYsY.js";import{t}from"../chunks/YGUJjaoV.js";function n(n,r){let i=e(r,`taskId`,3,``),a=e(r,`embedded`,3,!1),o=e(r,`inApproval`,3,!1),s=e(r,`showBack`,3,!1),c=e(r,`onBack`,3,()=>{});t(n,{get taskId(){return i()},get embedded(){return a()},get inApproval(){return o()},get showBack(){return s()},get onBack(){return c()}})}export{n as component};

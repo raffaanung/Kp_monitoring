@@ -1,1 +1,0 @@
-import{$ as e,C as t,et as n,j as r,k as i,n as a}from"../chunks/BgGLuYsY.js";import{t as o}from"../chunks/ybKD3GP0.js";import"../chunks/B5dVnxO3.js";var s=r(`<section class="page svelte-zz9nza"><p>Mengalihkan…</p></section>`);function c(r,c){n(c,!1),t(()=>{o(`/registry/list`)}),a();var l=s();i(r,l),e()}export{c as component};
