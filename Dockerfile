@@ -65,6 +65,8 @@ ENV PATH="${OPENSSL_PREFIX}/bin:/usr/local/bin:${PATH}" \
 # saat extract source PHP (download/layer putus), bukan karena kode app.
 # -----------------------------------------------------------------------------
 RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends libicu-dev; \
     install_one() { \
       ext="$1"; shift || true; \
       n=0; \
@@ -84,10 +86,13 @@ RUN set -eux; \
       echo "ERROR: gagal install ${ext} setelah 3 percobaan"; \
       return 1; \
     }; \
+    install_one intl; \
     install_one pgsql; \
     install_one pdo_pgsql; \
     ARCH="$(dpkg-architecture -qDEB_HOST_MULTIARCH 2>/dev/null || echo x86_64-linux-gnu)"; \
-    install_one ldap --with-libdir="lib/${ARCH}"
+    install_one ldap --with-libdir="lib/${ARCH}"; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/*
 
 # -----------------------------------------------------------------------------
 # 3) PHP + Apache hardening
