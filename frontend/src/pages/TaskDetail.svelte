@@ -314,9 +314,6 @@
               <div class="meta">
                 <span class="mono-id">{task.code}</span>
                 <span class={`chip st-${task.status}`}>{workflowLabel(task.status)}</span>
-                {#if task.status_move}
-                  <span class="chip appr-pending">Menunggu PM · {workflowLabel(task.status_move.to)}</span>
-                {/if}
                 {#if isOverdue(task)}
                   <span class="chip late">Overdue</span>
                 {/if}
@@ -367,7 +364,7 @@
         </div>
 
         {#if journey.length === 0}
-          <p class="empty">Belum ada catatan. Teknis dan PM bisa menulis di sini, termasuk lampiran gambar.</p>
+          <p class="empty">Belum ada catatan. Developer dan Admin bisa menulis di sini, termasuk lampiran gambar.</p>
         {:else if visibleJourney.length === 0}
           <p class="empty">{journeyRange === 'today' ? 'Tidak ada catatan hari ini.' : 'Tidak ada catatan minggu ini.'}</p>
         {:else}
@@ -404,17 +401,7 @@
           <form class="composer" onsubmit={onReply}>
             <div class="composer-head">
               <p class="eyebrow">Tanggapan</p>
-              {#if task.status_move && asPm}
-                <p class="reply-context">
-                  {task.status_move.requested_by} mengajukan {workflowLabel(task.status_move.from)} → {workflowLabel(task.status_move.to)}. Tulis catatan, lalu pilih satu keputusan.
-                </p>
-              {:else if task.status_move}
-                <p class="reply-context">
-                  Pengajuan {workflowLabel(task.status_move.from)} → {workflowLabel(task.status_move.to)} menunggu PM.
-                </p>
-              {:else}
-                <p class="reply-context">Catatan dan gambar akan masuk ke riwayat task.</p>
-              {/if}
+              <p class="reply-context">Catatan dan gambar akan masuk ke riwayat task.</p>
             </div>
             <div class="reply-field">
               <textarea rows="2" bind:value={commentBody} placeholder="Tulis tanggapan…"></textarea>
@@ -432,36 +419,18 @@
               </div>
             </div>
             <div class="decision">
-              {#if (asPm || asRequirementOwner) && task.status_move}
-                <button type="button" class="primary" onclick={onApproveMove}>Setujui ke {workflowLabel(task.status_move.to)}</button>
-                <button type="button" class="ghost-btn" onclick={onRejectMove}>Minta revisi</button>
-                {#if canComment}
-                  <button type="submit" class="text-btn">Catat saja</button>
-                {/if}
-              {:else if asRequirementOwner && task.approval_state === 'pending'}
-                <button type="button" class="primary" onclick={onApproveTask}>Setujui ke Backlog</button>
-                <button type="button" class="ghost-btn" onclick={onRequestRevisionTask}>Minta revisi</button>
-              {:else if task.approval_state === 'revision' && (task.created_by === currentUserName() || asRequirementOwner) && canBoard}
-                <button type="button" class="ghost-btn" onclick={onResubmitTask}>Ajukan ulang</button>
-                {#if canComment}
-                  <button type="submit" class="primary">Kirim tanggapan</button>
-                {/if}
-              {:else}
-                {#if canBoard && task.approval_state === 'approved' && !task.status_move}
-                  <select bind:value={nextStatus} aria-label="Status tujuan">
-                    {#each workflowColumns as col}
-                      <option value={col.key}>{col.label}</option>
-                    {/each}
-                  </select>
-                  <button type="button" class="ghost-btn" onclick={onMove}>
-                    {role === 'teknis' ? 'Ajukan pindah' : 'Ubah status'}
-                  </button>
-                {:else if role === 'teknis' && !canBoard && task.approval_state === 'approved'}
-                  <span class="assignee-only-hint" style="font-size:0.7rem; color:#64748b; font-style:italic;">(Hanya assignee yang dapat mengajukan perubahan status task ini)</span>
-                {/if}
-                {#if canComment}
-                  <button type="submit" class="primary">Kirim tanggapan</button>
-                {/if}
+              {#if canBoard}
+                <select bind:value={nextStatus} aria-label="Status tujuan">
+                  {#each workflowColumns as col}
+                    <option value={col.key}>{col.label}</option>
+                  {/each}
+                </select>
+                <button type="button" class="ghost-btn" onclick={onMove}>
+                  Ubah status
+                </button>
+              {/if}
+              {#if canComment}
+                <button type="submit" class="primary">Kirim tanggapan</button>
               {/if}
             </div>
           </form>

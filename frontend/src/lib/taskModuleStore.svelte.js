@@ -306,129 +306,76 @@ export function isCurrentUserPicOf(dashboard) {
   return isCurrentUserPmOf(dashboard)
 }
 
-/** Buat, ubah, hapus, dan ganti status dashboard mengikuti permission "manage_registry". */
-export function canCreateDashboard() {
-  return (taskModuleStore.session.permissions || []).includes('manage_registry')
-}
-
-/** Tombol Tambah Field di Registry mengikuti permission "add_field" dari role. */
-export function canAddField() {
-  return (taskModuleStore.session.permissions || []).includes('add_field')
-}
-
-/** Tombol Edit pada field mengikuti permission "edit_field". */
-export function canEditField() {
-  return (taskModuleStore.session.permissions || []).includes('edit_field')
-}
-
-/** Tombol Hapus pada field mengikuti permission "delete_field". */
-export function canDeleteField() {
-  return (taskModuleStore.session.permissions || []).includes('delete_field')
-}
-
-/** Edit form add dashboard mengikuti permission "edit_dashboard_form". Manager dan Admin diizinkan secara default. */
-export function canEditDashboardForm() {
+/** Cek apakah user saat ini memiliki role developer atau admin (bisa kelola task, requirement, dashboard, dan monitoring). */
+export function isDeveloperOrAdmin() {
   const role = currentUserRole()
-  return role === 'manager' || role === 'admin' || (taskModuleStore.session.permissions || []).includes('edit_dashboard_form')
+  return role === 'manager' || role === 'admin' || role === 'developer' || role === 'pm' || role === 'teknis'
+}
+
+/** Buat, ubah, hapus, dan ganti status dashboard. Developer dan Admin diizinkan. */
+export function canCreateDashboard() {
+  return isDeveloperOrAdmin() || (taskModuleStore.session.permissions || []).includes('manage_registry')
+}
+
+/** Tombol Tambah Field di Registry. */
+export function canAddField() {
+  return isDeveloperOrAdmin() || (taskModuleStore.session.permissions || []).includes('add_field')
+}
+
+/** Tombol Edit pada field. */
+export function canEditField() {
+  return isDeveloperOrAdmin() || (taskModuleStore.session.permissions || []).includes('edit_field')
+}
+
+/** Tombol Hapus pada field. */
+export function canDeleteField() {
+  return isDeveloperOrAdmin() || (taskModuleStore.session.permissions || []).includes('delete_field')
+}
+
+/** Edit form add dashboard mengikuti permission "edit_dashboard_form". Developer dan Admin diizinkan secara default. */
+export function canEditDashboardForm() {
+  return isDeveloperOrAdmin() || (taskModuleStore.session.permissions || []).includes('edit_dashboard_form')
 }
 
 /** @param {string} [dashboard] */
 export function canManageRequirements(dashboard = '') {
-  const role = currentUserRole()
-  if (role === 'manager' || role === 'admin') return true
-  if (role !== 'pm') return false
-  if (!dashboard) return true
-  return isCurrentUserPmOf(dashboard)
+  return isDeveloperOrAdmin()
 }
 
 /** Tambah requirement baru (termasuk tambah versi) mengikuti permission "create_requirement". */
 export function canCreateRequirement() {
-  const role = currentUserRole()
-  return role === 'manager' || role === 'admin' || (taskModuleStore.session.permissions || []).includes('create_requirement')
+  return isDeveloperOrAdmin() || (taskModuleStore.session.permissions || []).includes('create_requirement')
 }
 
 /** Tambah assignee ke requirement yang sudah ada mengikuti permission "add_assignee". */
 export function canAddAssignee() {
-  const role = currentUserRole()
-  return role === 'manager' || role === 'admin' || (taskModuleStore.session.permissions || []).includes('add_assignee')
+  return isDeveloperOrAdmin() || (taskModuleStore.session.permissions || []).includes('add_assignee')
 }
 
-/** Tombol Tambah Task dan izin buat task mengikuti permission "create_task" dari role. */
+/** Tombol Tambah Task dan izin buat task. Developer dan Admin diizinkan secara default. */
 export function canCreateTask() {
-  return (taskModuleStore.session.permissions || []).includes('create_task')
+  return isDeveloperOrAdmin() || (taskModuleStore.session.permissions || []).includes('create_task')
 }
 
-/** Board interaction: PM/Manager full move, teknis request only */
+/** Board interaction: Developer dan Admin langsung mengupdate board tanpa proses approval. */
 export function canUpdateBoard() {
-  const role = currentUserRole()
-  return role === 'manager' || role === 'admin' || role === 'pm' || role === 'teknis'
+  return isDeveloperOrAdmin()
 }
 
 /**
  * Cek apakah user saat ini berhak mengupdate progress / memindahkan status task ini.
- * - Manager / Admin: selalu boleh (full override).
- * - PM dashboard task ini: boleh.
- * - Owner requirement task ini: boleh.
- * - Teknis: HANYA boleh jika task ini ditugaskan ke dirinya (assignee_ids / assignees / pic) atau dibuat olehnya.
+ * - Admin & Developer: selalu berhak (direct update tanpa menunggu approval).
+ * - Viewer: hanya membaca (read-only).
  * @param {any} task
  * @returns {boolean}
  */
 export function canUpdateTaskProgress(task) {
   if (!task) return false
-  const role = currentUserRole()
-  if (role === 'manager' || role === 'admin') return true
-
-  const userName = currentUserName()
-  const userId = String(taskModuleStore.session.id || '')
-
-  // PM dari dashboard task ini
-  if (role === 'pm' && isCurrentUserPmOf(task.dashboard)) return true
-
-  // Owner dari requirement task ini
-  if (task.requirement_owner && task.requirement_owner === userName) return true
-
-  // Teknis: hanya jika di-assign ke dia atau dibuat olehnya
-  if (role === 'teknis') {
-    if (task.assignee_ids && Array.isArray(task.assignee_ids) && userId) {
-      if (task.assignee_ids.map(String).includes(userId)) {
-        return true
-      }
-    }
-    if (task.assignees && Array.isArray(task.assignees)) {
-      if (
-        task.assignees.some((a) =>
-          typeof a === 'string'
-            ? a.toLowerCase() === userName.toLowerCase()
-            : a.name?.toLowerCase() === userName.toLowerCase() || String(a.id) === userId,
-        )
-      ) {
-        return true
-      }
-    }
-    if (task.assignee) {
-      const parts = task.assignee.split(',').map((s) => s.trim().toLowerCase())
-      if (parts.includes(userName.toLowerCase())) {
-        return true
-      }
-    }
-    if (task.pic) {
-      const parts = task.pic.split(',').map((s) => s.trim().toLowerCase())
-      if (parts.includes(userName.toLowerCase())) {
-        return true
-      }
-    }
-    if (task.created_by && task.created_by.toLowerCase() === userName.toLowerCase()) {
-      return true
-    }
-    return false
-  }
-
-  return false
+  return isDeveloperOrAdmin()
 }
 
 export function canCommentOnTask() {
-  const role = currentUserRole()
-  return role === 'manager' || role === 'admin' || role === 'pm' || role === 'teknis'
+  return isDeveloperOrAdmin()
 }
 
 /** @param {string} id */
@@ -510,7 +457,6 @@ export function tasksByColumn(status, dashboard = '') {
   return taskModuleStore.items
     .filter(
       (t) =>
-        t.approval_state === 'approved' &&
         t.status === status &&
         (!dashboard || t.dashboard === dashboard),
     )
@@ -689,17 +635,14 @@ export async function updateModuleTask(id, patch) {
 }
 
 /**
- * PM/owner: langsung pindah (dan/atau update progress). Teknis: buat status_move request
- * (progress_percent ikut dibawa di request yang sama, disetujui/ditolak bareng status-nya).
+ * Langsung update status & progress task tanpa proses approval staging.
  * @param {number} id
  * @param {TaskWorkflow} status
  * @param {{ note?: string, evidence?: EvidenceFile | null, progressPercent?: number }} [opts]
  * @returns {Promise<'moved' | 'requested' | false>}
  */
 export async function moveModuleTask(id, status, opts = {}) {
-  // Tampilkan seolah langsung pindah; kalau ternyata jadi request (Teknis, menunggu PM),
-  // response asli dari server akan menimpa ini lagi dalam ~1-2 detik dengan status_move yang benar.
-  const optimisticPatch = { status }
+  const optimisticPatch = { status, approval_state: 'approved', status_move: null }
   if (opts.progressPercent !== undefined) optimisticPatch.progress_percent = opts.progressPercent
   const prev = applyOptimisticPatch(id, optimisticPatch)
   try {
@@ -711,7 +654,7 @@ export async function moveModuleTask(id, status, opts = {}) {
     applyTaskUpdate(result.task)
     void loadNotificationsFromApi()
     void loadRequirementsFromApi()
-    return result.result
+    return result.result || 'moved'
   } catch (err) {
     rollbackOptimisticTask(id, prev)
     taskModuleStore.lastActionError = err instanceof Error ? err.message : String(err)

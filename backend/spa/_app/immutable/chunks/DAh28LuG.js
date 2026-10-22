@@ -1,0 +1,1 @@
+function e(e){if(typeof document>`u`)return{};let t=!0,n=()=>{t&&e&&document.body&&e.parentNode!==document.body&&document.body.appendChild(e)};return queueMicrotask(n),typeof requestAnimationFrame<`u`&&requestAnimationFrame(n),{destroy(){t=!1,e&&e.parentNode&&e.parentNode.removeChild(e)}}}export{e as t};

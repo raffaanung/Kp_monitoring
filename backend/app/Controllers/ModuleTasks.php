@@ -353,9 +353,8 @@ class ModuleTasks extends BaseController
     {
         $taskId = $id;
         $user   = $this->authUser();
-        $role   = TaskPolicy::functionalRole($user['role_name'] ?? null);
-        if ($role !== 'pm' && ! TaskPolicy::isAdmin($user)) {
-            return $this->jsonError('Only a PM can edit task details', 403);
+        if (! TaskPolicy::isDeveloper($user)) {
+            return $this->jsonError('Only developers or admins can edit task details', 403);
         }
 
         $taskModel = new TaskModel();
@@ -498,25 +497,14 @@ class ModuleTasks extends BaseController
             return $this->jsonError('Anda hanya dapat mengubah progress/status task yang ditugaskan kepada Anda', 403);
         }
 
-        // Owner requirement boleh geser langsung, apa pun role-nya (termasuk Admin) — sama seperti PM.
-        $isOwner = $requirement !== null && TaskPolicy::isRequirementOwner($user, $requirement);
-
         $statusChanged   = $task['status'] !== $status;
         $progressChanged = $progressPercent !== null && $progressPercent !== (int) ($task['progress_percent'] ?? 0);
         if (! $statusChanged && ! $progressChanged) {
             return $this->jsonOk(['result' => 'moved', 'task' => $this->shapeDetailRow($taskModel->findRichById($taskId))]);
         }
 
-        $moveModel = new TaskStatusMoveModel();
-        if ($moveModel->pendingForTask($taskId) !== null) {
-            return $this->jsonError('A move request is still waiting', 422);
-        }
-
-        $dashboard = $task['dashboard_id'] ? (new DashboardModel())->find($task['dashboard_id']) : null;
-
-        // Verb + deskripsi dipisah supaya nggak dobel kata ("Pindah pindah ke X") — deskripsi cuma
-        // bagian tujuannya aja, verb-nya ("pindah"/"update progress") ditentukan oleh pemanggil.
-        $verb       = $statusChanged ? 'pindah' : 'update progress';
+        // Verb + deskripsi dipisah supaya rapih
+        $verb = $statusChanged ? 'pindah' : 'update progress';
         $describeChange = function () use ($statusChanged, $progressChanged, $status, $progressPercent): string {
             if ($statusChanged && $progressChanged) {
                 return "ke {$status} dengan progress {$progressPercent}%";
@@ -528,57 +516,35 @@ class ModuleTasks extends BaseController
             return "ke {$progressPercent}%";
         };
 
-        if ($isOwner || ($role === 'pm' && $dashboard !== null && TaskPolicy::isPmOfDashboard($user, $dashboard))) {
-            $patch = ['status' => $status];
-            if ($progressChanged) {
-                $patch['progress_percent'] = $progressPercent;
-            }
-            $taskModel->update($taskId, $patch);
-            if (!empty($task['requirement_id'])) {
-                (new RequirementModel())->syncStatusFromTasks($task['requirement_id']);
-            }
-            if ($evidenceId) {
-                (new TaskEvidenceModel())->update($evidenceId, ['kind' => 'pm_approve']);
-            }
-            (new ActivityLogModel())->log([
-                'actor_id' => $user['id'], 'actor_name' => $user['name'],
-                'action' => ucfirst("{$verb} " . $describeChange()) . ". {$note}", 'action_type' => 'status_change',
-                'object_type' => 'task', 'object_id' => $taskId, 'object_label' => $task['title'],
-                'dashboard_id' => $task['dashboard_id'], 'evidence_id' => $evidenceId,
-            ]);
-
-            return $this->jsonOk(['result' => 'moved', 'task' => $this->shapeDetailRow($taskModel->findRichById($taskId))]);
+        $patch = ['status' => $status, 'approval_state' => 'approved'];
+        if ($progressChanged) {
+            $patch['progress_percent'] = $progressPercent;
+        }
+        $taskModel->update($taskId, $patch);
+        if (!empty($task['requirement_id'])) {
+            (new RequirementModel())->syncStatusFromTasks($task['requirement_id']);
+        }
+        if ($evidenceId) {
+            (new TaskEvidenceModel())->update($evidenceId, ['kind' => 'evidence']);
         }
 
-        if ($role === 'teknis') {
-            $moveId = Id::new();
-            $moveModel->insert([
-                'id' => $moveId, 'task_id' => $taskId, 'from_status' => $task['status'], 'to_status' => $status,
-                'to_progress_percent' => $progressChanged ? $progressPercent : null,
-                'requested_by' => $user['id'], 'note' => $note, 'evidence_id' => $evidenceId,
-                'status' => 'pending',
-            ], false);
-            if ($evidenceId) {
-                (new TaskEvidenceModel())->update($evidenceId, ['kind' => 'move_request']);
-            }
-            (new ActivityLogModel())->log([
-                'actor_id' => $user['id'], 'actor_name' => $user['name'],
-                'action' => "Ajukan {$verb} " . $describeChange() . ". {$note}", 'action_type' => 'status_change',
-                'object_type' => 'task', 'object_id' => $taskId, 'object_label' => $task['title'],
-                'dashboard_id' => $task['dashboard_id'], 'evidence_id' => $evidenceId,
-            ]);
-            if ($dashboard !== null && $dashboard['pm_id']) {
-                (new NotificationModel())->notify(
-                    'move_request', 'Request pindah status',
-                    "{$user['name']} minta {$verb} " . $describeChange() . " untuk \"{$task['title']}\"",
-                    $dashboard['pm_id'], $taskId, $task['dashboard_id'],
-                );
-            }
-
-            return $this->jsonOk(['result' => 'requested', 'move_id' => $moveId, 'task' => $this->shapeDetailRow($taskModel->findRichById($taskId))]);
+        // Otomatis selesaikan jika ada move pending sebelumnya
+        $moveModel = new TaskStatusMoveModel();
+        $pendingMove = $moveModel->pendingForTask($taskId);
+        if ($pendingMove !== null) {
+            $moveModel->update($pendingMove['id'], ['status' => 'approved']);
         }
 
-        return $this->jsonError('You are not allowed to move this task', 403);
+        $noteText = $note !== '' ? ". {$note}" : '';
+        (new ActivityLogModel())->log([
+            'actor_id' => $user['id'], 'actor_name' => $user['name'],
+            'action' => ucfirst("{$verb} " . $describeChange()) . $noteText,
+            'action_type' => 'status_change',
+            'object_type' => 'task', 'object_id' => $taskId, 'object_label' => $task['title'],
+            'dashboard_id' => $task['dashboard_id'], 'evidence_id' => $evidenceId,
+        ]);
+
+        return $this->jsonOk(['result' => 'moved', 'task' => $this->shapeDetailRow($taskModel->findRichById($taskId))]);
     }
 
     public function approveMove(string $id = '0'): ResponseInterface

@@ -15,10 +15,6 @@
 
   let { children } = $props()
 
-  const canManageRoles = $derived(
-    authStore.user?.functional_role === 'manager' ||
-      (authStore.user?.permissions || []).includes('manage_roles'),
-  )
 
   const session = $derived.by(() => {
     void taskModuleStore.session
@@ -74,9 +70,6 @@
     if (path === '/access/users' || path === '/access') {
       return { title: 'User Access', sub: 'User List' }
     }
-    if (path.startsWith('/access/roles')) {
-      return { title: 'User Access', sub: 'Role Management' }
-    }
     if (path === '/access/profile' || path.startsWith('/settings/profile')) {
       return { title: 'User Access', sub: 'Profile' }
     }
@@ -90,7 +83,6 @@
 
   function isAccessSub(sub) {
     if (sub === 'users') return path === '/access' || path === '/access/users'
-    if (sub === 'roles') return path === '/access/roles'
     if (sub === 'profile') return path === '/access/profile' || path.startsWith('/settings/profile')
     return false
   }
@@ -177,9 +169,6 @@
             {#if railExpanded}
               <div class="subnav" class:visible={onAccess} aria-label="Sub menu User Access">
                 <a href="/access/users" class="sub-item" class:on={isAccessSub('users')}>User List</a>
-                {#if canManageRoles}
-                  <a href="/access/roles" class="sub-item" class:on={isAccessSub('roles')}>Role Management</a>
-                {/if}
                 <a href="/access/profile" class="sub-item" class:on={isAccessSub('profile')}>Profile</a>
               </div>
             {/if}
@@ -263,7 +252,6 @@
       #f2f3f5;
   }
 
-  /* Lebar slot ikut animasi — konten didorong, tidak ditutupi */
   .rail-wrap {
     position: relative;
     z-index: 5;
@@ -272,6 +260,10 @@
     height: 100%;
     will-change: width;
     transition: width 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  :global(html.modal-open .rail-wrap) {
+    pointer-events: none !important;
   }
 
   .shell.expanded .rail-wrap {

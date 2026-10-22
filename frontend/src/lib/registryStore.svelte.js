@@ -71,6 +71,53 @@ export function rememberDetailId(id) {
 }
 
 /**
+ * Mengambil semua data IP dari dashboard (dari metadata development_ip, production_ip, dsb.)
+ * @param {any} d
+ * @returns {string[]}
+ */
+export function getDashboardIps(d) {
+  if (!d) return []
+  const ips = []
+  if (d.ip) ips.push(String(d.ip).trim())
+
+  let meta = d.metadata
+  if (typeof meta === 'string') {
+    try {
+      meta = JSON.parse(meta)
+    } catch {
+      const matches = meta.match(/\b\d{1,3}(?:\.\d{1,3}){1,3}\b/g)
+      if (matches) ips.push(...matches)
+      meta = null
+    }
+  }
+
+  if (meta && typeof meta === 'object') {
+    for (const [key, val] of Object.entries(meta)) {
+      if (!val) continue
+      const strVal = String(val).trim()
+      if (!strVal) continue
+
+      const k = key.toLowerCase()
+      // Jika key mengandung 'ip' (development_ip, production_ip, server_ip, dsb.)
+      if (k.includes('ip')) {
+        ips.push(strVal)
+      } else if (/\b\d{1,3}(?:\.\d{1,3}){1,3}\b/.test(strVal)) {
+        // Atau jika nilai mengandung format IP address
+        const matches = strVal.match(/\b\d{1,3}(?:\.\d{1,3}){1,3}\b/g)
+        if (matches) ips.push(...matches)
+      }
+    }
+  }
+
+  if (d.url) {
+    const urlMatches = String(d.url).match(/\b\d{1,3}(?:\.\d{1,3}){1,3}\b/g)
+    if (urlMatches) ips.push(...urlMatches)
+  }
+
+  return ips
+}
+
+/**
  * @param {{ status?: string, dashboard?: string, criticality?: string, q?: string, sort?: string }} [filters]
  */
 export function listDashboards(filters = {}) {
@@ -84,10 +131,23 @@ export function listDashboards(filters = {}) {
     items = items.filter((d) => `${d.name} ${d.code} ${d.category}`.toLowerCase().includes(needle))
   }
   if (q) {
-    const needle = q.toLowerCase()
-    items = items.filter((d) =>
-      `${d.name} ${d.code} ${d.description} ${d.owner} ${d.platform} ${d.category}`.toLowerCase().includes(needle),
-    )
+    const needle = q.toLowerCase().trim()
+    items = items.filter((d) => {
+      // 1. Pencarian berdasarkan nama aplikasi (dan kode singkatan)
+      const name = (d.name || '').toLowerCase()
+      const code = (d.code || '').toLowerCase()
+      if (name.includes(needle) || (code && code.includes(needle))) {
+        return true
+      }
+
+      // 2. Pencarian berdasarkan data IP (development_ip, production_ip, server IP, dsb.)
+      const ips = getDashboardIps(d)
+      if (ips.some((ip) => ip.toLowerCase().includes(needle))) {
+        return true
+      }
+
+      return false
+    })
   }
 
   const rank = { high: 3, medium: 2, low: 1 }

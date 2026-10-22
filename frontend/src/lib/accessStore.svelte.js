@@ -121,6 +121,14 @@ export function teamLabels(teamIds) {
 }
 
 export function roleOptions() {
+  const canonical = ['Admin', 'Developer', 'Viewer']
+  const matched = accessStore.roles
+    .filter((r) => canonical.includes(r.name))
+    .sort((a, b) => canonical.indexOf(a.name) - canonical.indexOf(b.name))
+
+  if (matched.length > 0) {
+    return matched.map((r) => ({ value: r.id, label: r.name }))
+  }
   return accessStore.roles.map((r) => ({ value: r.id, label: r.name }))
 }
 

@@ -301,6 +301,7 @@
   function openTask(id, from) {
     work = 'overview';
     expandedTaskId = String(id);
+    openJourneyMap[String(id)] = false;
     loadModuleTaskDetail(id);
   }
 
@@ -312,6 +313,15 @@
   /** Accordion: grup task (judul sama) di "List Task" bisa di-expand di tempat. @type {string} */
   let expandedTaskId = $state('');
   let lastSyncedDraftKey = $state('');
+
+  /** State penentu apakah "Riwayat & Journey Progress Task" terbuka. Default: tertutup / hide */
+  let openJourneyMap = $state(/** @type {Record<string, boolean>} */ ({}));
+
+  /** @param {string | number} taskId */
+  function toggleTaskJourney(taskId) {
+    const key = String(taskId);
+    openJourneyMap[key] = !openJourneyMap[key];
+  }
 
   /**
    * Pastikan progressDraft dan kanbanDraftStatus selalu tersinkronisasi dengan posisi
@@ -343,6 +353,8 @@
       return;
     }
     expandedTaskId = key;
+    // Riwayat & Journey Progress Task selalu tertutup (hide) secara default saat detail task dibuka
+    openJourneyMap[key] = false;
     const opened = tasks.find((t) => String(t.id) === String(key));
     if (opened) {
       const approvedPct = displayProgress(opened);
@@ -403,25 +415,11 @@
 
   /** @param {any} task */
   function hasPendingApproval(task) {
-    return Boolean(task.status_move);
+    return false;
   }
 
-  /** PIC (PM) dan Admin/Manager berhak memutuskan approval (Accept/Return). @param {any} task */
+  /** @param {any} task */
   function canDecideApproval(task) {
-    const role = currentUserRole();
-    if (role === 'manager' || role === 'admin') return true;
-    const isPmRole =
-      role === 'pm' ||
-      role === 'pic' ||
-      taskModuleStore.session.label?.toLowerCase() === 'pic' ||
-      taskModuleStore.session.label?.toLowerCase() === 'pm';
-    if (isPmRole) {
-      const d = task?.dashboard || dashName;
-      if (!d) return true;
-      if (selectedDetail?.pm && selectedDetail.pm.toLowerCase() === (taskModuleStore.session.name || '').toLowerCase()) return true;
-      if (selectedDetail?.pm_id && String(selectedDetail.pm_id) === String(taskModuleStore.session.id)) return true;
-      return isCurrentUserPmOf(d);
-    }
     return false;
   }
 
@@ -700,15 +698,14 @@
   function onKanbanColDrop(e, colKey) {
     e.preventDefault();
     kanbanDraftStatus = colKey;
+    progressDraft = progressForStatus(colKey);
   }
 
-  /** Apply cuma boleh jalan kalau posisi slider progress dan posisi card kanban SUDAH disamakan manual — kalau assignee cuma geser salah satu doang, Apply harus kekunci biar dia sadar harus nyamain progress juga. */
   const canApplyProgress = $derived.by(() => {
     const currentTask = versionTasks.find((t) => String(t.id) === String(expandedTaskId))
       || taskModuleStore.items.find((t) => String(t.id) === String(expandedTaskId));
     if (!currentTask || !canUpdateTaskProgress(currentTask)) return false;
-    const effectiveStatus = kanbanDraftStatus || currentTask?.status || '';
-    return Boolean(effectiveStatus) && statusForProgress(progressDraft) === effectiveStatus;
+    return true;
   });
 
   /** @param {any} task */
@@ -1305,108 +1302,142 @@
 
       {#snippet taskJourneySnippet(task)}
         {@const journey = getTaskJourney(task)}
-        <div class="task-journey-container simplified">
-          <div class="journey-header">
+        {@const isJourneyOpen = Boolean(openJourneyMap[String(task.id)])}
+        <div class="task-journey-container simplified" class:is-collapsed={!isJourneyOpen}>
+          <button
+            type="button"
+            class="journey-header-toggle"
+            onclick={() => toggleTaskJourney(task.id)}
+            aria-expanded={isJourneyOpen}
+          >
             <div class="journey-header-title">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="10"/>
                 <polyline points="12 6 12 12 16 14"/>
               </svg>
               <span>Riwayat & Journey Progress Task</span>
+              {#if journey.length > 0}
+                <span class="journey-count-badge">{journey.length}</span>
+              {/if}
             </div>
-          </div>
 
-          <div class="task-journey-timeline">
-            {#each journey as step, i (step.id)}
-              <div class="journey-step {step.status}">
-                <div class="journey-rail">
-                  <div class="journey-badge-dot" title="Step {step.stepNum}: {step.pct}%">
-                    {#if step.status === 'approved'}
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                    {:else if step.status === 'rejected'}
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <line x1="18" y1="6" x2="6" y2="18"/>
-                        <line x1="6" y1="6" x2="18" y2="18"/>
-                      </svg>
-                    {:else if step.status === 'pending'}
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <circle cx="12" cy="12" r="10"/>
-                        <polyline points="12 6 12 12 14 14"/>
-                      </svg>
-                    {:else}
-                      <span style="font-size: 9px; font-weight: 700;">{step.stepNum}</span>
-                    {/if}
-                  </div>
-                  {#if i < journey.length - 1}
-                    <div class="journey-line"></div>
-                  {/if}
-                </div>
+            <div class="journey-header-action">
+              <span class="journey-toggle-hint">{isJourneyOpen ? 'Sembunyikan' : 'Tampilkan'}</span>
+              <svg
+                class="journey-chevron"
+                class:rotated={isJourneyOpen}
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.4"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </div>
+          </button>
 
-                <div class="journey-content-card">
-                  <div class="journey-card-top">
-                    <div class="journey-step-tag">
-                      <span class="step-pct-badge">{step.pct}%</span>
-                      <span class="step-title">
-                        {step.toStatus ? workflowLabel(step.toStatus) : (step.statusLabel || 'Progress Milestone')}
-                      </span>
-                      <span class="journey-author">
-                        · Oleh: <strong>{step.requestedBy}</strong>
-                        {#if step.at} · {formatDate(step.at)}{/if}
-                      </span>
-                    </div>
-                    <span class="status-pill pill-{step.status}">
-                      {#if step.status === 'approved'}
-                        Disetujui PM
-                      {:else if step.status === 'rejected'}
-                        Perlu Revisi / Returned
-                      {:else if step.status === 'pending'}
-                        Menunggu Approval PM
-                      {:else}
-                        Status
-                      {/if}
-                    </span>
-                  </div>
-
-                  {#if step.note && !step.note.startsWith('Update progress ke')}
-                    <div class="journey-simple-note">
-                      <span class="journey-note-label">Catatan:</span>
-                      <span class="journey-note-val">"{step.note}"</span>
-                    </div>
-                  {/if}
-
-                  {#if step.evidences && step.evidences.length > 0}
-                    <div class="journey-simple-evidences">
-                      <span class="journey-ev-label">Evidence ({step.evidences.length}):</span>
-                      <div class="journey-ev-inline-list">
-                        {#each step.evidences as ev (ev.id)}
-                          <span class="journey-ev-item">
-                            <a href={fileUrl(ev.file_url)} target="_blank" rel="noopener noreferrer" class="journey-ev-link">{ev.name}</a>
-                            {#if ev.note}
-                              <small class="journey-ev-item-note">("{ev.note}")</small>
-                            {/if}
-                          </span>
-                        {/each}
+          {#if isJourneyOpen}
+            {#if journey.length === 0}
+              <p class="journey-empty-hint">Belum ada riwayat pergerakan status untuk task ini.</p>
+            {:else}
+              <div class="task-journey-timeline">
+                {#each journey as step, i (step.id)}
+                  <div class="journey-step {step.status}">
+                    <div class="journey-rail">
+                      <div class="journey-badge-dot" title="Step {step.stepNum}: {step.pct}%">
+                        {#if step.status === 'approved'}
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        {:else if step.status === 'rejected'}
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                          </svg>
+                        {:else if step.status === 'pending'}
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <circle cx="12" cy="12" r="10"/>
+                            <polyline points="12 6 12 12 14 14"/>
+                          </svg>
+                        {:else}
+                          <span style="font-size: 9px; font-weight: 700;">{step.stepNum}</span>
+                        {/if}
                       </div>
-                    </div>
-                  {/if}
-
-                  {#if step.feedback}
-                    <div class="journey-simple-feedback feedback-{step.feedback.type}">
-                      <span class="feedback-author">Respon PM ({step.feedback.actor}):</span>
-                      <span class="feedback-text">"{step.feedback.text}"</span>
-                      {#if step.feedback.evidenceId}
-                        <a href="/api/evidences/{step.feedback.evidenceId}/file" target="_blank" rel="noopener noreferrer" class="feedback-link">
-                          Lampiran PM
-                        </a>
+                      {#if i < journey.length - 1}
+                        <div class="journey-line"></div>
                       {/if}
                     </div>
-                  {/if}
-                </div>
+
+                    <div class="journey-content-card">
+                      <div class="journey-card-top">
+                        <div class="journey-step-tag">
+                          <span class="step-pct-badge">{step.pct}%</span>
+                          <span class="step-title">
+                            {step.toStatus ? workflowLabel(step.toStatus) : (step.statusLabel || 'Progress Milestone')}
+                          </span>
+                          <span class="journey-author">
+                            · Oleh: <strong>{step.requestedBy}</strong>
+                            {#if step.at} · {formatDate(step.at)}{/if}
+                          </span>
+                        </div>
+                        <span class="status-pill pill-{step.status}">
+                          {#if step.status === 'approved'}
+                            Disetujui PM
+                          {:else if step.status === 'rejected'}
+                            Perlu Revisi / Returned
+                          {:else if step.status === 'pending'}
+                            Menunggu Approval PM
+                          {:else}
+                            Status
+                          {/if}
+                        </span>
+                      </div>
+
+                      {#if step.note && !step.note.startsWith('Update progress ke')}
+                        <div class="journey-simple-note">
+                          <span class="journey-note-label">Catatan:</span>
+                          <span class="journey-note-val">"{step.note}"</span>
+                        </div>
+                      {/if}
+
+                      {#if step.evidences && step.evidences.length > 0}
+                        <div class="journey-simple-evidences">
+                          <span class="journey-ev-label">Evidence ({step.evidences.length}):</span>
+                          <div class="journey-ev-inline-list">
+                            {#each step.evidences as ev (ev.id)}
+                              <span class="journey-ev-item">
+                                <a href={fileUrl(ev.file_url)} target="_blank" rel="noopener noreferrer" class="journey-ev-link">{ev.name}</a>
+                                {#if ev.note}
+                                  <small class="journey-ev-item-note">("{ev.note}")</small>
+                                {/if}
+                              </span>
+                            {/each}
+                          </div>
+                        </div>
+                      {/if}
+
+                      {#if step.feedback}
+                        <div class="journey-simple-feedback feedback-{step.feedback.type}">
+                          <span class="feedback-author">Respon PM ({step.feedback.actor}):</span>
+                          <span class="feedback-text">"{step.feedback.text}"</span>
+                          {#if step.feedback.evidenceId}
+                            <a href="/api/evidences/{step.feedback.evidenceId}/file" target="_blank" rel="noopener noreferrer" class="feedback-link">
+                              Lampiran PM
+                            </a>
+                          {/if}
+                        </div>
+                      {/if}
+                    </div>
+                  </div>
+                {/each}
               </div>
-            {/each}
-          </div>
+            {/if}
+          {/if}
         </div>
       {/snippet}
       <!-- ERP Standard Object Header -->
@@ -1910,89 +1941,18 @@
                           </td>
                           <td>
                             <span class="task-status" style="color: {workflowStatusColor(task.status)}; background: {workflowStatusColor(task.status)}22">{workflowLabel(task.status)}</span>
-                            {#if isTaskReturned(task)}
-                              <span class="task-returned-badge" title="Task dikembalikan oleh Admin untuk revisi">Returned</span>
-                            {/if}
-                            {#if task.status_move}
-                              <span class="task-status-req-badge" title="Menunggu approval PM">Minta {workflowLabel(task.status_move.to)}</span>
-                            {/if}
                           </td>
                           <td>{formatDate(task.deadline)}</td>
                           <td class="task-actions-col">
-                            {#if (isAdminOrManager || canDecideApproval(task)) && hasPendingApproval(task)}
-                              <div class="task-row-actions">
-                                <button
-                                  type="button"
-                                  class="task-action-btn btn-accept"
-                                  title="Approve / Accept task"
-                                  aria-label="Approve task"
-                                  onclick={(e) => { e.stopPropagation(); openAcceptModal(task.id); }}
-                                >
-                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                    <polyline points="20 6 9 17 4 12" />
-                                  </svg>
-                                  <span>Approve</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  class="task-action-btn btn-return"
-                                  title="Return task ke tim teknis"
-                                  aria-label="Return task ke tim teknis"
-                                  onclick={(e) => { e.stopPropagation(); openReturnModal(task.id); }}
-                                >
-                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                    <polyline points="9 14 4 9 9 4" />
-                                    <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
-                                  </svg>
-                                  <span>Return</span>
-                                </button>
-                              </div>
-                            {:else if task.approval_state === 'revision' && canResubmit(task)}
-                              <div class="task-row-actions">
-                                <button
-                                  type="button"
-                                  class="task-action-btn btn-ghost-view icon-only"
-                                  title="Lihat Catatan Return"
-                                  aria-label="Lihat Catatan Return"
-                                  onclick={(e) => { e.stopPropagation(); readOnlyReturnTaskId = task.id; }}
-                                >
-                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                    <polyline points="9 14 4 9 9 4" />
-                                    <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
-                                  </svg>
-                                </button>
-                                <button
-                                  type="button"
-                                  class="task-action-btn btn-resubmit"
-                                  title="Ajukan ulang task ini"
-                                  aria-label="Ajukan ulang task ini"
-                                  onclick={(e) => { e.stopPropagation(); onResubmitTask(task.id); }}
-                                >
-                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                    <path d="M3 12a9 9 0 1 0 3-6.7" />
-                                    <polyline points="3 4 3 9 8 9" />
-                                  </svg>
-                                  <span>Ajukan ulang</span>
-                                </button>
-                              </div>
-                            {:else if isTaskReturned(task)}
-                              <!-- Bagian Tim Teknis / Info: Hanya bisa lihat catatan ketika task di-return -->
-                              <button
-                                type="button"
-                                class="task-action-btn btn-view-return"
-                                title="Lihat Catatan Return dari Admin (Hanya Baca)"
-                                aria-label="Lihat Catatan Return dari Admin"
-                                onclick={(e) => { e.stopPropagation(); readOnlyReturnTaskId = task.id; }}
-                              >
-                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                  <polyline points="9 14 4 9 9 4" />
-                                  <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
-                                </svg>
-                                <span class="btn-return-label">Lihat Return</span>
-                              </button>
-                            {:else}
-                              <span class="readonly-dash" title="Belum ada update pengajuan dari tim teknis">—</span>
-                            {/if}
+                            <button
+                              type="button"
+                              class="task-action-btn btn-ghost-view"
+                              title={isOpen ? 'Tutup detail' : 'Buka detail & update progres'}
+                              aria-label={isOpen ? 'Tutup detail' : 'Buka detail & update progres'}
+                              onclick={(e) => { e.stopPropagation(); toggleTaskRow(task.id, [task]); }}
+                            >
+                              <span>{isOpen ? 'Tutup' : 'Update'}</span>
+                            </button>
                           </td>
                         </tr>
                         {#if isOpen}
@@ -2026,313 +1986,163 @@
                                     </div>
                                   {/if}
                                 {/if}
-                                {#if isAdminOrManager || canDecideApproval(task)}
-                                  <!-- POV PM: Tampilan informatif status %, posisi lifecycle, file evidence, catatan issue & notes evidence -->
-                                  <div class="pm-task-detail-card">
-                                    <!-- Header: Status % dan Posisi Task di Kanannya -->
-                                    <div class="pm-task-header-row">
-                                      <div class="pm-task-progress-box">
-                                        <span class="pm-metric-label">Status & Progress</span>
-                                        <div class="pm-progress-hero">
-                                          <span class="pm-progress-pct" style="color: {workflowStatusColor(task.status)}">{pct}%</span>
-                                          <div class="pm-progress-bar-track">
-                                            <div class="pm-progress-bar-fill" style="width: {pct}%; background: {workflowStatusColor(task.status)}"></div>
-                                          </div>
-                                        </div>
-                                        <div class="pm-status-pill-wrap">
-                                          <span
-                                            class="task-status"
-                                            style="color: {workflowStatusColor(task.status)}; background: {workflowStatusColor(task.status)}22"
-                                          >
-                                            {workflowLabel(task.status)}
-                                          </span>
-                                          {#if isTaskReturned(task)}
-                                            <span class="task-returned-badge" title="Task dalam status revisi">Returned</span>
-                                          {/if}
-                                          {#if task.status_move}
-                                            <span class="task-status-req-badge">Minta {workflowLabel(task.status_move.to)}</span>
-                                          {/if}
+                                <div class="pm-task-detail-card">
+                                  <!-- Header: Status % dan Posisi Task di Kanannya -->
+                                  <div class="pm-task-header-row">
+                                    <div class="pm-task-progress-box">
+                                      <span class="pm-metric-label">Status & Progress</span>
+                                      <div class="pm-progress-hero">
+                                        <span class="pm-progress-pct" style="color: {workflowStatusColor(task.status)}">{pct}%</span>
+                                        <div class="pm-progress-bar-track">
+                                          <div class="pm-progress-bar-fill" style="width: {pct}%; background: {workflowStatusColor(task.status)}"></div>
                                         </div>
                                       </div>
-
-                                      <!-- Kanannya sudah di posisi mana: Visual pipeline kanban lifecycle -->
-                                      <div class="pm-task-stage-tracker">
-                                        <div class="pm-stage-header">
-                                          <span class="pm-metric-label">Posisi Task (Kanban Lifecycle)</span>
-                                          <span class="pm-current-pos-txt">Saat ini di: <strong>{workflowLabel(task.status)}</strong></span>
-                                        </div>
-                                        <div class="pm-pipeline-track">
-                                          {#each workflowColumns as col, idx (col.key)}
-                                            {@const isCurrent = task.status === col.key}
-                                            {@const isTarget = task.status_move?.to === col.key}
-                                            {@const currentIdx = workflowColumns.findIndex((c) => c.key === task.status)}
-                                            {@const isPast = idx < currentIdx}
-                                            <div
-                                              class="pm-pipeline-step"
-                                              class:current={isCurrent}
-                                              class:target={isTarget}
-                                              class:past={isPast}
-                                              style="--step-col: {workflowStatusColor(col.key)}"
-                                            >
-                                              <div class="step-marker">
-                                                {#if isCurrent}
-                                                  <span class="marker-dot current"></span>
-                                                {:else if isTarget}
-                                                  <span class="marker-dot target"></span>
-                                                {:else if isPast}
-                                                  <span class="marker-dot past"></span>
-                                                {:else}
-                                                  <span class="marker-dot"></span>
-                                                {/if}
-                                              </div>
-                                              <span class="step-label">{col.label}</span>
-                                              {#if isCurrent}
-                                                <span class="step-sub-badge active">Posisi Sekarang</span>
-                                              {:else if isTarget}
-                                                <span class="step-sub-badge pending">Diajukan</span>
-                                              {/if}
-                                            </div>
-                                            {#if idx < workflowColumns.length - 1}
-                                              <div class="pm-pipeline-connector" class:filled={idx < currentIdx}></div>
-                                            {/if}
-                                          {/each}
-                                        </div>
-                                      </div>
-                                    </div>
-
-                                    <!-- Deskripsi & Info Task -->
-                                    <div class="pm-task-desc-strip">
-                                      <div class="pm-desc-col">
-                                        <span class="pm-metric-label">Deskripsi Task</span>
-                                        <p class="pm-desc-text">{task.description || 'Tidak ada deskripsi.'}</p>
-                                      </div>
-                                      <div class="pm-meta-grid">
-                                        <div class="meta-item">
-                                          <span class="meta-lbl">Kode Task:</span>
-                                          <strong>{task.code || '—'}</strong>
-                                        </div>
-                                        <div class="meta-item">
-                                          <span class="meta-lbl">Prioritas:</span>
-                                          <span class="prio-tag prio-{task.priority || 'medium'}">{task.priority || 'Medium'}</span>
-                                        </div>
-                                        <div class="meta-item">
-                                          <span class="meta-lbl">Assignee (Teknis):</span>
-                                          <strong>{task.assignees?.length ? task.assignees.join(', ') : '—'}</strong>
-                                        </div>
-                                        <div class="meta-item">
-                                          <span class="meta-lbl">Deadline:</span>
-                                          <strong>{formatDate(task.deadline)}</strong>
-                                        </div>
-                                        <div class="meta-item">
-                                          <span class="meta-lbl">Dibuat Oleh:</span>
-                                          <span>{task.created_by || '—'}</span>
-                                        </div>
-                                      </div>
-                                    </div>
-
-                                    <!-- Catatan Pengajuan / Issue dari Tim Teknis -->
-                                    {#if task.status_move}
-                                      <div class="pm-issue-box">
-                                        <div class="pm-issue-header">
-                                          <div class="pm-issue-title">
-                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                                              <polyline points="14 2 14 8 20 8"/>
-                                              <line x1="16" y1="13" x2="8" y2="13"/>
-                                              <line x1="16" y1="17" x2="8" y2="17"/>
-                                              <polyline points="10 9 9 9 8 9"/>
-                                            </svg>
-                                            <strong>Catatan Pengajuan / Issue Tim Teknis ({task.status_move.requested_by || 'Teknis'})</strong>
-                                          </div>
-                                          {#if task.status_move.at}
-                                            <span class="pm-issue-time">{formatDate(task.status_move.at)}</span>
-                                          {/if}
-                                        </div>
-                                        <p class="pm-issue-note-text">
-                                          {task.status_move.note || 'Tidak ada catatan issue tambahan dari teknis saat pengajuan.'}
-                                        </p>
-                                        <div class="pm-issue-meta">
-                                          <span>Permintaan: Dari <strong>{workflowLabel(task.status_move.from)}</strong> → pindah ke <strong>{workflowLabel(task.status_move.to)}</strong>
-                                          {#if task.status_move.to_progress_percent !== null}
-                                            dengan progress <strong>{task.status_move.to_progress_percent}%</strong>
-                                          {/if}
-                                          </span>
-                                        </div>
-                                      </div>
-                                    {/if}
-
-                                    <!-- File Evidence & Notes Evidences (PM) -->
-                                    <div class="pm-section-card pm-evidence-fullwidth">
-                                      <div class="pm-section-header">
-                                        <div class="pm-sec-title">
-                                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-                                          </svg>
-                                          <span>File Evidence & Notes Evidence</span>
-                                        </div>
-                                        <span class="pm-badge-count">{task.evidences?.length ?? 0} file</span>
-                                      </div>
-
-                                      {#if task.evidences?.length}
-                                        <div class="pm-evidence-list">
-                                          {#each task.evidences as ev (ev.id)}
-                                            <div class="pm-evidence-item">
-                                              <div class="ev-item-main">
-                                                <div class="ev-file-icon">
-                                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                                                    <polyline points="14 2 14 8 20 8"/>
-                                                  </svg>
-                                                </div>
-                                                <div class="ev-file-texts">
-                                                  <a href={fileUrl(ev.file_url)} target="_blank" rel="noopener noreferrer" class="ev-filename" title={ev.name}>
-                                                    {ev.name}
-                                                  </a>
-                                                  <span class="ev-uploader">
-                                                    Oleh: <strong>{ev.actor || 'Teknis'}</strong>
-                                                    {#if ev.size} · {formatFileSize(ev.size)}{/if}
-                                                    {#if ev.at} · {formatDate(ev.at)}{/if}
-                                                  </span>
-                                                </div>
-                                                <div class="ev-item-actions">
-                                                  <a href={fileUrl(ev.file_url)} target="_blank" rel="noopener noreferrer" class="ev-btn-view" title="Buka / download lampiran">
-                                                    <span>Buka</span>
-                                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                                                      <polyline points="15 3 21 3 21 9"/>
-                                                      <line x1="10" y1="14" x2="21" y2="3"/>
-                                                    </svg>
-                                                  </a>
-                                                </div>
-                                              </div>
-                                              <!-- Notes evidences (PM) -->
-                                              <div class="ev-note-container" class:empty={!ev.note}>
-                                                <span class="ev-note-badge">Catatan Evidence:</span>
-                                                {#if ev.note}
-                                                  <span class="ev-note-quote">"{ev.note}"</span>
-                                                {:else}
-                                                  <span class="ev-note-quote-empty">Tidak ada catatan untuk file ini.</span>
-                                                {/if}
-                                              </div>
-                                            </div>
-                                          {/each}
-                                        </div>
-                                      {:else}
-                                        <div class="pm-empty-placeholder">
-                                          <p>Belum ada file evidence yang dilampirkan pada task ini.</p>
-                                        </div>
-                                      {/if}
-                                    </div>
-
-                                    <!-- Tombol Action PM di Accordion jika ada permintaan status_move/approval -->
-                                    {#if (isAdminOrManager || canDecideApproval(task)) && task.status_move}
-                                      <div class="pm-accordion-approval-bar">
-                                        <div class="pm-accordion-approval-left">
-                                          <span class="pm-approval-badge-status">Menunggu Approval PM</span>
-                                          <span class="pm-approval-text">
-                                            Teknis mengajukan pindah ke <strong>{workflowLabel(task.status_move.to)}</strong>
-                                            {#if task.status_move.to_progress_percent !== null}
-                                              dengan progress <strong>{task.status_move.to_progress_percent}%</strong>
-                                            {/if}.
-                                          </span>
-                                        </div>
-                                        <div class="pm-accordion-approval-buttons">
-                                          <button
-                                            type="button"
-                                            class="task-action-btn btn-accept"
-                                            title="Approve / Terima Pengajuan"
-                                            onclick={() => openAcceptModal(task.id)}
-                                          >
-                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                              <polyline points="20 6 9 17 4 12" />
-                                            </svg>
-                                            <span>Approve</span>
-                                          </button>
-                                          <button
-                                            type="button"
-                                            class="task-action-btn btn-return"
-                                            title="Return / Kembalikan Task ke Tim Teknis"
-                                            onclick={() => openReturnModal(task.id)}
-                                          >
-                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                              <polyline points="9 14 4 9 9 4" />
-                                              <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
-                                            </svg>
-                                            <span>Return</span>
-                                          </button>
-                                        </div>
-                                      </div>
-                                    {/if}
-                                    <!-- Row Paling Bawah Accordion PM: Simplified Journey Progress Task -->
-                                    {@render taskJourneySnippet(task)}
-                                  </div>
-                                {:else}
-                                  <!-- POV Tim Teknis: Task Info Strip + Form Pengajuan Progres Baru + Mini kanban + Apply + Journey di Row Paling Bawah -->
-                                  <div class="task-accordion-info-strip">
-                                    <div class="task-info-main">
-                                      <div class="task-status-outcome">
-                                        <span class="task-accordion-label">Status Saat Ini</span>
-                                        <div class="task-status-badge-wrap">
-                                          <span
-                                            class="task-status"
-                                            style="color: {workflowStatusColor(task.status)}; background: {workflowStatusColor(task.status)}22"
-                                          >
-                                            {workflowLabel(task.status)}
-                                          </span>
-                                          {#if isTaskReturned(task)}
-                                            <span class="task-returned-badge" title="Task dikembalikan oleh PIC untuk revisi">Returned</span>
-                                          {/if}
-                                          {#if task.status_move}
-                                            <span class="task-status-req-badge">Minta {workflowLabel(task.status_move.to)} ({task.status_move.to_progress_percent ?? displayProgress(task)}%)</span>
-                                          {/if}
-                                        </div>
-                                        {#if task.status_move}
-                                          <p class="task-accordion-empty">
-                                            {#if task.status_move.to !== task.status && task.status_move.to_progress_percent !== null}
-                                              Tim teknis meminta pindah ke <strong>{workflowLabel(task.status_move.to)}</strong> dengan progress {task.status_move.to_progress_percent}%.
-                                            {:else if task.status_move.to !== task.status}
-                                              Tim teknis meminta pindah ke <strong>{workflowLabel(task.status_move.to)}</strong>.
-                                            {:else}
-                                              Tim teknis meminta update progress ke {task.status_move.to_progress_percent}%.
-                                            {/if}
-                                          </p>
+                                      <div class="pm-status-pill-wrap">
+                                        <span
+                                          class="task-status"
+                                          style="color: {workflowStatusColor(task.status)}; background: {workflowStatusColor(task.status)}22"
+                                        >
+                                          {workflowLabel(task.status)}
+                                        </span>
+                                        {#if isTaskReturned(task)}
+                                          <span class="task-returned-badge" title="Task dalam status revisi">Returned</span>
                                         {/if}
                                       </div>
-
-                                      <div class="task-accordion-desc-wrap">
-                                        <span class="task-accordion-label">Description</span>
-                                        <p class="task-accordion-desc">{task.description || 'No description.'}</p>
-                                      </div>
                                     </div>
 
-                                    <div class="task-info-meta">
+                                    <!-- Posisi Task di Kanban Lifecycle -->
+                                    <div class="pm-task-stage-tracker">
+                                      <div class="pm-stage-header">
+                                        <span class="pm-metric-label">Posisi Task (Kanban Lifecycle)</span>
+                                        <span class="pm-current-pos-txt">Saat ini di: <strong>{workflowLabel(task.status)}</strong></span>
+                                      </div>
+                                      <div class="pm-pipeline-track">
+                                        {#each workflowColumns as col, idx (col.key)}
+                                          {@const isCurrent = task.status === col.key}
+                                          {@const currentIdx = workflowColumns.findIndex((c) => c.key === task.status)}
+                                          {@const isPast = idx < currentIdx}
+                                          <div
+                                            class="pm-pipeline-step"
+                                            class:current={isCurrent}
+                                            class:past={isPast}
+                                            style="--step-col: {workflowStatusColor(col.key)}"
+                                          >
+                                            <div class="step-marker">
+                                              {#if isCurrent}
+                                                <span class="marker-dot current"></span>
+                                              {:else if isPast}
+                                                <span class="marker-dot past"></span>
+                                              {:else}
+                                                <span class="marker-dot"></span>
+                                              {/if}
+                                            </div>
+                                            <span class="step-label">{col.label}</span>
+                                            {#if isCurrent}
+                                              <span class="step-sub-badge active">Posisi Sekarang</span>
+                                            {/if}
+                                          </div>
+                                          {#if idx < workflowColumns.length - 1}
+                                            <div class="pm-pipeline-connector" class:filled={idx < currentIdx}></div>
+                                          {/if}
+                                        {/each}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <!-- Deskripsi & Info Task -->
+                                  <div class="pm-task-desc-strip">
+                                    <div class="pm-desc-col">
+                                      <span class="pm-metric-label">Deskripsi Task</span>
+                                      <p class="pm-desc-text">{task.description || 'Tidak ada deskripsi.'}</p>
+                                    </div>
+                                    <div class="pm-meta-grid">
                                       <div class="meta-item">
-                                        <span class="task-accordion-label">Code</span>
-                                        <span>{task.code || '—'}</span>
+                                        <span class="meta-lbl">Kode Task:</span>
+                                        <strong>{task.code || '—'}</strong>
                                       </div>
                                       <div class="meta-item">
-                                        <span class="task-accordion-label">Priority</span>
+                                        <span class="meta-lbl">Prioritas:</span>
                                         <span class="prio-tag prio-{task.priority || 'medium'}">{task.priority || 'Medium'}</span>
                                       </div>
                                       <div class="meta-item">
-                                        <span class="task-accordion-label">Created by</span>
+                                        <span class="meta-lbl">Assignee:</span>
+                                        <strong>{task.assignees?.length ? task.assignees.join(', ') : (task.assignee || '—')}</strong>
+                                      </div>
+                                      <div class="meta-item">
+                                        <span class="meta-lbl">Deadline:</span>
+                                        <strong>{formatDate(task.deadline)}</strong>
+                                      </div>
+                                      <div class="meta-item">
+                                        <span class="meta-lbl">Dibuat Oleh:</span>
                                         <span>{task.created_by || '—'}</span>
                                       </div>
-                                      {#if task.deadline}
-                                        <div class="meta-item">
-                                          <span class="task-accordion-label">Deadline</span>
-                                          <span>{formatDate(task.deadline)}</span>
-                                        </div>
-                                      {/if}
-                                      {#if task.assignees?.length}
-                                        <div class="meta-item">
-                                          <span class="task-accordion-label">Assignee</span>
-                                          <span>{task.assignees.join(', ')}</span>
-                                        </div>
-                                      {/if}
                                     </div>
                                   </div>
 
+                                  <!-- File Evidence & Notes Evidences -->
+                                  <div class="pm-section-card pm-evidence-fullwidth">
+                                    <div class="pm-section-header">
+                                      <div class="pm-sec-title">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                          <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                                        </svg>
+                                        <span>File Evidence & Notes Evidence</span>
+                                      </div>
+                                      <span class="pm-badge-count">{task.evidences?.length ?? 0} file</span>
+                                    </div>
+
+                                    {#if task.evidences?.length}
+                                      <div class="pm-evidence-list">
+                                        {#each task.evidences as ev (ev.id)}
+                                          <div class="pm-evidence-item">
+                                            <div class="ev-item-main">
+                                              <div class="ev-file-icon">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                                  <polyline points="14 2 14 8 20 8"/>
+                                                </svg>
+                                              </div>
+                                              <div class="ev-file-texts">
+                                                <a href={fileUrl(ev.file_url)} target="_blank" rel="noopener noreferrer" class="ev-filename" title={ev.name}>
+                                                  {ev.name}
+                                                </a>
+                                                <span class="ev-uploader">
+                                                  Oleh: <strong>{ev.actor || 'Teknis'}</strong>
+                                                  {#if ev.size} · {formatFileSize(ev.size)}{/if}
+                                                  {#if ev.at} · {formatDate(ev.at)}{/if}
+                                                </span>
+                                              </div>
+                                              <div class="ev-item-actions">
+                                                <a href={fileUrl(ev.file_url)} target="_blank" rel="noopener noreferrer" class="ev-btn-view" title="Buka / download lampiran">
+                                                  <span>Buka</span>
+                                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                                                    <polyline points="15 3 21 3 21 9"/>
+                                                    <line x1="10" y1="14" x2="21" y2="3"/>
+                                                  </svg>
+                                                </a>
+                                              </div>
+                                            </div>
+                                            <!-- Notes evidences -->
+                                            <div class="ev-note-container" class:empty={!ev.note}>
+                                              <span class="ev-note-badge">Catatan Evidence:</span>
+                                              {#if ev.note}
+                                                <span class="ev-note-quote">"{ev.note}"</span>
+                                              {:else}
+                                                <span class="ev-note-quote-empty">Tidak ada catatan untuk file ini.</span>
+                                              {/if}
+                                            </div>
+                                          </div>
+                                        {/each}
+                                      </div>
+                                    {:else}
+                                      <div class="pm-empty-placeholder">
+                                        <p>Belum ada file evidence yang dilampirkan pada task ini.</p>
+                                      </div>
+                                    {/if}
+                                  </div>
+
+                                  <!-- Interactive Update Form & Controls -->
                                   {#if !canUpdateTaskProgress(task)}
                                     <div class="task-readonly-notice">
                                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -2340,13 +2150,13 @@
                                         <line x1="12" y1="8" x2="12" y2="12"></line>
                                         <line x1="12" y1="16" x2="12.01" y2="16"></line>
                                       </svg>
-                                      <span>Mode lihat — Task ini ditugaskan kepada <strong>{task.assignee || 'rekan teknis lain'}</strong>. Anda dapat melihat progres dan riwayat pekerjaan di bawah, namun tidak dapat mengupdate progres task rekan teknis Anda.</span>
+                                      <span>Mode lihat — Anda memiliki hak akses pantau (read-only) untuk task ini.</span>
                                     </div>
                                   {:else}
                                     <div class="task-new-submission-box">
                                       <div class="submission-box-header">
                                         <div class="submission-title-wrap">
-                                          <span class="submission-title">Pengajuan Progres Task</span>
+                                          <span class="submission-title">Update Progres & Status Task</span>
                                           <span class="submission-target-pill">Target: {progressDraft}% ({workflowLabel(statusForProgress(progressDraft))})</span>
                                         </div>
                                       </div>
@@ -2361,12 +2171,15 @@
                                             max="100"
                                             step="5"
                                             value={progressDraft}
-                                            oninput={(e) => (progressDraft = Number(e.currentTarget.value))}
+                                            oninput={(e) => {
+                                              progressDraft = Number(e.currentTarget.value);
+                                              kanbanDraftStatus = statusForProgress(progressDraft);
+                                            }}
                                             onclick={(e) => e.stopPropagation()}
                                           />
                                           <div class="task-progress-readout">
                                             <b>{progressDraft}%</b>
-                                            <span class="task-progress-hint">Approval terakhir PM: <strong>{displayProgress(task)}% ({workflowLabel(task.status)})</strong></span>
+                                            <span class="task-progress-hint">Posisi saat ini: <strong>{displayProgress(task)}% ({workflowLabel(task.status)})</strong></span>
                                           </div>
                                         </div>
 
@@ -2472,7 +2285,7 @@
 
                                       <!-- Mini Kanban Track -->
                                       <div class="task-mini-kanban">
-                                        <span class="task-accordion-label">Kanban — geser card ke kolom tujuan</span>
+                                        <span class="task-accordion-label">Kanban — geser card atau klik kolom tujuan untuk update status langsung</span>
                                         <div class="task-mini-kanban-track">
                                           {#each workflowColumns as col (col.key)}
                                             {@const isCardHere = (kanbanDraftStatus || task.status) === col.key}
@@ -2483,7 +2296,11 @@
                                               style="--col-color: {workflowStatusColor(col.key)}; cursor: pointer;"
                                               ondragover={onKanbanColDragOver}
                                               ondrop={(e) => onKanbanColDrop(e, col.key)}
-                                              onclick={(e) => { e.stopPropagation(); kanbanDraftStatus = col.key; }}
+                                              onclick={(e) => {
+                                                e.stopPropagation();
+                                                kanbanDraftStatus = col.key;
+                                                progressDraft = progressForStatus(col.key);
+                                              }}
                                               role="list"
                                               aria-label={col.label}
                                             >
@@ -2500,22 +2317,19 @@
                                             </div>
                                           {/each}
                                         </div>
-                                        {#if (progressDraft !== displayProgress(task) || (Boolean(kanbanDraftStatus) && kanbanDraftStatus !== task.status)) && !canApplyProgress}
-                                          <p class="field-error">Samakan dulu posisi slider progress dengan kolom kanban yang digeser sebelum Apply.</p>
-                                        {/if}
                                         {#if progressError}<p class="field-error">{progressError}</p>{/if}
                                         <div class="task-kanban-actions">
                                           <button
                                             type="button"
                                             class="task-action-btn task-progress-apply"
                                             disabled={progressBusy || !canApplyProgress}
-                                            title="Terapkan perubahan progress dan status task"
+                                            title="Terapkan perubahan progress dan status task langsung"
                                             onclick={(e) => { e.stopPropagation(); applyProgress(task); }}
                                           >
                                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                               <polyline points="20 6 9 17 4 12" />
                                             </svg>
-                                            <span>{progressBusy ? 'Menerapkan...' : 'Apply'}</span>
+                                            <span>{progressBusy ? 'Menerapkan...' : 'Terapkan (Apply)'}</span>
                                           </button>
                                         </div>
                                       </div>
@@ -2524,8 +2338,7 @@
 
                                   <!-- Row Paling Bawah Accordion: Simplified Journey Progress Task -->
                                   {@render taskJourneySnippet(task)}
-                                {/if}
-                              </div>
+                                </div>
                             </td>
                           </tr>
                         {/if}
@@ -2574,60 +2387,157 @@
 {#if acceptModalTaskId}
   {@const task = versionTasks.find((t) => String(t.id) === String(acceptModalTaskId))}
   {#if task}
-    <div class="req-detail-backdrop" use:portal role="presentation" onclick={closeAcceptModal}></div>
-    <div class="attach-pop approval-pop-modal" use:portal role="dialog" aria-modal="true" aria-label="Accept task">
-      <header>
-        <div>
-          <p class="pop-eyebrow pop-eyebrow-accept">Accept Task</p>
-          <h3>{task.title}</h3>
+    <div class="req-detail-backdrop approval-backdrop-blur" use:portal role="presentation" onclick={closeAcceptModal}></div>
+    <div class="approval-action-modal approval-theme-accept" use:portal role="dialog" aria-modal="true" aria-label="Accept task">
+      <header class="approval-modal-head">
+        <div class="approval-head-left">
+          <div class="approval-badge-pill pill-accept">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              <polyline points="9 12 11 14 15 10"/>
+            </svg>
+            <span>Accept Task / Persetujuan</span>
+          </div>
+          <h3 class="approval-modal-title">{task.title}</h3>
         </div>
-        <button type="button" onclick={closeAcceptModal} aria-label="Close">×</button>
+        <button type="button" class="approval-modal-close" onclick={closeAcceptModal} aria-label="Tutup modal">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
       </header>
-      <div class="approval-list">
-        <div class="approval-row">
-          <div class="approval-row-head">
-            <strong>Tim Teknis: {task.assignees?.length ? task.assignees.join(', ') : '—'}</strong>
-            <span class="task-status" style="color: {workflowStatusColor(task.status)}; background: {workflowStatusColor(task.status)}22">{workflowLabel(task.status)}</span>
-          </div>
-          {#if task.status_move}
-            <p class="approval-row-note">Permintaan pindah status ke <strong>{workflowLabel(task.status_move.to)}</strong> akan disetujui (Approved).</p>
-          {:else if isTaskReturned(task)}
-            <p class="approval-row-note">Task yang sebelumnya dikembalikan akan disetujui kembali (Approved) oleh PIC.</p>
-          {:else}
-            <p class="approval-row-note">Task ini disetujui oleh PIC/Admin.</p>
-          {/if}
 
-          <label class="approval-note-field">
-            <span>Catatan / Keterangan Accept (Opsional)</span>
-            <textarea
-              rows="2"
-              placeholder="Berikan catatan persetujuan untuk tim teknis (opsional)..."
-              bind:value={acceptNote}
-            ></textarea>
-          </label>
-          <label class="approval-note-field">
-            <span>Evidence / Lampiran Bukti (Opsional)</span>
-            <input
-              type="file"
-              accept="image/*,.pdf"
-              onchange={pickAcceptEvidence}
-            />
-            {#if acceptEvidence}
-              <p class="task-evidence-picked">{acceptEvidence.name}</p>
-            {/if}
-            {#if acceptEvidenceError}<p class="field-error">{acceptEvidenceError}</p>{/if}
-          </label>
-          <div class="approval-modal-actions">
-            <button type="button" class="btn-cancel" onclick={closeAcceptModal}>Batal</button>
-            <button
-              type="button"
-              class="btn-confirm-accept"
-              disabled={acceptBusy || !canDecideApproval(task)}
-              onclick={() => submitAccept(task)}
-            >{acceptBusy ? 'Menyetujui...' : 'Accept Task'}</button>
+      <div class="approval-modal-body">
+        <div class="approval-meta-box">
+          <div class="approval-meta-top">
+            <div class="approval-assignee">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+              <span class="meta-label">Tim Teknis:</span>
+              <strong class="meta-value">{task.assignees?.length ? task.assignees.join(', ') : '—'}</strong>
+            </div>
+            <span class="approval-status-badge" style="color: {workflowStatusColor(task.status)}; background: {workflowStatusColor(task.status)}18; border-color: {workflowStatusColor(task.status)}40">
+              <span class="status-dot" style="background: {workflowStatusColor(task.status)}"></span>
+              {workflowLabel(task.status)}
+            </span>
           </div>
+
+          <div class="approval-notice notice-accept">
+            <svg class="notice-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="9 12 12 15 16 10"></polyline>
+            </svg>
+            <div class="notice-text">
+              {#if task.status_move}
+                Permintaan pindah status ke <strong>{workflowLabel(task.status_move.to)}</strong> akan disetujui (Approved).
+              {:else if isTaskReturned(task)}
+                Task yang sebelumnya dikembalikan akan disetujui kembali (Approved) oleh PIC/Admin.
+              {:else}
+                Task ini akan disetujui (Approved) oleh PIC/Admin.
+              {/if}
+            </div>
+          </div>
+        </div>
+
+        <div class="approval-field-group">
+          <label class="approval-field-label" for="accept-note-input">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+            <span>Catatan / Keterangan Persetujuan</span>
+            <span class="field-hint">(Opsional)</span>
+          </label>
+          <textarea
+            id="accept-note-input"
+            class="approval-textarea"
+            rows="3"
+            placeholder="Tuliskan catatan atau instruksi persetujuan untuk tim teknis (opsional)..."
+            bind:value={acceptNote}
+          ></textarea>
+        </div>
+
+        <div class="approval-field-group">
+          <span class="approval-field-label">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+            </svg>
+            <span>Evidence / Lampiran Bukti</span>
+            <span class="field-hint">(Opsional)</span>
+          </span>
+
+          {#if !acceptEvidence}
+            <label class="approval-dropzone">
+              <input
+                type="file"
+                class="sr-only-input"
+                accept="image/*,.pdf"
+                onchange={pickAcceptEvidence}
+              />
+              <div class="dropzone-content">
+                <div class="dropzone-icon">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                  </svg>
+                </div>
+                <div class="dropzone-texts">
+                  <span class="dropzone-title">Pilih file bukti atau tarik ke sini</span>
+                  <span class="dropzone-sub">Format gambar (PNG, JPG, WEBP) atau PDF (Maks. 10MB)</span>
+                </div>
+              </div>
+            </label>
+          {:else}
+            <div class="approval-file-card">
+              <div class="file-card-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                </svg>
+              </div>
+              <div class="file-card-meta">
+                <span class="file-card-name" title={acceptEvidence.name}>{acceptEvidence.name}</span>
+                <span class="file-card-size">{formatBytes(acceptEvidence.size)} · Siap dilampirkan</span>
+              </div>
+              <button
+                type="button"
+                class="file-card-remove"
+                title="Hapus file lampiran"
+                onclick={() => { acceptEvidence = null; acceptEvidenceError = ''; }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            </div>
+          {/if}
+          {#if acceptEvidenceError}<p class="approval-field-error">{acceptEvidenceError}</p>{/if}
         </div>
       </div>
+
+      <footer class="approval-modal-foot">
+        <button type="button" class="btn-approval-cancel" onclick={closeAcceptModal}>Batal</button>
+        <button
+          type="button"
+          class="btn-approval-confirm btn-accept"
+          disabled={acceptBusy || !canDecideApproval(task)}
+          onclick={() => submitAccept(task)}
+        >
+          {#if acceptBusy}
+            <span class="spinner-dot"></span>
+            Menyetujui...
+          {:else}
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            Accept Task
+          {/if}
+        </button>
+      </footer>
     </div>
   {/if}
 {/if}
@@ -2635,60 +2545,158 @@
 {#if returnModalTaskId}
   {@const task = versionTasks.find((t) => String(t.id) === String(returnModalTaskId))}
   {#if task}
-    <div class="req-detail-backdrop" use:portal role="presentation" onclick={closeReturnModal}></div>
-    <div class="attach-pop approval-pop-modal" use:portal role="dialog" aria-modal="true" aria-label="Return task ke tim teknis">
-      <header>
-        <div>
-          <p class="pop-eyebrow pop-eyebrow-return">Return Task ke Tim Teknis</p>
-          <h3>{task.title}</h3>
+    <div class="req-detail-backdrop approval-backdrop-blur" use:portal role="presentation" onclick={closeReturnModal}></div>
+    <div class="approval-action-modal approval-theme-return" use:portal role="dialog" aria-modal="true" aria-label="Return task ke tim teknis">
+      <header class="approval-modal-head">
+        <div class="approval-head-left">
+          <div class="approval-badge-pill pill-return">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+              <path d="M3 3v5h5"/>
+            </svg>
+            <span>Return Task ke Tim Teknis</span>
+          </div>
+          <h3 class="approval-modal-title">{task.title}</h3>
         </div>
-        <button type="button" onclick={closeReturnModal} aria-label="Close">×</button>
+        <button type="button" class="approval-modal-close" onclick={closeReturnModal} aria-label="Tutup modal">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
       </header>
-      <div class="approval-list">
-        <div class="approval-row">
-          <div class="approval-row-head">
-            <strong>Tim Teknis: {task.assignees?.length ? task.assignees.join(', ') : '—'}</strong>
-            <span class="task-status" style="color: {workflowStatusColor(task.status)}; background: {workflowStatusColor(task.status)}22">{workflowLabel(task.status)}</span>
-          </div>
-          {#if task.status_move}
-            <p class="approval-row-note">Permintaan pindah status ke <strong>{workflowLabel(task.status_move.to)}</strong> akan dikembalikan (Return) untuk direvisi.</p>
-          {:else}
-            <p class="approval-row-note">Task akan dikembalikan ke tim teknis untuk revisi / perbaikan.</p>
-          {/if}
 
-          <label class="approval-note-field">
-            <span>Deskripsi / Catatan Perbaikan untuk Tim Teknis <strong class="req-asterisk">*</strong></span>
-            <textarea
-              rows="3"
-              placeholder="Tuliskan deskripsi/alasan return secara jelas agar tim teknis mengetahui bagian apa yang perlu diperbaiki..."
-              bind:value={returnDescription}
-              required
-            ></textarea>
-            {#if returnValidationError}<p class="field-error">{returnValidationError}</p>{/if}
-          </label>
-          <label class="approval-note-field">
-            <span>Evidence / Lampiran Bukti (Opsional)</span>
-            <input
-              type="file"
-              accept="image/*,.pdf"
-              onchange={pickReturnEvidence}
-            />
-            {#if returnEvidence}
-              <p class="task-evidence-picked">{returnEvidence.name}</p>
-            {/if}
-            {#if returnEvidenceError}<p class="field-error">{returnEvidenceError}</p>{/if}
-          </label>
-          <div class="approval-modal-actions">
-            <button type="button" class="btn-cancel" onclick={closeReturnModal}>Batal</button>
-            <button
-              type="button"
-              class="btn-confirm-return"
-              disabled={returnBusy || !returnDescription.trim() || !canDecideApproval(task)}
-              onclick={() => submitReturn(task)}
-            >{returnBusy ? 'Mengembalikan...' : 'Return ke Tim Teknis'}</button>
+      <div class="approval-modal-body">
+        <div class="approval-meta-box">
+          <div class="approval-meta-top">
+            <div class="approval-assignee">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+              <span class="meta-label">Tim Teknis:</span>
+              <strong class="meta-value">{task.assignees?.length ? task.assignees.join(', ') : '—'}</strong>
+            </div>
+            <span class="approval-status-badge" style="color: {workflowStatusColor(task.status)}; background: {workflowStatusColor(task.status)}18; border-color: {workflowStatusColor(task.status)}40">
+              <span class="status-dot" style="background: {workflowStatusColor(task.status)}"></span>
+              {workflowLabel(task.status)}
+            </span>
           </div>
+
+          <div class="approval-notice notice-return">
+            <svg class="notice-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+            <div class="notice-text">
+              {#if task.status_move}
+                Permintaan pindah status ke <strong>{workflowLabel(task.status_move.to)}</strong> akan dikembalikan (Return) untuk direvisi oleh tim teknis.
+              {:else}
+                Task akan dikembalikan ke tim teknis untuk revisi / perbaikan.
+              {/if}
+            </div>
+          </div>
+        </div>
+
+        <div class="approval-field-group">
+          <label class="approval-field-label" for="return-desc-input">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+            <span>Deskripsi / Catatan Perbaikan untuk Tim Teknis <strong class="req-asterisk">*</strong></span>
+          </label>
+          <textarea
+            id="return-desc-input"
+            class="approval-textarea"
+            rows="3"
+            placeholder="Tuliskan deskripsi/alasan return secara jelas agar tim teknis mengetahui bagian apa yang perlu diperbaiki..."
+            bind:value={returnDescription}
+            required
+          ></textarea>
+          {#if returnValidationError}<p class="approval-field-error">{returnValidationError}</p>{/if}
+        </div>
+
+        <div class="approval-field-group">
+          <span class="approval-field-label">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+            </svg>
+            <span>Evidence / Lampiran Bukti</span>
+            <span class="field-hint">(Opsional)</span>
+          </span>
+
+          {#if !returnEvidence}
+            <label class="approval-dropzone">
+              <input
+                type="file"
+                class="sr-only-input"
+                accept="image/*,.pdf"
+                onchange={pickReturnEvidence}
+              />
+              <div class="dropzone-content">
+                <div class="dropzone-icon">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                  </svg>
+                </div>
+                <div class="dropzone-texts">
+                  <span class="dropzone-title">Pilih file bukti atau tarik ke sini</span>
+                  <span class="dropzone-sub">Format gambar (PNG, JPG, WEBP) atau PDF (Maks. 10MB)</span>
+                </div>
+              </div>
+            </label>
+          {:else}
+            <div class="approval-file-card">
+              <div class="file-card-icon file-card-icon-return">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                </svg>
+              </div>
+              <div class="file-card-meta">
+                <span class="file-card-name" title={returnEvidence.name}>{returnEvidence.name}</span>
+                <span class="file-card-size">{formatBytes(returnEvidence.size)} · Siap dilampirkan</span>
+              </div>
+              <button
+                type="button"
+                class="file-card-remove"
+                title="Hapus file lampiran"
+                onclick={() => { returnEvidence = null; returnEvidenceError = ''; }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            </div>
+          {/if}
+          {#if returnEvidenceError}<p class="approval-field-error">{returnEvidenceError}</p>{/if}
         </div>
       </div>
+
+      <footer class="approval-modal-foot">
+        <button type="button" class="btn-approval-cancel" onclick={closeReturnModal}>Batal</button>
+        <button
+          type="button"
+          class="btn-approval-confirm btn-return"
+          disabled={returnBusy || !returnDescription.trim() || !canDecideApproval(task)}
+          onclick={() => submitReturn(task)}
+        >
+          {#if returnBusy}
+            <span class="spinner-dot"></span>
+            Mengembalikan...
+          {:else}
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+              <path d="M3 3v5h5"/>
+            </svg>
+            Return ke Tim Teknis
+          {/if}
+        </button>
+      </footer>
     </div>
   {/if}
 {/if}

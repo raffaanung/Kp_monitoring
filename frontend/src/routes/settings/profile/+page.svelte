@@ -1,6 +1,7 @@
 <script>
   import GlassPanel from '$lib/GlassPanel.svelte'
   import SubmenuHeader from '$lib/SubmenuHeader.svelte'
+  import { portal } from '$lib/portal.js'
   import {
     currentProfile,
     updateProfile,
@@ -263,7 +264,7 @@
 </section>
 
 {#if photoOpen}
-  <div class="backdrop" role="presentation" onclick={closePhoto} onkeydown={onKeydown}>
+  <div class="backdrop" use:portal role="presentation" onclick={closePhoto} onkeydown={onKeydown}>
     <div
       class="modal liquidGlass-wrapper"
       role="dialog"
@@ -320,7 +321,7 @@
 {/if}
 
 {#if infoOpen}
-  <div class="backdrop" role="presentation" onclick={closeInfo} onkeydown={onKeydown}>
+  <div class="backdrop" use:portal role="presentation" onclick={closeInfo} onkeydown={onKeydown}>
     <div
       class="modal liquidGlass-wrapper"
       role="dialog"
@@ -371,7 +372,7 @@
 {/if}
 
 {#if passwordOpen}
-  <div class="backdrop" role="presentation" onclick={closePassword} onkeydown={onKeydown}>
+  <div class="backdrop" use:portal role="presentation" onclick={closePassword} onkeydown={onKeydown}>
     <div
       class="modal liquidGlass-wrapper"
       role="dialog"
@@ -578,12 +579,13 @@
   .backdrop {
     position: fixed;
     inset: 0;
-    z-index: 100;
+    z-index: 1000;
     display: grid;
     place-items: center;
     padding: 20px;
-    background: rgba(20, 20, 22, 0.35);
-    backdrop-filter: blur(6px);
+    background: rgba(20, 20, 22, 0.45);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
   }
 
   .modal {

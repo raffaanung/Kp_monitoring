@@ -1,6 +1,7 @@
 <script>
   import GlassPanel from '$lib/GlassPanel.svelte'
   import SubmenuHeader from '$lib/SubmenuHeader.svelte'
+  import { portal } from '$lib/portal.js'
   import { authStore } from '$lib/authStore.svelte.js'
   import {
     listUsers,
@@ -14,10 +15,13 @@
     statusLabel,
   } from '$lib/accessStore.svelte.js'
 
-  const canManageUsers = $derived(
-    authStore.user?.functional_role === 'manager' ||
-      (authStore.user?.permissions || []).includes('manage_users'),
+  const isAdmin = $derived(
+    authStore.user?.functional_role === 'admin' ||
+      authStore.user?.role_name?.toLowerCase() === 'admin' ||
+      authStore.user?.functional_role === 'manager',
   )
+
+  const canManageUsers = $derived(isAdmin)
 
   let role = $state('')
   let status = $state('')
@@ -30,6 +34,9 @@
   let username = $state('')
   let password = $state('')
   let newRole = $state('')
+  let newUnit = $state('')
+  let newTeam = $state(/** @type {string[]} */ ([]))
+  let newStatus = $state(/** @type {'active' | 'inactive'} */ ('active'))
   let error = $state('')
 
   let editOpen = $state(false)
@@ -46,6 +53,14 @@
   const roles = $derived(roleOptions())
   const teams = $derived(dashboardTeamOptions())
 
+  $effect(() => {
+    const isModalOpen = addOpen || editOpen
+    document.documentElement.classList.toggle('modal-open', isModalOpen)
+    return () => {
+      document.documentElement.classList.remove('modal-open')
+    }
+  })
+
   function onSubmit(event) {
     event.preventDefault()
     applied = { role, unit: '', team: '', status, q }
@@ -55,13 +70,22 @@
     name = ''
     username = ''
     password = ''
-    newRole = roles[0]?.value || ''
+    const devRole = roles.find((r) => r.label.toLowerCase() === 'developer')
+    newRole = devRole?.value || roles[0]?.value || ''
+    newUnit = unitOptions[0] || ''
+    newTeam = []
+    newStatus = 'active'
     error = ''
     addOpen = true
   }
 
   function closeAdd() {
     addOpen = false
+  }
+
+  /** @param {string} id */
+  function toggleNewTeam(id) {
+    newTeam = newTeam.includes(id) ? newTeam.filter((t) => t !== id) : [...newTeam, id]
   }
 
   let addSubmitting = $state(false)
@@ -89,6 +113,9 @@
         username,
         password,
         role_id: newRole,
+        unit: newUnit,
+        team_ids: newTeam,
+        status: newStatus,
       })
       addOpen = false
     } catch (err) {
@@ -280,7 +307,7 @@
 </section>
 
 {#if addOpen}
-  <div class="backdrop" role="presentation" onclick={closeAdd} onkeydown={onKeydown}>
+  <div class="backdrop" use:portal role="presentation" onclick={closeAdd} onkeydown={onKeydown}>
     <div
       class="modal liquidGlass-wrapper"
       role="dialog"
@@ -319,14 +346,50 @@
           </label>
         </div>
 
-        <label>
-          <span>Peran</span>
-          <select bind:value={newRole}>
-            {#each roles as opt}
-              <option value={opt.value}>{opt.label}</option>
+        <div class="row">
+          <label>
+            <span>Peran</span>
+            <select bind:value={newRole}>
+              {#each roles as opt}
+                <option value={opt.value}>{opt.label}</option>
+              {/each}
+            </select>
+          </label>
+          <label>
+            <span>Unit</span>
+            <select bind:value={newUnit}>
+              {#each unitOptions as u}
+                <option value={u}>{u}</option>
+              {/each}
+            </select>
+          </label>
+        </div>
+
+        <div class="row">
+          <label>
+            <span>Status</span>
+            <select bind:value={newStatus}>
+              <option value="active">Aktif</option>
+              <option value="inactive">Nonaktif</option>
+            </select>
+          </label>
+        </div>
+
+        <fieldset class="team-pick">
+          <legend>Tim</legend>
+          <div class="team-grid">
+            {#each teams as opt}
+              <label class="check">
+                <input
+                  type="checkbox"
+                  checked={newTeam.includes(opt.value)}
+                  onchange={() => toggleNewTeam(opt.value)}
+                />
+                <span>{opt.label}</span>
+              </label>
             {/each}
-          </select>
-        </label>
+          </div>
+        </fieldset>
 
         {#if error}<p class="error">{error}</p>{/if}
 
@@ -347,7 +410,7 @@
 {/if}
 
 {#if editOpen}
-  <div class="backdrop" role="presentation" onclick={closeEdit} onkeydown={onKeydown}>
+  <div class="backdrop" use:portal role="presentation" onclick={closeEdit} onkeydown={onKeydown}>
     <div
       class="modal liquidGlass-wrapper"
       role="dialog"
@@ -684,12 +747,13 @@
   .backdrop {
     position: fixed;
     inset: 0;
-    z-index: 100;
+    z-index: 9999;
     display: grid;
     place-items: center;
     padding: 20px;
-    background: rgba(20, 20, 22, 0.35);
-    backdrop-filter: blur(6px);
+    background: rgba(20, 20, 22, 0.45);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
   }
 
   .modal {

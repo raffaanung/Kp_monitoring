@@ -284,7 +284,7 @@
               <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.7" />
               <path d="m16.5 16.5 3.2 3.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
             </svg>
-            <input type="search" placeholder="Name, code, SOP, PIC, platform…" bind:value={q} />
+            <input type="search" placeholder="Nama aplikasi, IP address…" bind:value={q} />
           </div>
         </label>
 

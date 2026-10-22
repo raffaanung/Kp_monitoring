@@ -12,6 +12,14 @@
     teamLabels,
     statusLabel,
   } from '../lib/accessStore.svelte.js'
+  import { authStore } from '../lib/authStore.svelte.js'
+
+  const isAdmin = $derived(
+    authStore.user?.functional_role === 'admin' ||
+      authStore.user?.role_name?.toLowerCase() === 'admin' ||
+      authStore.user?.functional_role === 'manager',
+  )
+  const canManageUsers = $derived(isAdmin)
 
   let role = $state('')
   let status = $state('')
@@ -172,7 +180,9 @@
       meta={`${items.length} user`}
     >
       {#snippet actions()}
-        <button type="button" class="btn-primary" onclick={openAdd}>+ Tambah User</button>
+        {#if canManageUsers}
+          <button type="button" class="btn-primary" onclick={openAdd}>+ Add User</button>
+        {/if}
       {/snippet}
     </SubmenuHeader>
 
