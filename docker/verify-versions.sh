@@ -10,4 +10,4 @@ if command -v dpkg >/dev/null 2>&1; then
   echo "Debian: $(. /etc/os-release 2>/dev/null && echo "$PRETTY_NAME")"
   dpkg -l libssl3t64 openssl 2>/dev/null | awk '/^ii/ {print $2, $3}' || true
 fi
-php -m | grep -E '^(pdo_pgsql|pgsql|ldap)$' || true
+php -m | grep -E '^(intl|pdo_pgsql|pgsql|ldap)$' || true
