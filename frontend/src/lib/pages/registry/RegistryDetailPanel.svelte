@@ -42,6 +42,7 @@
   } from '$lib/requirementStore.svelte.js';
   import { formatDate } from '$lib/format.js';
   import { activityLogStore, listActivityLogs, loadActivityLogsFromApi } from '$lib/activityLogStore.svelte.js';
+  import { dataSourceStore, loadDataSourceTree, createModule, addDataSourceField, updateDataSourceField, flattenModules } from '$lib/dataSourceStore.svelte.js';
   import { attachmentKindLabel, attachmentStore, listAttachments, loadAttachmentsFromApi, useAttachment } from '$lib/attachmentStore.svelte.js';
   import { portal } from '$lib/portal.js';
   import AttachmentPanel from '$lib/AttachmentPanel.svelte';
@@ -1010,6 +1011,152 @@
     loadActivityLogsFromApi();
   });
 
+  // --- Data Source tab ---
+  let selectedModuleId = $state('');
+  let addModuleOpen = $state(false);
+  /** @type {string} id parent kalau nambah submodul, kosong kalau nambah modul baru */
+  let addModuleParentId = $state('');
+  let newModuleName = $state('');
+  let newModuleDescription = $state('');
+  let newModuleDbName = $state('');
+  let newModuleDbEngine = $state('');
+  let moduleSaving = $state(false);
+  let moduleError = $state('');
+
+  let addFieldOpen = $state(false);
+  /** @type {string} id field yang lagi diedit, kosong kalau lagi nambah baru */
+  let editingFieldId = $state('');
+  let newFieldLabel = $state('');
+  let newFieldTable = $state('');
+  let newFieldName = $state('');
+  let newFieldType = $state('');
+  let fieldSaving = $state(false);
+  let fieldError = $state('');
+
+  $effect(() => {
+    if (work !== 'source' || !selectedDetail?.id) return;
+    loadDataSourceTree(selectedDetail.id);
+  });
+
+  const moduleTree = $derived.by(() => {
+    void dataSourceStore.tree;
+    return dataSourceStore.tree;
+  });
+
+  const flatModules = $derived(flattenModules(moduleTree));
+
+  const selectedModule = $derived(flatModules.find((m) => m.id === selectedModuleId) || null);
+
+  $effect(() => {
+    if (selectedModuleId || flatModules.length === 0) return;
+    // Auto-pilih submodul/halaman pertama yang ada biar langsung kelihatan isinya.
+    const firstLeaf = flatModules.find((m) => m.parent_id !== null) || flatModules[0];
+    if (firstLeaf) selectedModuleId = firstLeaf.id;
+  });
+
+  function openAddModule() {
+    addModuleParentId = '';
+    newModuleName = '';
+    newModuleDescription = '';
+    newModuleDbName = '';
+    newModuleDbEngine = '';
+    moduleError = '';
+    addModuleOpen = true;
+  }
+
+  function openAddSubmodule() {
+    const parentModules = flatModules.filter((m) => m.parent_id === null);
+    addModuleParentId = selectedModule?.parent_id
+      ? selectedModule.parent_id
+      : (selectedModule?.id || parentModules[0]?.id || '');
+    newModuleName = '';
+    newModuleDescription = '';
+    newModuleDbName = '';
+    newModuleDbEngine = '';
+    moduleError = '';
+    addModuleOpen = true;
+  }
+
+  function closeAddModule() {
+    addModuleOpen = false;
+  }
+
+  async function submitAddModule(event) {
+    event.preventDefault();
+    if (!newModuleName.trim() || moduleSaving || !selectedDetail?.id) return;
+    moduleSaving = true;
+    moduleError = '';
+    try {
+      await createModule(selectedDetail.id, {
+        name: newModuleName.trim(),
+        description: newModuleDescription.trim(),
+        parent_id: addModuleParentId || undefined,
+        db_name: newModuleDbName.trim() || undefined,
+        db_engine: newModuleDbEngine.trim() || undefined,
+      });
+      addModuleOpen = false;
+    } catch (err) {
+      moduleError = err instanceof Error ? err.message : String(err);
+    } finally {
+      moduleSaving = false;
+    }
+  }
+
+  function openAddField() {
+    if (!selectedModule) return;
+    editingFieldId = '';
+    newFieldLabel = '';
+    newFieldTable = '';
+    newFieldName = '';
+    newFieldType = '';
+    fieldError = '';
+    addFieldOpen = true;
+  }
+
+  /** @param {{ id: string, display_label: string, table_name: string, field_name: string, field_type: string }} row */
+  function openEditField(row) {
+    editingFieldId = row.id;
+    newFieldLabel = row.display_label;
+    newFieldTable = row.table_name;
+    newFieldName = row.field_name;
+    newFieldType = row.field_type;
+    fieldError = '';
+    addFieldOpen = true;
+  }
+
+  function closeAddField() {
+    addFieldOpen = false;
+  }
+
+  async function submitAddField(event) {
+    event.preventDefault();
+    if (!selectedDetail?.id || !selectedModule || fieldSaving) return;
+    if (!newFieldLabel.trim() || !newFieldTable.trim() || !newFieldName.trim() || !newFieldType.trim()) {
+      fieldError = 'Semua field wajib diisi';
+      return;
+    }
+    fieldSaving = true;
+    fieldError = '';
+    const payload = {
+      display_label: newFieldLabel.trim(),
+      table_name: newFieldTable.trim(),
+      field_name: newFieldName.trim(),
+      field_type: newFieldType.trim(),
+    };
+    try {
+      if (editingFieldId) {
+        await updateDataSourceField(selectedDetail.id, editingFieldId, payload);
+      } else {
+        await addDataSourceField(selectedDetail.id, selectedModule.id, payload);
+      }
+      addFieldOpen = false;
+    } catch (err) {
+      fieldError = err instanceof Error ? err.message : String(err);
+    } finally {
+      fieldSaving = false;
+    }
+  }
+
   /** @param {string} name */
   function activityInitials(name) {
     const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
@@ -1514,9 +1661,98 @@
 
       <div class="detail-content">
         {#if work === 'source'}
-          <div class="dev-placeholder">
-            <img src="/on-development.gif" alt="" width="220" height="160" />
-            <p>On Development</p>
+          <div class="ds-layout">
+            <aside class="ds-sidebar">
+              <div class="ds-sidebar-head">
+                <span>Modul / Halaman</span>
+                <div class="ds-sidebar-actions">
+                  <button type="button" class="ds-add-btn" onclick={openAddModule}>+ Modul</button>
+                  <button type="button" class="ds-add-btn ghost" disabled={flatModules.filter((m) => m.parent_id === null).length === 0} onclick={openAddSubmodule}>+ Submodul</button>
+                </div>
+              </div>
+              {#if dataSourceStore.loading}
+                <p class="sheet-empty">Loading...</p>
+              {:else if moduleTree.length === 0}
+                <p class="sheet-empty">Belum ada modul. Klik "+ Modul" buat mulai dokumentasiin data source halaman ini.</p>
+              {:else}
+                <div class="ds-tree">
+                  {#each moduleTree as modul (modul.id)}
+                    <div class="ds-modul-group">
+                      <strong class="ds-modul-name">{modul.name}</strong>
+                      {#each modul.children as halaman (halaman.id)}
+                        <button
+                          type="button"
+                          class="ds-halaman-btn"
+                          class:on={halaman.id === selectedModuleId}
+                          onclick={() => (selectedModuleId = halaman.id)}
+                        >{halaman.name}</button>
+                      {/each}
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+            </aside>
+
+            <section class="ds-main">
+              {#if dataSourceStore.error}
+                <p class="field-error">{dataSourceStore.error}</p>
+              {:else if !selectedModule}
+                <p class="sheet-empty">Pilih halaman di sebelah kiri, atau tambahkan modul dulu kalau belum ada.</p>
+              {:else}
+                <header class="ds-main-head">
+                  <h3>{selectedModule.name}</h3>
+                  {#if selectedModule.db_name}
+                    <span class="ds-db-badge">Database: <strong>{selectedModule.db_name}</strong> · {selectedModule.db_engine || '—'}</span>
+                  {/if}
+                </header>
+                <p class="ds-source-line">
+                  Diambil dari tabel:
+                  {#if selectedModule.tables.length === 0}
+                    <span class="sheet-empty" style="display:inline;">belum ada</span>
+                  {:else}
+                    {#each selectedModule.tables as t}
+                      <span class="ds-chip ds-chip-table">{t}</span>
+                    {/each}
+                  {/if}
+                </p>
+
+                <div class="ds-table-wrap">
+                  <table class="ds-table">
+                    <thead>
+                      <tr>
+                        <th>Yang tampil di halaman</th>
+                        <th>Tabel</th>
+                        <th>Field</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#if selectedModule.rows.length === 0}
+                        <tr><td colspan="3" class="sheet-empty">Belum ada field yang didokumentasikan.</td></tr>
+                      {:else}
+                        {#each selectedModule.rows as row (row.id)}
+                          <tr class="ds-row-editable" onclick={() => openEditField(row)} title="Klik buat edit field ini">
+                            <td>{row.display_label}</td>
+                            <td><span class="ds-chip ds-chip-table">{row.table_name}</span></td>
+                            <td>
+                              <span class="ds-field-cell">
+                                <span class="ds-field-name">{row.field_name}</span>
+                                <span class="ds-field-type">{row.field_type}</span>
+                                <svg class="ds-row-edit-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                  <path d="M12 20h9" />
+                                  <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                                </svg>
+                              </span>
+                            </td>
+                          </tr>
+                        {/each}
+                      {/if}
+                    </tbody>
+                  </table>
+                </div>
+
+                <button type="button" class="ds-add-field-btn" onclick={openAddField}>+ Tambah Field</button>
+              {/if}
+            </section>
           </div>
         {:else if work === 'activity'}
           <div class="activity-history">
@@ -2962,6 +3198,95 @@
           <span>Create Version</span>
         {/if}
       </button>
+    </div>
+  </form>
+{/if}
+
+{#if addModuleOpen}
+  <div class="req-detail-backdrop" use:portal role="presentation" onclick={closeAddModule}></div>
+  <form class="attach-pop req-create-modal" use:portal role="dialog" aria-modal="true" aria-label={addModuleParentId ? 'Tambah Submodul' : 'Tambah Modul'} onsubmit={submitAddModule}>
+    <header>
+      <div>
+        <p class="pop-eyebrow">Data Source</p>
+        <h3>{addModuleParentId ? 'Tambah Submodul / Halaman' : 'Tambah Modul'}</h3>
+      </div>
+      <button type="button" onclick={closeAddModule} aria-label="Close">×</button>
+    </header>
+    <div class="req-create-body">
+      {#if flatModules.filter((m) => m.parent_id === null).length > 0}
+        <label class="field">
+          <span>{addModuleParentId ? 'Masuk ke Modul' : 'Jenis'}</span>
+          <select bind:value={addModuleParentId}>
+            <option value="">— Modul baru (tanpa induk) —</option>
+            {#each flatModules.filter((m) => m.parent_id === null) as m (m.id)}
+              <option value={m.id}>{m.name}</option>
+            {/each}
+          </select>
+        </label>
+      {/if}
+      <label class="field">
+        <span>Nama {addModuleParentId ? 'Halaman' : 'Modul'}</span>
+        <input bind:value={newModuleName} placeholder={addModuleParentId ? 'Contoh: Ringkasan KPI' : 'Contoh: Overview'} maxlength="150" />
+      </label>
+      <label class="field">
+        <span>Deskripsi (opsional)</span>
+        <textarea rows="2" bind:value={newModuleDescription}></textarea>
+      </label>
+      {#if addModuleParentId}
+        <div class="row2">
+          <label class="field">
+            <span>Nama Database (opsional)</span>
+            <input bind:value={newModuleDbName} placeholder="Contoh: tes" />
+          </label>
+          <label class="field">
+            <span>Engine (opsional)</span>
+            <input bind:value={newModuleDbEngine} placeholder="Contoh: PostgreSQL" />
+          </label>
+        </div>
+      {/if}
+      {#if moduleError}<p class="field-error">{moduleError}</p>{/if}
+    </div>
+    <div class="req-create-actions">
+      <button type="button" onclick={closeAddModule}>Cancel</button>
+      <button type="submit" disabled={!newModuleName.trim() || moduleSaving}>{moduleSaving ? 'Menyimpan…' : 'Simpan'}</button>
+    </div>
+  </form>
+{/if}
+
+{#if addFieldOpen && selectedModule}
+  <div class="req-detail-backdrop" use:portal role="presentation" onclick={closeAddField}></div>
+  <form class="attach-pop req-create-modal" use:portal role="dialog" aria-modal="true" aria-label={editingFieldId ? 'Edit Field' : 'Tambah Field'} onsubmit={submitAddField}>
+    <header>
+      <div>
+        <p class="pop-eyebrow">Data Source · {selectedModule.name}</p>
+        <h3>{editingFieldId ? 'Edit Field' : 'Tambah Field'}</h3>
+      </div>
+      <button type="button" onclick={closeAddField} aria-label="Close">×</button>
+    </header>
+    <div class="req-create-body">
+      <label class="field">
+        <span>Yang tampil di halaman</span>
+        <input bind:value={newFieldLabel} placeholder="Contoh: Nama KPI" maxlength="150" />
+      </label>
+      <div class="row2">
+        <label class="field">
+          <span>Tabel</span>
+          <input bind:value={newFieldTable} placeholder="Contoh: kpi_metrics" maxlength="100" />
+        </label>
+        <label class="field">
+          <span>Field</span>
+          <input bind:value={newFieldName} placeholder="Contoh: metric_name" maxlength="100" />
+        </label>
+      </div>
+      <label class="field">
+        <span>Tipe data</span>
+        <input bind:value={newFieldType} placeholder="Contoh: varchar" maxlength="50" />
+      </label>
+      {#if fieldError}<p class="field-error">{fieldError}</p>{/if}
+    </div>
+    <div class="req-create-actions">
+      <button type="button" onclick={closeAddField}>Cancel</button>
+      <button type="submit" disabled={fieldSaving}>{fieldSaving ? 'Menyimpan…' : 'Simpan'}</button>
     </div>
   </form>
 {/if}
