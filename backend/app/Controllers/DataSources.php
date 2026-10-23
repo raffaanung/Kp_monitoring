@@ -17,7 +17,11 @@ use CodeIgniter\HTTP\ResponseInterface;
  */
 class DataSources extends BaseController
 {
-    /** Pohon modul (modul + submodul-nya) untuk 1 dashboard, lengkap sampai field. */
+    /**
+     * Pohon modul (modul + submodul-nya) untuk 1 dashboard, lengkap sampai field.
+     * 4 query total terlepas dari berapa banyak modul/database/tabel-nya (hindari N+1):
+     * modul -> database -> tabel -> field, masing-masing 1x whereIn().
+     */
     public function index(string $dashboardId = '0'): ResponseInterface
     {
         $modules = (new ModuleModel())->forDashboard($dashboardId);
@@ -30,18 +34,10 @@ class DataSources extends BaseController
         $tableModel  = new ModuleTableModel();
         $fieldModel  = new ModuleTableFieldModel();
 
-        $databasesByModule = [];
-        foreach ($moduleIds as $mid) {
-            $db = $dbModel->forModule($mid);
-            if ($db !== null) {
-                $databasesByModule[$mid] = $db;
-            }
-        }
+        $databasesByModule = $dbModel->forModules($moduleIds);
 
-        $tablesByDatabase = [];
-        foreach ($databasesByModule as $db) {
-            $tablesByDatabase[$db['id']] = $tableModel->forDatabase($db['id']);
-        }
+        $databaseIds = array_column($databasesByModule, 'id');
+        $tablesByDatabase = $tableModel->forDatabases($databaseIds);
 
         $allTableIds = [];
         foreach ($tablesByDatabase as $tables) {
@@ -61,12 +57,17 @@ class DataSources extends BaseController
             $db        = $databasesByModule[$m['id']] ?? null;
             if ($db !== null) {
                 foreach ($tablesByDatabase[$db['id']] ?? [] as $t) {
-                    $tableTags[] = $t['table_name'];
+                    $schemaName = $t['schema_name'] ?: 'public';
+                    $tableTags[$schemaName . '.' . $t['table_name']] = [
+                        'table_name'  => $t['table_name'],
+                        'schema_name' => $schemaName,
+                    ];
                     foreach ($fieldsByTable[$t['id']] ?? [] as $f) {
                         $rows[] = [
                             'id'           => $f['id'],
                             'display_label'=> $f['display_label'],
                             'table_name'   => $t['table_name'],
+                            'schema_name'  => $schemaName,
                             'field_name'   => $f['field_name'],
                             'field_type'   => $f['field_type'],
                         ];
@@ -81,7 +82,7 @@ class DataSources extends BaseController
                 'description' => $m['description'],
                 'db_name'     => $db['db_name'] ?? null,
                 'db_engine'   => $db['db_engine'] ?? null,
-                'tables'      => array_values(array_unique($tableTags)),
+                'tables'      => array_values($tableTags),
                 'rows'        => $rows,
                 'children'    => [],
             ];
@@ -159,22 +160,15 @@ class DataSources extends BaseController
 
         $displayLabel = trim((string) $this->request->getJsonVar('display_label'));
         $tableName    = trim((string) $this->request->getJsonVar('table_name'));
+        $schemaName   = trim((string) ($this->request->getJsonVar('schema_name') ?? '')) ?: 'public';
         $fieldName    = trim((string) $this->request->getJsonVar('field_name'));
         $fieldType    = trim((string) $this->request->getJsonVar('field_type'));
         if ($displayLabel === '' || $tableName === '' || $fieldName === '' || $fieldType === '') {
             return $this->jsonError('Semua field wajib diisi', 422);
         }
 
-        $dbModel = new ModuleDatabaseModel();
-        $db = $dbModel->forModule($moduleId);
-        if ($db === null) {
-            $dbId = Id::new();
-            $dbModel->insert(['id' => $dbId, 'module_id' => $moduleId, 'db_name' => '-', 'db_engine' => null], false);
-        } else {
-            $dbId = $db['id'];
-        }
-
-        $table = (new ModuleTableModel())->findOrCreate($dbId, $tableName);
+        $dbId = $this->resolveModuleDatabaseId($moduleId);
+        $table = (new ModuleTableModel())->findOrCreate($dbId, $tableName, $schemaName);
 
         $fieldId = Id::new();
         (new ModuleTableFieldModel())->insert([
@@ -183,6 +177,47 @@ class DataSources extends BaseController
         ], false);
 
         return $this->jsonOk(['id' => $fieldId]);
+    }
+
+    /** Tambah 1 tabel kosong (dokumentasi) ke 1 submodul/halaman, sebelum field-nya diisi satu-satu. */
+    public function addTable(string $moduleId = '0'): ResponseInterface
+    {
+        $user = $this->authUser();
+        if ($user === null || ! TaskPolicy::canManageRegistry($user)) {
+            return $this->jsonError('You are not allowed to manage the data source documentation', 403);
+        }
+
+        $moduleModel = new ModuleModel();
+        $module = $moduleModel->find($moduleId);
+        if ($module === null) {
+            return $this->jsonError('Module not found', 404);
+        }
+
+        $tableName  = trim((string) $this->request->getJsonVar('table_name'));
+        $schemaName = trim((string) ($this->request->getJsonVar('schema_name') ?? '')) ?: 'public';
+        if ($tableName === '') {
+            return $this->jsonError('Nama tabel wajib diisi', 422);
+        }
+
+        $dbId = $this->resolveModuleDatabaseId($moduleId);
+        $table = (new ModuleTableModel())->findOrCreate($dbId, $tableName, $schemaName);
+
+        return $this->jsonOk(['id' => $table['id'], 'table_name' => $table['table_name'], 'schema_name' => $table['schema_name']]);
+    }
+
+    /** Database dokumentasi punya 1 submodul/halaman; buat baris "-"-nya kalau belum ada. */
+    private function resolveModuleDatabaseId(string $moduleId): string
+    {
+        $dbModel = new ModuleDatabaseModel();
+        $db = $dbModel->forModule($moduleId);
+        if ($db !== null) {
+            return $db['id'];
+        }
+
+        $dbId = Id::new();
+        $dbModel->insert(['id' => $dbId, 'module_id' => $moduleId, 'db_name' => '-', 'db_engine' => null], false);
+
+        return $dbId;
     }
 
     /** Edit 1 baris field-mapping yang sudah ada (ubah label/tabel/field/tipe-nya). */
@@ -201,6 +236,7 @@ class DataSources extends BaseController
 
         $displayLabel = trim((string) $this->request->getJsonVar('display_label'));
         $tableName    = trim((string) $this->request->getJsonVar('table_name'));
+        $schemaName   = trim((string) ($this->request->getJsonVar('schema_name') ?? '')) ?: 'public';
         $fieldName    = trim((string) $this->request->getJsonVar('field_name'));
         $fieldType    = trim((string) $this->request->getJsonVar('field_type'));
         if ($displayLabel === '' || $tableName === '' || $fieldName === '' || $fieldType === '') {
@@ -214,8 +250,9 @@ class DataSources extends BaseController
         }
 
         $patch = ['display_label' => $displayLabel, 'field_name' => $fieldName, 'field_type' => $fieldType];
-        if ($tableName !== $currentTable['table_name']) {
-            $newTable = $tableModel->findOrCreate($currentTable['module_database_id'], $tableName);
+        $currentSchema = $currentTable['schema_name'] ?: 'public';
+        if ($tableName !== $currentTable['table_name'] || $schemaName !== $currentSchema) {
+            $newTable = $tableModel->findOrCreate($currentTable['module_database_id'], $tableName, $schemaName);
             $patch['module_table_id'] = $newTable['id'];
             $fieldModel->update($fieldId, $patch);
             // Tabel lama udah gak punya field lagi? Buang biar gak nyangkut jadi badge "tabel" kosong.

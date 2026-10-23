@@ -2,6 +2,7 @@
   import GlassPanel from '$lib/GlassPanel.svelte'
   import SubmenuHeader from '$lib/SubmenuHeader.svelte'
   import { portal } from '$lib/portal.js'
+  import { fileUrl } from '$lib/api.js'
   import {
     currentProfile,
     updateProfile,
@@ -38,7 +39,7 @@
 
   const session = $derived.by(() => authStore.user)
 
-  const avatarSrc = $derived(session?.avatar_url || '')
+  const avatarSrc = $derived(fileUrl(session?.avatar_url) || '')
   const shownName = $derived(profile.displayName || session?.name || '')
 
   /** @param {string} n */

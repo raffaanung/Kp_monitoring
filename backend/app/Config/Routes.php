@@ -51,6 +51,7 @@ $routes->group('api', ['filter' => 'auth'], static function ($routes) use ($uuid
     $routes->put("dashboards/{$uuid}/modules/{$uuid}", 'Dashboards::updateModule/$1/$2');
     $routes->delete("dashboards/{$uuid}/modules/{$uuid}", 'Dashboards::deleteModule/$1/$2');
     $routes->post("modules/{$uuid}/fields", 'DataSources::addField/$1');
+    $routes->post("modules/{$uuid}/tables", 'DataSources::addTable/$1');
     $routes->put("module-fields/{$uuid}", 'DataSources::updateField/$1');
 
     $routes->get('requirements', 'Requirements::index');

@@ -9498,78 +9498,183 @@
     overflow: auto;
   }
 
-  .ds-sidebar-head {
+  .ds-root {
+    min-height: 0;
+    height: 100%;
     display: flex;
     flex-direction: column;
+    gap: 14px;
+  }
+
+  .ds-statbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 16px;
+    border-radius: 12px;
+    background: #f8fafc;
+    border: 1px solid #e8edf3;
+  }
+
+  .ds-statbar-item {
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: #475569;
+  }
+
+  .ds-statbar-item strong {
+    color: #111827;
+    font-weight: 760;
+  }
+
+  .ds-statbar-sep {
+    color: #cbd5e1;
+  }
+
+  .ds-statbar-hint {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.6rem;
+    font-weight: 600;
+    color: #94a3b8;
+  }
+
+  .ds-layout {
+    flex: 1;
+  }
+
+  .ds-sidebar-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     gap: 6px;
   }
 
   .ds-sidebar-head > span {
-    font-size: 0.56rem;
+    font-size: 0.62rem;
     font-weight: 750;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    color: #8a8a90;
-  }
-
-  .ds-sidebar-actions {
-    display: flex;
+    color: #1a1a1a;
+    display: inline-flex;
+    align-items: center;
     gap: 6px;
   }
 
-  .registry-page .ds-add-btn {
-    flex: 1;
-    height: 28px;
+  .ds-sidebar-head em {
+    font-style: normal;
+    font-size: 0.52rem;
+    font-weight: 750;
+    color: #94a3b8;
+    background: #f1f5f9;
+    border-radius: 5px;
+    padding: 1px 5px;
+  }
+
+  .registry-page .ds-icon-add {
+    width: 24px;
+    height: 24px;
     border: 0;
     border-radius: 999px;
     background: #0f1b2e;
     color: #fff;
-    font-size: 0.6rem;
-    font-weight: 700;
+    font-size: 0.85rem;
+    line-height: 1;
     cursor: pointer;
-    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
   }
 
-  .registry-page .ds-add-btn.ghost {
-    background: rgba(15, 27, 46, 0.06);
-    color: #0f1b2e;
-    border-color: rgba(15, 27, 46, 0.12);
+  .registry-page .ds-search {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 30px;
+    padding: 0 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 999px;
+    background: #fff;
+    color: #94a3b8;
   }
 
-  .registry-page .ds-add-btn:disabled {
-    opacity: 0.45;
-    cursor: default;
+  .registry-page .ds-search svg {
+    flex: none;
+  }
+
+  .registry-page .ds-search input {
+    height: auto;
+    border: 0;
+    border-radius: 0;
+    outline: none;
+    background: transparent;
+    font: inherit;
+    font-size: 0.64rem;
+    color: #1a1a1a;
+    width: 100%;
+    min-width: 0;
+    padding: 0;
   }
 
   .ds-tree {
     display: grid;
-    gap: 12px;
+    gap: 14px;
   }
 
   .ds-modul-group {
     display: grid;
-    gap: 2px;
+    gap: 3px;
+  }
+
+  .ds-modul-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    color: #64748b;
   }
 
   .ds-modul-name {
     font-size: 0.68rem;
     font-weight: 750;
     color: #111827;
-    padding: 4px 6px;
+    flex: 1;
+  }
+
+  .ds-modul-count {
+    font-size: 0.56rem;
+    font-weight: 700;
+    color: #94a3b8;
+    background: #f1f5f9;
+    border-radius: 5px;
+    padding: 1px 6px;
   }
 
   .registry-page .ds-halaman-btn {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 7px;
     width: 100%;
     text-align: left;
     border: 1px solid #e2e8f0;
     background: transparent;
-    padding: 6px 10px 6px 18px;
+    padding: 6px 10px 6px 24px;
     border-radius: 8px;
     font-size: 0.65rem;
     font-weight: 600;
     color: #475569;
     cursor: pointer;
+    position: relative;
+  }
+
+  .registry-page .ds-halaman-btn svg {
+    flex-shrink: 0;
+    opacity: 0.7;
+  }
+
+  .registry-page .ds-halaman-btn span {
+    flex: 1;
   }
 
   .registry-page .ds-halaman-btn:hover {
@@ -9582,12 +9687,64 @@
     border-color: #065fc6;
   }
 
+  .registry-page .ds-halaman-btn.on svg {
+    opacity: 1;
+  }
+
+  .ds-halaman-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: #fff;
+    flex-shrink: 0;
+  }
+
+  .registry-page .ds-add-halaman-btn {
+    margin-top: 4px;
+    height: 30px;
+    border: 1px dashed #cbd5e1;
+    border-radius: 8px;
+    background: transparent;
+    color: #64748b;
+    font-size: 0.62rem;
+    font-weight: 650;
+    cursor: pointer;
+  }
+
+  .registry-page .ds-add-halaman-btn:hover:not(:disabled) {
+    border-color: #065fc6;
+    color: #065fc6;
+  }
+
+  .registry-page .ds-add-halaman-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
   .ds-main {
     min-height: 0;
     overflow: auto;
     display: flex;
     flex-direction: column;
     gap: 10px;
+  }
+
+  .ds-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.62rem;
+    font-weight: 600;
+    color: #94a3b8;
+  }
+
+  .ds-breadcrumb .on {
+    color: #111827;
+    font-weight: 750;
+  }
+
+  .ds-breadcrumb-sep {
+    color: #cbd5e1;
   }
 
   .ds-main-head {
@@ -9600,44 +9757,174 @@
 
   .ds-main-head h3 {
     margin: 0;
-    font-size: 0.86rem;
+    font-size: 0.92rem;
     font-weight: 760;
     color: #111827;
   }
 
-  .ds-db-badge {
-    font-size: 0.62rem;
-    font-weight: 600;
-    color: #475569;
-    background: #f1f5f9;
-    border: 1px solid #e2e8f0;
-    border-radius: 999px;
-    padding: 4px 10px;
+  .ds-description {
+    margin: -4px 0 0;
+    font-size: 0.68rem;
+    line-height: 1.5;
+    color: #64748b;
   }
 
-  .ds-source-line {
-    margin: 0;
-    font-size: 0.68rem;
-    font-weight: 600;
-    color: #475569;
+  .ds-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-top: 14px;
+    border-top: 1px solid #f1f5f9;
+  }
+
+  .ds-section-head {
     display: flex;
     align-items: center;
+    gap: 8px;
     flex-wrap: wrap;
+  }
+
+  .ds-section-num {
+    font-size: 0.56rem;
+    font-weight: 750;
+    color: #94a3b8;
+    background: #f1f5f9;
+    border-radius: 5px;
+    padding: 1px 6px;
+  }
+
+  .ds-section-head h4 {
+    margin: 0;
+    font-size: 0.74rem;
+    font-weight: 750;
+    color: #111827;
+  }
+
+  .ds-section-count {
+    font-size: 0.56rem;
+    font-weight: 700;
+    color: #065fc6;
+    background: rgba(6, 95, 198, 0.08);
+    border-radius: 5px;
+    padding: 1px 6px;
+  }
+
+  .ds-field-search {
+    margin-left: auto;
+    width: 180px;
+  }
+
+  .registry-page .ds-add-field-btn,
+  .registry-page .ds-add-table-btn {
+    height: 30px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 999px;
+    background: #065fc6;
+    color: #fff;
+    font-size: 0.62rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .registry-page .ds-add-field-btn:hover,
+  .registry-page .ds-add-table-btn:hover {
+    background: #054fa3;
+  }
+
+  .ds-section-head .ds-add-table-btn {
+    margin-left: auto;
+  }
+
+  .ds-table-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px;
+  }
+
+  .ds-table-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px 14px;
+    border: 1px solid #e8edf3;
+    border-radius: 12px;
+    background: #fff;
+  }
+
+  .ds-table-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: #065fc6;
+  }
+
+  .ds-table-card-badge {
+    font-size: 0.54rem;
+    font-weight: 700;
+    color: #94a3b8;
+    background: #f1f5f9;
+    border-radius: 999px;
+    padding: 2px 8px;
+  }
+
+  .ds-table-card-name {
+    font-size: 0.74rem;
+    font-weight: 750;
+    color: #111827;
+    font-family: 'SFMono-Regular', Consolas, monospace;
+  }
+
+  .ds-table-card-meta {
+    font-size: 0.6rem;
+    font-weight: 600;
+    color: #94a3b8;
+  }
+
+  .ds-field-db-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .ds-field-db-cell strong {
+    font-size: 0.68rem;
+    font-weight: 750;
+    color: #111827;
+    font-family: 'SFMono-Regular', Consolas, monospace;
+  }
+
+  .ds-field-db-cell small {
+    font-size: 0.56rem;
+    font-weight: 600;
+    color: #94a3b8;
+  }
+
+  .ds-field-type-badge {
+    display: inline-flex;
+    font-size: 0.58rem;
+    font-weight: 700;
+    color: #7c6bc4;
+    background: rgba(124, 107, 196, 0.1);
+    border-radius: 999px;
+    padding: 2px 9px;
+  }
+
+  .ds-arrow-col {
+    color: #cbd5e1;
+    text-align: center;
+    width: 24px;
+  }
+
+  .ds-component-cell {
+    display: inline-flex;
+    align-items: center;
     gap: 6px;
   }
 
-  .ds-chip {
-    display: inline-flex;
-    align-items: center;
-    padding: 2px 9px;
-    border-radius: 999px;
-    font-size: 0.6rem;
+  .ds-component-label {
     font-weight: 700;
-  }
-
-  .ds-chip-table {
-    background: rgba(6, 95, 198, 0.1);
-    color: #065fc6;
+    color: #111827;
   }
 
   .ds-table-wrap {
@@ -9683,12 +9970,6 @@
     background: rgba(6, 95, 198, 0.04);
   }
 
-  .ds-field-cell {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-
   .ds-row-edit-icon {
     color: #cbd5e1;
     flex-shrink: 0;
@@ -9696,35 +9977,6 @@
 
   .ds-row-editable:hover .ds-row-edit-icon {
     color: #065fc6;
-  }
-
-  .ds-field-name {
-    font-weight: 700;
-    color: #111827;
-  }
-
-  .ds-field-type {
-    margin-left: 4px;
-    font-size: 0.58rem;
-    font-weight: 600;
-    color: #94a3b8;
-  }
-
-  .registry-page .ds-add-field-btn {
-    align-self: flex-start;
-    height: 30px;
-    padding: 0 14px;
-    border: 1px dashed rgba(6, 95, 198, 0.35);
-    border-radius: 999px;
-    background: rgba(6, 95, 198, 0.05);
-    color: #065fc6;
-    font-size: 0.62rem;
-    font-weight: 700;
-    cursor: pointer;
-  }
-
-  .registry-page .ds-add-field-btn:hover {
-    background: rgba(6, 95, 198, 0.1);
   }
 
   /* Form kecil "Tambah Modul/Submodul/Field" — dipakai bareng .attach-pop */

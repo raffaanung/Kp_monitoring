@@ -5,8 +5,15 @@ import { api } from './api.js'
  * @property {string} id
  * @property {string} display_label
  * @property {string} table_name
+ * @property {string} schema_name
  * @property {string} field_name
  * @property {string} field_type
+ */
+
+/**
+ * @typedef {Object} DataSourceTable
+ * @property {string} table_name
+ * @property {string} schema_name
  */
 
 /**
@@ -17,7 +24,7 @@ import { api } from './api.js'
  * @property {string} description
  * @property {string|null} db_name
  * @property {string|null} db_engine
- * @property {string[]} tables
+ * @property {DataSourceTable[]} tables
  * @property {DataSourceRow[]} rows
  * @property {DataSourceNode[]} children
  */
@@ -55,7 +62,7 @@ export async function createModule(dashboardId, payload) {
 /**
  * @param {string} dashboardId
  * @param {string} moduleId
- * @param {{ display_label: string, table_name: string, field_name: string, field_type: string }} payload
+ * @param {{ display_label: string, table_name: string, schema_name?: string, field_name: string, field_type: string }} payload
  */
 export async function addDataSourceField(dashboardId, moduleId, payload) {
   await api.post(`/api/modules/${moduleId}/fields`, payload)
@@ -64,8 +71,18 @@ export async function addDataSourceField(dashboardId, moduleId, payload) {
 
 /**
  * @param {string} dashboardId
+ * @param {string} moduleId
+ * @param {{ table_name: string, schema_name?: string }} payload
+ */
+export async function addDataSourceTable(dashboardId, moduleId, payload) {
+  await api.post(`/api/modules/${moduleId}/tables`, payload)
+  await loadDataSourceTree(dashboardId)
+}
+
+/**
+ * @param {string} dashboardId
  * @param {string} fieldId
- * @param {{ display_label: string, table_name: string, field_name: string, field_type: string }} payload
+ * @param {{ display_label: string, table_name: string, schema_name?: string, field_name: string, field_type: string }} payload
  */
 export async function updateDataSourceField(dashboardId, fieldId, payload) {
   await api.put(`/api/module-fields/${fieldId}`, payload)

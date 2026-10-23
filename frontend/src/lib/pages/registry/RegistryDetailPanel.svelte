@@ -49,7 +49,7 @@
   import RegistryEditModal from './RegistryEditModal.svelte';
   import PmCreateTaskModal from '$lib/PmCreateTaskModal.svelte';
   import GeneralKnowledgeView from './GeneralKnowledgeView.svelte';
-  import { dataSourceStore, loadDataSourceTree, createModule, addDataSourceField, updateDataSourceField, flattenModules } from '$lib/dataSourceStore.svelte.js';
+  import { dataSourceStore, loadDataSourceTree, createModule, addDataSourceField, addDataSourceTable, updateDataSourceField, flattenModules } from '$lib/dataSourceStore.svelte.js';
 
   /** @type {{ selectedDetail: any, detailActiveTab: string, selectedSopItem: any, autoFocusTaskId?: string }} */
   let { selectedDetail = $bindable(), detailActiveTab = $bindable("overview"), selectedSopItem = $bindable(), autoFocusTaskId = '' } = $props();
@@ -1029,10 +1029,17 @@
   let editingFieldId = $state('');
   let newFieldLabel = $state('');
   let newFieldTable = $state('');
+  let newFieldSchema = $state('public');
   let newFieldName = $state('');
   let newFieldType = $state('');
   let fieldSaving = $state(false);
   let fieldError = $state('');
+
+  let addTableOpen = $state(false);
+  let newTableName = $state('');
+  let newTableSchema = $state('public');
+  let tableSaving = $state(false);
+  let tableError = $state('');
 
   $effect(() => {
     if (work !== 'source' || !selectedDetail?.id) return;
@@ -1047,6 +1054,53 @@
   const flatModules = $derived(flattenModules(moduleTree));
 
   const selectedModule = $derived(flatModules.find((m) => m.id === selectedModuleId) || null);
+
+  /** Modul induk dari halaman yang lagi dibuka (buat breadcrumb). */
+  const selectedModuleParent = $derived(
+    selectedModule?.parent_id ? flatModules.find((m) => m.id === selectedModule.parent_id) || null : null,
+  );
+
+  const dsStats = $derived.by(() => {
+    const totalModul = moduleTree.length;
+    const halamanList = flatModules.filter((m) => m.parent_id !== null);
+    const totalHalaman = halamanList.length;
+    const tableSet = new Set();
+    let totalField = 0;
+    for (const h of halamanList) {
+      for (const t of h.tables) tableSet.add(`${t.schema_name}.${t.table_name}`);
+      totalField += h.rows.length;
+    }
+    return { totalModul, totalHalaman, totalTabel: tableSet.size, totalField };
+  });
+
+  let dsHalamanQuery = $state('');
+  const dsFilteredTree = $derived.by(() => {
+    const needle = dsHalamanQuery.trim().toLowerCase();
+    if (!needle) return moduleTree;
+    return moduleTree
+      .map((modul) => ({ ...modul, children: modul.children.filter((h) => h.name.toLowerCase().includes(needle)) }))
+      .filter((modul) => modul.children.length > 0 || modul.name.toLowerCase().includes(needle));
+  });
+
+  let dsFieldQuery = $state('');
+  const dsFilteredRows = $derived.by(() => {
+    if (!selectedModule) return [];
+    const needle = dsFieldQuery.trim().toLowerCase();
+    if (!needle) return selectedModule.rows;
+    return selectedModule.rows.filter((r) =>
+      `${r.display_label} ${r.table_name} ${r.field_name} ${r.field_type}`.toLowerCase().includes(needle),
+    );
+  });
+
+  /** Berapa field yang makai tiap tabel di halaman yang lagi dibuka — buat kartu "Tabel sumber". */
+  const dsTableUsage = $derived.by(() => {
+    if (!selectedModule) return [];
+    return selectedModule.tables.map((t) => ({
+      name: t.table_name,
+      schema: t.schema_name,
+      count: selectedModule.rows.filter((r) => r.table_name === t.table_name && r.schema_name === t.schema_name).length,
+    }));
+  });
 
   $effect(() => {
     if (selectedModuleId || flatModules.length === 0) return;
@@ -1108,17 +1162,19 @@
     editingFieldId = '';
     newFieldLabel = '';
     newFieldTable = '';
+    newFieldSchema = 'public';
     newFieldName = '';
     newFieldType = '';
     fieldError = '';
     addFieldOpen = true;
   }
 
-  /** @param {{ id: string, display_label: string, table_name: string, field_name: string, field_type: string }} row */
+  /** @param {{ id: string, display_label: string, table_name: string, schema_name: string, field_name: string, field_type: string }} row */
   function openEditField(row) {
     editingFieldId = row.id;
     newFieldLabel = row.display_label;
     newFieldTable = row.table_name;
+    newFieldSchema = row.schema_name || 'public';
     newFieldName = row.field_name;
     newFieldType = row.field_type;
     fieldError = '';
@@ -1127,6 +1183,40 @@
 
   function closeAddField() {
     addFieldOpen = false;
+  }
+
+  function openAddTable() {
+    if (!selectedModule) return;
+    newTableName = '';
+    newTableSchema = 'public';
+    tableError = '';
+    addTableOpen = true;
+  }
+
+  function closeAddTable() {
+    addTableOpen = false;
+  }
+
+  async function submitAddTable(event) {
+    event.preventDefault();
+    if (!selectedDetail?.id || !selectedModule || tableSaving) return;
+    if (!newTableName.trim()) {
+      tableError = 'Nama tabel wajib diisi';
+      return;
+    }
+    tableSaving = true;
+    tableError = '';
+    try {
+      await addDataSourceTable(selectedDetail.id, selectedModule.id, {
+        table_name: newTableName.trim(),
+        schema_name: newTableSchema.trim() || 'public',
+      });
+      addTableOpen = false;
+    } catch (err) {
+      tableError = err instanceof Error ? err.message : String(err);
+    } finally {
+      tableSaving = false;
+    }
   }
 
   async function submitAddField(event) {
@@ -1141,6 +1231,7 @@
     const payload = {
       display_label: newFieldLabel.trim(),
       table_name: newFieldTable.trim(),
+      schema_name: newFieldSchema.trim() || 'public',
       field_name: newFieldName.trim(),
       field_type: newFieldType.trim(),
     };
@@ -1673,98 +1764,164 @@
             onOpenDetailInfo={() => { focusTaskId = ''; work = 'overview'; }}
           />
         {:else if work === 'source'}
-          <div class="ds-layout">
-            <aside class="ds-sidebar">
-              <div class="ds-sidebar-head">
-                <span>Modul / Halaman</span>
-                <div class="ds-sidebar-actions">
-                  <button type="button" class="ds-add-btn" onclick={openAddModule}>+ Modul</button>
-                  <button type="button" class="ds-add-btn ghost" disabled={flatModules.filter((m) => m.parent_id === null).length === 0} onclick={openAddSubmodule}>+ Submodul</button>
-                </div>
-              </div>
-              {#if dataSourceStore.loading}
-                <p class="sheet-empty">Loading...</p>
-              {:else if moduleTree.length === 0}
-                <p class="sheet-empty">Belum ada modul. Klik "+ Modul" buat mulai dokumentasiin data source halaman ini.</p>
-              {:else}
-                <div class="ds-tree">
-                  {#each moduleTree as modul (modul.id)}
-                    <div class="ds-modul-group">
-                      <strong class="ds-modul-name">{modul.name}</strong>
-                      {#each modul.children as halaman (halaman.id)}
-                        <button
-                          type="button"
-                          class="ds-halaman-btn"
-                          class:on={halaman.id === selectedModuleId}
-                          onclick={() => (selectedModuleId = halaman.id)}
-                        >{halaman.name}</button>
-                      {/each}
-                    </div>
-                  {/each}
-                </div>
-              {/if}
-            </aside>
+          <div class="ds-root">
+            <div class="ds-statbar">
+              <span class="ds-statbar-item"><strong>{dsStats.totalModul}</strong> modul</span>
+              <span class="ds-statbar-sep">·</span>
+              <span class="ds-statbar-item"><strong>{dsStats.totalHalaman}</strong> halaman</span>
+              <span class="ds-statbar-sep">·</span>
+              <span class="ds-statbar-item"><strong>{dsStats.totalTabel}</strong> tabel sumber</span>
+              <span class="ds-statbar-sep">·</span>
+              <span class="ds-statbar-item"><strong>{dsStats.totalField}</strong> field terpetakan</span>
+              <span class="ds-statbar-hint">Pilih halaman untuk menelusuri pemetaan</span>
+            </div>
 
-            <section class="ds-main">
-              {#if dataSourceStore.error}
-                <p class="field-error">{dataSourceStore.error}</p>
-              {:else if !selectedModule}
-                <p class="sheet-empty">Pilih halaman di sebelah kiri, atau tambahkan modul dulu kalau belum ada.</p>
-              {:else}
-                <header class="ds-main-head">
-                  <h3>{selectedModule.name}</h3>
-                  {#if selectedModule.db_name}
-                    <span class="ds-db-badge">Database: <strong>{selectedModule.db_name}</strong> · {selectedModule.db_engine || '—'}</span>
-                  {/if}
-                </header>
-                <p class="ds-source-line">
-                  Diambil dari tabel:
-                  {#if selectedModule.tables.length === 0}
-                    <span class="sheet-empty" style="display:inline;">belum ada</span>
-                  {:else}
-                    {#each selectedModule.tables as t}
-                      <span class="ds-chip ds-chip-table">{t}</span>
-                    {/each}
-                  {/if}
-                </p>
-
-                <div class="ds-table-wrap">
-                  <table class="ds-table">
-                    <thead>
-                      <tr>
-                        <th>Yang tampil di halaman</th>
-                        <th>Tabel</th>
-                        <th>Field</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {#if selectedModule.rows.length === 0}
-                        <tr><td colspan="3" class="sheet-empty">Belum ada field yang didokumentasikan.</td></tr>
-                      {:else}
-                        {#each selectedModule.rows as row (row.id)}
-                          <tr class="ds-row-editable" onclick={() => openEditField(row)} title="Klik buat edit field ini">
-                            <td>{row.display_label}</td>
-                            <td><span class="ds-chip ds-chip-table">{row.table_name}</span></td>
-                            <td>
-                              <span class="ds-field-cell">
-                                <span class="ds-field-name">{row.field_name}</span>
-                                <span class="ds-field-type">{row.field_type}</span>
-                                <svg class="ds-row-edit-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                  <path d="M12 20h9" />
-                                  <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                                </svg>
-                              </span>
-                            </td>
-                          </tr>
+            <div class="ds-layout">
+              <aside class="ds-sidebar">
+                <div class="ds-sidebar-head">
+                  <span><em>01</em> Modul &amp; halaman</span>
+                  <button type="button" class="ds-icon-add" title="Tambah Modul" aria-label="Tambah Modul" onclick={openAddModule}>+</button>
+                </div>
+                <label class="ds-search">
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="4.25" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5 13 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                  <input type="search" placeholder="Cari halaman..." bind:value={dsHalamanQuery} />
+                </label>
+                {#if dataSourceStore.loading && moduleTree.length === 0}
+                  <p class="sheet-empty">Loading...</p>
+                {:else if moduleTree.length === 0}
+                  <p class="sheet-empty">Belum ada modul. Klik tombol "+" buat mulai dokumentasiin data source halaman ini.</p>
+                {:else}
+                  <div class="ds-tree">
+                    {#each dsFilteredTree as modul (modul.id)}
+                      <div class="ds-modul-group">
+                        <div class="ds-modul-head">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4l1.5 2H19.5A1.5 1.5 0 0 1 21 8.5v10A1.5 1.5 0 0 1 19.5 20h-15A1.5 1.5 0 0 1 3 18.5Z" /></svg>
+                          <strong class="ds-modul-name">{modul.name}</strong>
+                          <span class="ds-modul-count">{modul.children.length}</span>
+                        </div>
+                        {#each modul.children as halaman (halaman.id)}
+                          <button
+                            type="button"
+                            class="ds-halaman-btn"
+                            class:on={halaman.id === selectedModuleId}
+                            onclick={() => (selectedModuleId = halaman.id)}
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.3"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.3"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.3"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.3"/></svg>
+                            <span>{halaman.name}</span>
+                            {#if halaman.id === selectedModuleId}<i class="ds-halaman-dot" aria-hidden="true"></i>{/if}
+                          </button>
                         {/each}
-                      {/if}
-                    </tbody>
-                  </table>
-                </div>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+                <button type="button" class="ds-add-halaman-btn" disabled={flatModules.filter((m) => m.parent_id === null).length === 0} onclick={openAddSubmodule}>+ Tambah halaman</button>
+              </aside>
 
-                <button type="button" class="ds-add-field-btn" onclick={openAddField}>+ Tambah Field</button>
-              {/if}
-            </section>
+              <section class="ds-main">
+                {#if dataSourceStore.error}
+                  <p class="field-error">{dataSourceStore.error}</p>
+                {:else if !selectedModule}
+                  <p class="sheet-empty">Pilih halaman di sebelah kiri, atau tambahkan modul dulu kalau belum ada.</p>
+                {:else}
+                  <nav class="ds-breadcrumb" aria-label="Lokasi halaman">
+                    <span>{selectedDetail?.name || 'Dashboard'}</span>
+                    <span class="ds-breadcrumb-sep">›</span>
+                    {#if selectedModuleParent}
+                      <span>{selectedModuleParent.name}</span>
+                      <span class="ds-breadcrumb-sep">›</span>
+                    {/if}
+                    <span class="on">{selectedModule.name}</span>
+                  </nav>
+
+                  <header class="ds-main-head">
+                    <h3>{selectedModule.name}</h3>
+                  </header>
+                  {#if selectedModule.description}
+                    <p class="ds-description">{selectedModule.description}</p>
+                  {/if}
+
+                  <section class="ds-section">
+                    <div class="ds-section-head">
+                      <span class="ds-section-num">02</span>
+                      <h4>Tabel sumber</h4>
+                      <span class="ds-section-count">{dsTableUsage.length}</span>
+                      <button type="button" class="ds-add-table-btn" onclick={openAddTable}>+ Tambah tabel</button>
+                    </div>
+                    {#if dsTableUsage.length === 0}
+                      <p class="sheet-empty">Belum ada tabel. Tambahin field dulu lewat tombol di bawah.</p>
+                    {:else}
+                      <div class="ds-table-cards">
+                        {#each dsTableUsage as t, i (`${t.schema}.${t.name}`)}
+                          <div class="ds-table-card">
+                            <div class="ds-table-card-top">
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M3.5 9.5h17M9.5 9.5v11" /></svg>
+                              <span class="ds-table-card-badge">{i === 0 ? 'Tabel utama' : 'Referensi'}</span>
+                            </div>
+                            <strong class="ds-table-card-name">{t.name}</strong>
+                            <span class="ds-table-card-meta">{t.schema} · {t.count} field digunakan</span>
+                          </div>
+                        {/each}
+                      </div>
+                    {/if}
+                  </section>
+
+                  <section class="ds-section">
+                    <div class="ds-section-head">
+                      <span class="ds-section-num">03</span>
+                      <h4>Pemetaan field</h4>
+                      <span class="ds-section-count">{selectedModule.rows.length}</span>
+                      <label class="ds-search ds-field-search">
+                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="4.25" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5 13 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                        <input type="search" placeholder="Cari field..." bind:value={dsFieldQuery} />
+                      </label>
+                      <button type="button" class="ds-add-field-btn" onclick={openAddField}>+ Tambah field</button>
+                    </div>
+
+                    <div class="ds-table-wrap">
+                      <table class="ds-table">
+                        <thead>
+                          <tr>
+                            <th>Field database</th>
+                            <th>Tipe data</th>
+                            <th></th>
+                            <th>Komponen di halaman</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {#if dsFilteredRows.length === 0}
+                            <tr><td colspan="4" class="sheet-empty">{selectedModule.rows.length === 0 ? 'Belum ada field yang didokumentasikan.' : 'Gak ada field yang cocok.'}</td></tr>
+                          {:else}
+                            {#each dsFilteredRows as row (row.id)}
+                              <tr class="ds-row-editable" onclick={() => openEditField(row)} title="Klik buat edit field ini">
+                                <td>
+                                  <span class="ds-field-db-cell">
+                                    <strong>{row.field_name}</strong>
+                                    <small>{row.schema_name}.{row.table_name}</small>
+                                  </span>
+                                </td>
+                                <td><span class="ds-field-type-badge">{row.field_type}</span></td>
+                                <td class="ds-arrow-col">→</td>
+                                <td>
+                                  <span class="ds-component-cell">
+                                    <span class="ds-component-label">{row.display_label}</span>
+                                    <svg class="ds-row-edit-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                      <path d="M12 20h9" />
+                                      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                                    </svg>
+                                  </span>
+                                </td>
+                              </tr>
+                            {/each}
+                          {/if}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                {/if}
+              </section>
+            </div>
           </div>
         {:else if work === 'activity'}
           <div class="activity-history">
@@ -3282,23 +3439,59 @@
       </label>
       <div class="row2">
         <label class="field">
+          <span>Schema</span>
+          <input bind:value={newFieldSchema} placeholder="Contoh: public" maxlength="100" />
+        </label>
+        <label class="field">
           <span>Tabel</span>
           <input bind:value={newFieldTable} placeholder="Contoh: kpi_metrics" maxlength="100" />
         </label>
+      </div>
+      <div class="row2">
         <label class="field">
           <span>Field</span>
           <input bind:value={newFieldName} placeholder="Contoh: metric_name" maxlength="100" />
         </label>
+        <label class="field">
+          <span>Tipe data</span>
+          <input bind:value={newFieldType} placeholder="Contoh: varchar" maxlength="50" />
+        </label>
       </div>
-      <label class="field">
-        <span>Tipe data</span>
-        <input bind:value={newFieldType} placeholder="Contoh: varchar" maxlength="50" />
-      </label>
       {#if fieldError}<p class="field-error">{fieldError}</p>{/if}
     </div>
     <div class="req-create-actions">
       <button type="button" onclick={closeAddField}>Cancel</button>
       <button type="submit" disabled={fieldSaving}>{fieldSaving ? 'Menyimpan…' : 'Simpan'}</button>
+    </div>
+  </form>
+{/if}
+
+{#if addTableOpen && selectedModule}
+  <div class="req-detail-backdrop" use:portal role="presentation" onclick={closeAddTable}></div>
+  <form class="attach-pop req-create-modal" use:portal role="dialog" aria-modal="true" aria-label="Tambah Tabel" onsubmit={submitAddTable}>
+    <header>
+      <div>
+        <p class="pop-eyebrow">Data Source · {selectedModule.name}</p>
+        <h3>Tambah Tabel</h3>
+      </div>
+      <button type="button" onclick={closeAddTable} aria-label="Close">×</button>
+    </header>
+    <div class="req-create-body">
+      <div class="row2">
+        <label class="field">
+          <span>Schema</span>
+          <input bind:value={newTableSchema} placeholder="Contoh: public" maxlength="100" />
+        </label>
+        <label class="field">
+          <span>Nama tabel</span>
+          <input bind:value={newTableName} placeholder="Contoh: kpi_metrics" maxlength="100" />
+        </label>
+      </div>
+      {#if tableError}<p class="field-error">{tableError}</p>{/if}
+    </div>
+    <div class="req-create-actions">
+      <button type="button" onclick={closeAddTable}>Cancel</button>
+      <button type="submit" disabled={tableSaving}>{tableSaving ? 'Menyimpan…' : 'Simpan'}</button>
     </div>
   </form>
 {/if}
