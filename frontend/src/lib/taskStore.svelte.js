@@ -534,6 +534,38 @@ export function weekIndexForDate(date, weeks) {
 }
 
 /**
+ * Convert a timestamp or Date to visual percentage (0–100%) on a bucketed timeline grid.
+ * Each bucket in `weeks` is rendered with equal width (1/n of the grid).
+ * @param {Date | number | string} date
+ * @param {{ start: Date, end: Date }[]} weeks
+ * @param {boolean} [clip=false] If true, clamps to [0, 100] instead of returning -1 when out of range
+ */
+export function dateToTimelinePct(date, weeks, clip = false) {
+  const n = weeks.length
+  if (!n) return -1
+
+  const rangeStart = weeks[0].start.getTime()
+  const rangeEnd = addDays(weeks[n - 1].end, 1).getTime()
+  const t = date instanceof Date ? date.getTime() : new Date(date).getTime()
+
+  if (isNaN(t)) return -1
+  if (t < rangeStart) return clip ? 0 : -1
+  if (t >= rangeEnd) return clip ? 100 : -1
+
+  for (let i = 0; i < n; i++) {
+    const bStart = weeks[i].start.getTime()
+    const bEnd = addDays(weeks[i].end, 1).getTime()
+    if (t >= bStart && (t < bEnd || (i === n - 1 && t <= bEnd))) {
+      const span = bEnd - bStart || 1
+      const frac = Math.min(Math.max((t - bStart) / span, 0), 1)
+      return ((i + frac) / n) * 100
+    }
+  }
+
+  return clip ? 100 : -1
+}
+
+/**
  * Place a task bar across arbitrary day/week buckets.
  * @param {FeTask} task
  * @param {{ start: Date, end: Date }[]} weeks
@@ -553,10 +585,13 @@ export function barInMonthWeeks(task, weeks) {
   const clipEnd = Math.min(addDays(end, 1).getTime(), rangeEnd)
   if (clipEnd <= clipStart) return null
 
-  const span = rangeEnd - rangeStart || 1
+  const left = dateToTimelinePct(clipStart, weeks, true)
+  const right = dateToTimelinePct(clipEnd, weeks, true)
+  const minWidth = 100 / n / 5
+
   return {
-    left: ((clipStart - rangeStart) / span) * 100,
-    width: Math.max(((clipEnd - clipStart) / span) * 100, 100 / n / 5),
+    left,
+    width: Math.max(right - left, minWidth),
   }
 }
 

@@ -210,8 +210,8 @@
   <div class="stage">
     {#if !isHome}
       <header class="section-head">
-        <a href="/" class="brand-logo" aria-label="EDM Task Monitoring" title="EDM Task Monitoring">
-          <img src={logoFull} alt="EDM Task Monitoring" />
+        <a href="/" class="brand-logo" aria-label="ATA - Active Tasks Analytics" title="ATA - Active Tasks Analytics">
+          <img src={logoFull} alt="ATA - Active Tasks Analytics" />
         </a>
         <div class="section-copy">
           <h1>{section.title}</h1>

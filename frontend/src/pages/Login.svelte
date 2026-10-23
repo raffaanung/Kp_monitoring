@@ -32,7 +32,7 @@
 
 <div class="login-wrapper" in:fade={{ duration: 250 }}>
   <!-- ── Left Brand Card ── -->
-  <aside class="brand-card" aria-label="EDM Task Monitoring">
+  <aside class="brand-card" aria-label="ATA - Active Tasks Analytics">
     <div class="glow-bg" aria-hidden="true"></div>
     <div class="glow-spot-1" aria-hidden="true"></div>
     <div class="glow-spot-2" aria-hidden="true"></div>
@@ -40,7 +40,7 @@
     <!-- Header: Logo + System Online -->
     <div class="brand-top">
       <div class="brand-logo">
-        <img src={logoWhite} alt="EDM Task Monitoring" class="brand-logo-img" />
+        <img src={logoWhite} alt="ATA - Active Tasks Analytics" class="brand-logo-img" />
       </div>
 
       <div class="system-status">
@@ -62,7 +62,7 @@
 
     <!-- Footer: Copyright & Features -->
     <div class="brand-footer">
-      <span class="copyright">© {new Date().getFullYear()} EDM Task Monitor</span>
+      <span class="copyright">© {new Date().getFullYear()} ATA - Active Tasks Analytics</span>
       <div class="footer-tags">
         <span>Real-time</span>
         <span>Analytics</span>
@@ -75,9 +75,9 @@
   <main class="form-area">
     <div class="form-box">
       <header class="form-header">
-        <span class="tagline">TASK MONITORING DASHBOARD</span>
+        <span class="tagline">ACTIVE TASKS ANALYTICS</span>
         <h2 class="welcome-heading">Welcome back</h2>
-        <p class="welcome-sub">Sign in to your EDM Task Monitoring account to continue.</p>
+        <p class="welcome-sub">Sign in to your ATA account to continue.</p>
       </header>
 
       <form class="auth-form" onsubmit={handleLogin} novalidate>

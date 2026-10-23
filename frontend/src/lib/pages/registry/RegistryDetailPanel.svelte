@@ -42,13 +42,14 @@
   } from '$lib/requirementStore.svelte.js';
   import { formatDate } from '$lib/format.js';
   import { activityLogStore, listActivityLogs, loadActivityLogsFromApi } from '$lib/activityLogStore.svelte.js';
-  import { dataSourceStore, loadDataSourceTree, createModule, addDataSourceField, updateDataSourceField, flattenModules } from '$lib/dataSourceStore.svelte.js';
   import { attachmentKindLabel, attachmentStore, listAttachments, loadAttachmentsFromApi, useAttachment } from '$lib/attachmentStore.svelte.js';
   import { portal } from '$lib/portal.js';
   import AttachmentPanel from '$lib/AttachmentPanel.svelte';
   import RegistryInviteModal from './RegistryInviteModal.svelte';
   import RegistryEditModal from './RegistryEditModal.svelte';
   import PmCreateTaskModal from '$lib/PmCreateTaskModal.svelte';
+  import GeneralKnowledgeView from './GeneralKnowledgeView.svelte';
+  import { dataSourceStore, loadDataSourceTree, createModule, addDataSourceField, updateDataSourceField, flattenModules } from '$lib/dataSourceStore.svelte.js';
 
   /** @type {{ selectedDetail: any, detailActiveTab: string, selectedSopItem: any, autoFocusTaskId?: string }} */
   let { selectedDetail = $bindable(), detailActiveTab = $bindable("overview"), selectedSopItem = $bindable(), autoFocusTaskId = '' } = $props();
@@ -255,8 +256,8 @@
 
   const dashName = $derived(String(selectedDetail?.name || '').trim());
 
-  /** @type {'overview' | 'requirement' | 'source' | 'activity' | 'tasks' | 'task'} */
-  let work = $state('overview');
+  /** @type {'knowledge' | 'overview' | 'requirement' | 'source' | 'activity' | 'tasks' | 'task'} */
+  let work = $state(autoFocusTaskId ? 'overview' : 'knowledge');
   let focusTaskId = $state('');
   /** @type {'kanban' | 'tasks' | 'requirement'} */
   let taskFrom = $state('kanban');
@@ -269,7 +270,7 @@
   $effect(() => {
     if (dashName === seenDash) return;
     seenDash = dashName;
-    work = 'overview';
+    work = autoFocusTaskId ? 'overview' : 'knowledge';
     attachReqId = '';
     focusTaskId = '';
     // Jangan reset kalau lagi ada auto-focus (dari klik notifikasi) yang belum selesai diproses —
@@ -1651,7 +1652,13 @@
           <button
             type="button"
             class="view-tab"
-            class:on={work !== 'source' && work !== 'activity'}
+            class:on={work === 'knowledge'}
+            onclick={() => { focusTaskId = ''; work = 'knowledge'; }}
+          >General Knowledge</button>
+          <button
+            type="button"
+            class="view-tab"
+            class:on={work !== 'knowledge' && work !== 'source' && work !== 'activity'}
             onclick={() => { focusTaskId = ''; work = 'overview'; }}
           >Detail Information</button>
           <button type="button" class="view-tab" class:on={work === 'source'} onclick={() => (work = 'source')}>Data Source</button>
@@ -1660,7 +1667,12 @@
       </div>
 
       <div class="detail-content">
-        {#if work === 'source'}
+        {#if work === 'knowledge'}
+          <GeneralKnowledgeView
+            dashboard={selectedDetail}
+            onOpenDetailInfo={() => { focusTaskId = ''; work = 'overview'; }}
+          />
+        {:else if work === 'source'}
           <div class="ds-layout">
             <aside class="ds-sidebar">
               <div class="ds-sidebar-head">

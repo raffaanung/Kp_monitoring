@@ -351,3 +351,56 @@ export async function saveDashboardFormSchema(schema) {
 export async function resetDashboardFormSchema() {
   return await api.post('/api/dashboards/form-schema/reset')
 }
+
+/**
+ * @param {string} dashboardId
+ * @param {{ name: string, description?: string }} payload
+ */
+export async function createDashboardModule(dashboardId, payload) {
+  const created = await api.post(`/api/dashboards/${dashboardId}/modules`, payload)
+  const item = getDashboard(dashboardId)
+  if (item) {
+    item.modules = [...(item.modules || []), created]
+    registryStore.items = [...registryStore.items]
+  }
+  return created
+}
+
+/**
+ * @param {string} dashboardId
+ * @param {string} moduleId
+ * @param {{ name: string, description?: string }} payload
+ */
+export async function updateDashboardModule(dashboardId, moduleId, payload) {
+  const updated = await api.put(`/api/dashboards/${dashboardId}/modules/${moduleId}`, payload)
+  const item = getDashboard(dashboardId)
+  if (item && item.modules) {
+    item.modules = item.modules.map((m) => (m.id === moduleId ? updated : m))
+    registryStore.items = [...registryStore.items]
+  }
+  return updated
+}
+
+/**
+ * @param {string} dashboardId
+ * @param {string} moduleId
+ */
+export async function deleteDashboardModule(dashboardId, moduleId) {
+  await api.delete(`/api/dashboards/${dashboardId}/modules/${moduleId}`)
+  const item = getDashboard(dashboardId)
+  if (item && item.modules) {
+    item.modules = item.modules.filter((m) => m.id !== moduleId)
+    registryStore.items = [...registryStore.items]
+  }
+  return true
+}
+
+/**
+ * @param {string} dashboardId
+ * @param {{ description?: string, category?: string }} patch
+ */
+export async function updateDashboardGeneralKnowledge(dashboardId, patch) {
+  const ok = await updateDashboard(dashboardId, patch)
+  return ok
+}
+

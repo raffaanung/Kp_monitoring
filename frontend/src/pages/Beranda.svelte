@@ -15,6 +15,7 @@
     dayBucket,
     monthLabel,
     weekIndexForDate,
+    dateToTimelinePct,
     tasksInMonthWeeks,
     periodRange,
     tasksInRange,
@@ -416,11 +417,7 @@
 
   const todayPct = $derived.by(() => {
     if (currentWeekIdx < 0 || !boardBuckets.length) return -1
-    const rangeStart = boardBuckets[0].start.getTime()
-    const rangeEnd = addDays(boardBuckets[boardBuckets.length - 1].end, 1).getTime()
-    const t = new Date(`${todayISO}T00:00:00`).getTime()
-    if (t < rangeStart || t >= rangeEnd) return -1
-    return ((t - rangeStart) / (rangeEnd - rangeStart)) * 100
+    return dateToTimelinePct(now, boardBuckets)
   })
 
   const todayChip = $derived(
@@ -595,8 +592,8 @@
 <section class="beranda">
   <header class="page-header">
     <div class="topbar">
-      <a href="/" use:link class="brand-logo" aria-label="EDM Task Monitoring" title="EDM Task Monitoring">
-        <img src={logoFull} alt="EDM Task Monitoring" />
+      <a href="/" use:link class="brand-logo" aria-label="ATA - Active Tasks Analytics" title="ATA - Active Tasks Analytics">
+        <img src={logoFull} alt="ATA - Active Tasks Analytics" />
       </a>
 
       <div class="period-slot">

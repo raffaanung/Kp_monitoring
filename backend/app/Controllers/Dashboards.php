@@ -5,6 +5,7 @@ namespace App\Controllers;
 use App\Libraries\TaskPolicy;
 use App\Models\ActivityLogModel;
 use App\Models\DashboardModel;
+use App\Models\ModuleModel;
 use App\Models\NotificationModel;
 use CodeIgniter\HTTP\ResponseInterface;
 
@@ -498,6 +499,7 @@ class Dashboards extends BaseController
             'updated_at'  => $row['updated_at'],
             'metadata'    => $row['metadata'],
             'quick_stats' => $row['quick_stats'],
+            'modules'     => $row['modules'] ?? [],
             'tasks'       => [],
             'history'     => [],
         ];
@@ -600,5 +602,149 @@ class Dashboards extends BaseController
         }
 
         return $this->jsonOk(self::defaultFormSchema());
+    }
+
+    /**
+     * List all modules for a dashboard
+     */
+    public function listModules(string $id = '0'): ResponseInterface
+    {
+        $dashboard = (new DashboardModel())->find($id);
+        if ($dashboard === null) {
+            return $this->jsonError('Dashboard not found', 404);
+        }
+
+        $modules = (new ModuleModel())->listByDashboard($id);
+
+        return $this->jsonOk($modules);
+    }
+
+    /**
+     * Create a new module for a dashboard
+     */
+    public function createModule(string $id = '0'): ResponseInterface
+    {
+        $user = $this->authUser();
+        if (! TaskPolicy::canManageRegistry($user)) {
+            return $this->jsonError('You do not have permission to manage modules', 403);
+        }
+
+        $dashboard = (new DashboardModel())->find($id);
+        if ($dashboard === null) {
+            return $this->jsonError('Dashboard not found', 404);
+        }
+
+        $name        = trim((string) $this->request->getJsonVar('name'));
+        $description = trim((string) ($this->request->getJsonVar('description') ?? ''));
+        $parentId    = trim((string) ($this->request->getJsonVar('parent_id') ?? '')) ?: null;
+
+        if ($name === '') {
+            return $this->jsonError('Module name is required', 422);
+        }
+
+        $model = new ModuleModel();
+        $moduleId = $model->createModule([
+            'dashboard_id' => $id,
+            'name'         => $name,
+            'description'  => $description,
+            'parent_id'    => $parentId,
+        ]);
+
+        $created = $model->find($moduleId);
+
+        $this->logActivity(
+            $user,
+            $id,
+            $dashboard['name'],
+            'module_create',
+            "Module \"{$name}\" added",
+            [['field' => 'module', 'label' => 'Modul', 'before' => null, 'after' => $name]]
+        );
+
+        return $this->jsonOk($created);
+    }
+
+    /**
+     * Update an existing module
+     */
+    public function updateModule(string $id = '0', string $moduleId = '0'): ResponseInterface
+    {
+        $user = $this->authUser();
+        if (! TaskPolicy::canManageRegistry($user)) {
+            return $this->jsonError('You do not have permission to manage modules', 403);
+        }
+
+        $dashboard = (new DashboardModel())->find($id);
+        if ($dashboard === null) {
+            return $this->jsonError('Dashboard not found', 404);
+        }
+
+        $model  = new ModuleModel();
+        $module = $model->where('id', $moduleId)->where('dashboard_id', $id)->first();
+        if ($module === null) {
+            return $this->jsonError('Module not found', 404);
+        }
+
+        $name        = trim((string) ($this->request->getJsonVar('name') ?? $module['name']));
+        $description = trim((string) ($this->request->getJsonVar('description') ?? $module['description']));
+
+        if ($name === '') {
+            return $this->jsonError('Module name cannot be empty', 422);
+        }
+
+        $beforeName = $module['name'];
+        $model->update($moduleId, [
+            'name'        => $name,
+            'description' => $description,
+        ]);
+
+        $updated = $model->find($moduleId);
+
+        $this->logActivity(
+            $user,
+            $id,
+            $dashboard['name'],
+            'module_update',
+            "Module \"{$name}\" updated",
+            [['field' => 'module', 'label' => 'Modul', 'before' => $beforeName, 'after' => $name]]
+        );
+
+        return $this->jsonOk($updated);
+    }
+
+    /**
+     * Delete a module
+     */
+    public function deleteModule(string $id = '0', string $moduleId = '0'): ResponseInterface
+    {
+        $user = $this->authUser();
+        if (! TaskPolicy::canManageRegistry($user)) {
+            return $this->jsonError('You do not have permission to manage modules', 403);
+        }
+
+        $dashboard = (new DashboardModel())->find($id);
+        if ($dashboard === null) {
+            return $this->jsonError('Dashboard not found', 404);
+        }
+
+        $model  = new ModuleModel();
+        $module = $model->where('id', $moduleId)->where('dashboard_id', $id)->first();
+        if ($module === null) {
+            return $this->jsonError('Module not found', 404);
+        }
+
+        $moduleName = $module['name'];
+        $model->deleteModule($moduleId);
+
+        $this->logActivity(
+            $user,
+            $id,
+            $dashboard['name'],
+            'module_delete',
+            "Module \"{$moduleName}\" deleted",
+            [['field' => 'module', 'label' => 'Modul', 'before' => $moduleName, 'after' => null]]
+        );
+
+        return $this->jsonOk(['ok' => true]);
     }
 }

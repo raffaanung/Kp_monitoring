@@ -134,7 +134,13 @@ class DataSources extends BaseController
             ], false);
         }
 
-        return $this->jsonOk(['id' => $id]);
+        return $this->jsonOk([
+            'id'           => $id,
+            'dashboard_id' => $dashboardId,
+            'name'         => $name,
+            'description'  => $description,
+            'parent_id'    => $parentId,
+        ]);
     }
 
     /** Tambah 1 baris field-mapping ("yang tampil di halaman") ke 1 submodul/halaman. */

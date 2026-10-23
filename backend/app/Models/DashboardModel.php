@@ -60,10 +60,22 @@ class DashboardModel extends Model
             $reqByDashboard[$r['dashboard_id']] = (int) $r['c'];
         }
 
+        $moduleRows = $db->table('modules')
+            ->select('id, dashboard_id, name, description, parent_id, sort_order, created_at')
+            ->orderBy('sort_order', 'ASC')
+            ->orderBy('created_at', 'ASC')
+            ->orderBy('name', 'ASC')
+            ->get()->getResultArray();
+        $modulesByDashboard = [];
+        foreach ($moduleRows as $m) {
+            $modulesByDashboard[$m['dashboard_id']][] = $m;
+        }
+
         foreach ($rows as &$row) {
             $id = $row['id'];
             $stats = $tasksByDashboard[$id] ?? ['total' => 0, 'done' => 0];
             $row['metadata'] = $fieldsByDashboard[$id] ?? [];
+            $row['modules']  = $modulesByDashboard[$id] ?? [];
             $row['quick_stats'] = [
                 'tasks_total'        => $stats['total'] ?? 0,
                 'tasks_open'         => ($stats['total'] ?? 0) - ($stats['done'] ?? 0),
